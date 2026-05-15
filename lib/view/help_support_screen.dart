@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
-import 'package:shieldconnect_app/view/ticket_details_screen.dart';
+import 'package:shieldconnect_app/view/support_tickets_screen.dart';
 
-class HelpSupportScreen extends StatefulWidget {
+class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
 
-  @override
-  State<HelpSupportScreen> createState() => _HelpSupportScreenState();
-}
-
-class _HelpSupportScreenState extends State<HelpSupportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -48,10 +43,13 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    Text(
-                      "Help & Support",
-                      style: fontStyle.clashDisplaySemiBold20.textColor(
-                        appColor(context).black,
+                    Expanded(
+                      child: Text(
+                        "Help & Support",
+                        style: fontStyle.clashDisplaySemiBold20.textColor(
+                          appColor(context).black,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -70,12 +68,35 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildFAQSection(),
+              _buildFAQSection(context),
 
               const SizedBox(height: 32),
 
-              // 3. Support Tickets Section
-              _buildSupportTicketsSection(),
+              // 3. Support Options Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  "Still need help?",
+                  style: fontStyle.clashDisplaySemiBold18.textColor(
+                    appColor(context).black,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildSupportOption(
+                context: context,
+                title: "Support Tickets",
+                subtitle: "Create and track your support requests",
+                icon: Icons.confirmation_number_outlined,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SupportTicketsScreen(),
+                    ),
+                  );
+                },
+              ),
 
               const SizedBox(height: 40),
             ],
@@ -85,7 +106,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     );
   }
 
-  Widget _buildFAQSection() {
+  Widget _buildFAQSection(BuildContext context) {
     final faqs = [
       {
         "q": "How to backup my chats?",
@@ -154,378 +175,71 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     );
   }
 
-  Widget _buildSupportTicketsSection() {
+  Widget _buildSupportOption({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "Support Tickets",
-                style: fontStyle.clashDisplaySemiBold18.textColor(
-                  appColor(context).black,
-                ),
-              ),
-              GestureDetector(
-                onTap: () => _showCreateTicketBottomSheet(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: appColor(context).secondary,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.add, color: Colors.white, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        "Create Ticket",
-                        style: fontStyle.clashDisplaySemiBold12.textColor(
-                          Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: appColor(context).white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: appColor(context).black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-
-          // Ticket Summary Cards
-          Row(
+          child: Row(
             children: [
-              Expanded(
-                child: _buildSummaryCard("All", "1", Icons.forum_outlined),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSummaryCard("Pending", "1", Icons.timer_outlined),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSummaryCard(
-                  "Closed",
-                  "0",
-                  Icons.event_available_outlined,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Search & Filter
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: appColor(context).grey100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: "Search Subject or ID",
-                      hintStyle: fontStyle.clashDisplayMedium12.textColor(
-                        appColor(context).grey400,
-                      ),
-                      border: InputBorder.none,
-                      icon: Icon(
-                        Icons.search,
-                        color: appColor(context).grey400,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: appColor(context).grey100,
-                  borderRadius: BorderRadius.circular(12),
+                  color: appColor(context).secondary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.filter_list,
-                  color: appColor(context).secondary,
-                  size: 20,
-                ),
+                child: Icon(icon, color: appColor(context).secondary, size: 24),
               ),
-            ],
-          ),
-          const SizedBox(height: 32),
-
-          Text(
-            "Latest Support History",
-            style: fontStyle.clashDisplaySemiBold16.textColor(
-              appColor(context).black,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Data Table
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columnSpacing: 24,
-              headingRowColor: WidgetStateProperty.all(
-                appColor(context).grey100,
-              ),
-              headingTextStyle: fontStyle.clashDisplayMedium12.textColor(
-                appColor(context).grey600,
-              ),
-              dataTextStyle: fontStyle.clashDisplayMedium12.textColor(
-                appColor(context).black,
-              ),
-              columns: const [
-                DataColumn(label: Text("TICKET ID")),
-                DataColumn(label: Text("SUBJECT")),
-                DataColumn(label: Text("CATEGORY")),
-                DataColumn(label: Text("STATUS")),
-                DataColumn(label: Text("LAST UPDATED")),
-              ],
-              rows: [
-                DataRow(
-                  onSelectChanged: (_) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const TicketDetailsScreen(),
-                      ),
-                    );
-                  },
-                  cells: [
-                    const DataCell(Text("TCKT-009")),
-                    const DataCell(Text("Bug")),
-                    DataCell(
-                      Text(
-                        "Bug Report",
-                        style: TextStyle(color: appColor(context).secondary),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: fontStyle.clashDisplaySemiBold16.textColor(
+                        appColor(context).black,
                       ),
                     ),
-                    DataCell(
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE3F2FD),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          "Open",
-                          style: TextStyle(
-                            color: Color(0xFF1976D2),
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: fontStyle.clashDisplayMedium12.textColor(
+                        appColor(context).grey600,
                       ),
                     ),
-                    const DataCell(Text("5/6/2026")),
                   ],
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryCard(String title, String count, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: appColor(context).white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: appColor(context).black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: fontStyle.clashDisplayMedium12.textColor(
-                  appColor(context).grey600,
-                ),
               ),
-              Icon(icon, color: appColor(context).secondary, size: 18),
+              Icon(
+                Icons.chevron_right,
+                color: appColor(context).grey400,
+                size: 20,
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            count,
-            style: fontStyle.clashDisplayBold24.textColor(
-              appColor(context).black,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCreateTicketBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: appColor(context).white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 24,
-            left: 24,
-            right: 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Create Support Ticket",
-                    style: fontStyle.clashDisplaySemiBold20.textColor(
-                      appColor(context).black,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: appColor(context).black),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildLabel("Subject"),
-              _buildInput("What's the issue?"),
-              const SizedBox(height: 20),
-              _buildLabel("Category"),
-              _buildDropdown("General Inquiry"),
-              const SizedBox(height: 20),
-              _buildLabel("Priority"),
-              _buildDropdown("Medium"),
-              const SizedBox(height: 32),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        side: BorderSide(color: appColor(context).grey300),
-                      ),
-                      child: Text(
-                        "Cancel",
-                        style: fontStyle.clashDisplaySemiBold14.textColor(
-                          appColor(context).black,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: appColor(context).secondary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        "Create Ticket",
-                        style: fontStyle.clashDisplaySemiBold14.textColor(
-                          Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: fontStyle.clashDisplayBold12.textColor(appColor(context).black),
-      ),
-    );
-  }
-
-  Widget _buildInput(String hint) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: appColor(context).grey100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: fontStyle.clashDisplayMedium12.textColor(
-            appColor(context).grey400,
-          ),
-          border: InputBorder.none,
         ),
       ),
     );
   }
-
-  Widget _buildDropdown(String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: appColor(context).grey100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            value,
-            style: fontStyle.clashDisplayMedium12.textColor(
-              appColor(context).black,
-            ),
-          ),
-          Icon(Icons.keyboard_arrow_down, color: appColor(context).grey600),
-        ],
-      ),
-    );
-  }
 }
+

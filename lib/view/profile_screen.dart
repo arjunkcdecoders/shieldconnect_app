@@ -110,7 +110,7 @@ class ProfileScreen extends StatelessWidget {
                       Text(
                         "Happy Life 🥰",
                         style: fontStyle.clashDisplayMedium10.textColor(
-                          appColor(context).grey400,
+                          appColor(context).textMediumGrey,
                         ),
                       ),
                     ],

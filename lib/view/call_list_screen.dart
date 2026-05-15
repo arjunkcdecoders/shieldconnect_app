@@ -277,7 +277,7 @@ class CallListScreen extends StatelessWidget {
                     Text(
                       item["time"],
                       style: fontStyle.clashDisplayRegular12.textColor(
-                        appColor(context).grey400,
+                        appColor(context).textMediumGrey,
                       ),
                     ),
                   ],

@@ -238,7 +238,9 @@ class ChatlistScreen extends StatelessWidget {
       margin: const EdgeInsets.only(right: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        color: isActive ? appColor(context).secondary : appColor(context).grey100,
+        color: isActive
+            ? appColor(context).secondary
+            : appColor(context).grey100,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -263,9 +265,7 @@ class ChatlistScreen extends StatelessWidget {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => GroupChatScreen(
-                groupName: chat["name"],
-              ),
+              builder: (context) => GroupChatScreen(groupName: chat["name"]),
             ),
           );
         } else {
@@ -304,8 +304,9 @@ class ChatlistScreen extends StatelessWidget {
                           radius: 24,
                           backgroundImage: (chat["isGroup"] ?? false)
                               ? const NetworkImage(
-                                  "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
-                                ) as ImageProvider
+                                      "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
+                                    )
+                                    as ImageProvider
                               : const AssetImage(ImageAssets.maisieAvatar),
                         ),
                       )
@@ -316,8 +317,9 @@ class ChatlistScreen extends StatelessWidget {
                             radius: 28,
                             backgroundImage: (chat["isGroup"] ?? false)
                                 ? const NetworkImage(
-                                    "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
-                                  ) as ImageProvider
+                                        "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
+                                      )
+                                      as ImageProvider
                                 : const AssetImage(ImageAssets.maisieAvatar),
                           ),
                           if (hasStatusDot)
@@ -377,7 +379,7 @@ class ChatlistScreen extends StatelessWidget {
                         child: Text(
                           chat["message"],
                           style: fontStyle.clashDisplayRegular12.textColor(
-                            appColor(context).grey400,
+                            appColor(context).textMediumGrey,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -483,7 +485,7 @@ class ChatlistScreen extends StatelessWidget {
                   Text(
                     "Maintenance update at 12:00 PM today...",
                     style: fontStyle.clashDisplayRegular12.textColor(
-                      appColor(context).grey400,
+                      appColor(context).textMediumGrey,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

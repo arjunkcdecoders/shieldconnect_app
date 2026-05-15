@@ -164,7 +164,10 @@ class StatusScreen extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: appColor(context).secondary,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: appColor(context).white, width: 2),
+                                border: Border.all(
+                                  color: appColor(context).white,
+                                  width: 2,
+                                ),
                               ),
                               child: Icon(
                                 Icons.add,
@@ -191,7 +194,7 @@ class StatusScreen extends StatelessWidget {
                             Text(
                               "Tap to add status update",
                               style: fontStyle.clashDisplayRegular12.textColor(
-                                appColor(context).grey400,
+                                appColor(context).textMediumGrey,
                               ),
                             ),
                           ],
@@ -206,7 +209,7 @@ class StatusScreen extends StatelessWidget {
                 Text(
                   "Recent Updates",
                   style: fontStyle.clashDisplaySemiBold14.textColor(
-                    appColor(context).grey400,
+                    appColor(context).textSecondary,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -226,7 +229,7 @@ class StatusScreen extends StatelessWidget {
                 Text(
                   "Viewed Updates",
                   style: fontStyle.clashDisplaySemiBold14.textColor(
-                    appColor(context).grey400,
+                    appColor(context).textSecondary,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -298,7 +301,7 @@ class StatusScreen extends StatelessWidget {
                 Text(
                   status["time"],
                   style: fontStyle.clashDisplayRegular12.textColor(
-                    appColor(context).grey400,
+                    appColor(context).textMediumGrey,
                   ),
                 ),
               ],
