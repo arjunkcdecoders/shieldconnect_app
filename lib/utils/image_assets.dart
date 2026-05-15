@@ -1,0 +1,66 @@
+class ImageAssets {
+  static const String _path = "assets/images";
+
+  // App Logos & Icons
+  static const String maisieAvatar = "$_path/maisie_avatar.png";
+  static const String userAvatar = "$_path/user_avatar.png";
+  static const String appIcon = "$_path/appIcon.png";
+  static const String appLogoAndroid = "$_path/appLogo-Android.png";
+  static const String appLogoIos = "$_path/appLogo-ios.png";
+
+  static const String plus = "$_path/Plus.png";
+  static const String addPerson = "$_path/addPerson.png";
+  static const String archive = "$_path/archive.png";
+  static const String block = "$_path/block.png";
+  static const String callActive = "$_path/callActive.png";
+  static const String callInActive = "$_path/callInActive.png";
+  static const String cam = "$_path/cam.png";
+  static const String chatActive = "$_path/chatActive.png";
+  static const String chatInActive = "$_path/chatInActive.png";
+  static const String clearChat = "$_path/clearChat.png";
+  static const String clipActive = "$_path/clipActive.png";
+  static const String deleteChat = "$_path/deleteChaT.png";
+  static const String edit = "$_path/edit.png";
+  static const String emoji = "$_path/emoji.png";
+  static const String favorite = "$_path/favorite.png";
+  static const String file = "$_path/file.png";
+  static const String gallery = "$_path/gallery.png";
+  static const String key = "$_path/key.png";
+  static const String map = "$_path/map.png";
+  static const String message = "$_path/message.png";
+  static const String newGroup = "$_path/newGroup.png";
+  static const String notification = "$_path/notification.png";
+  static const String obchild1 = "$_path/obchild1.png";
+  static const String obchild2 = "$_path/obchild2.png";
+  static const String obchild3 = "$_path/obchild3.png";
+  static const String outgoingCall = "$_path/outgoingCall.png";
+  static const String paperclip = "$_path/paperclip.png";
+  static const String password = "$_path/password.png";
+  static const String phonePlus = "$_path/phone-plus.png";
+  static const String phone = "$_path/phone.png";
+  static const String recorder = "$_path/recorder.png";
+  static const String report = "$_path/report.png";
+  static const String searchIcon = "$_path/searchIcon.png";
+  static const String send = "$_path/send.png";
+  static const String settingsActive = "$_path/settingsActive.png";
+  static const String settingsInActive = "$_path/settingsInActive.png";
+  static const String splashscreenVector = "$_path/splashscreenVector.png";
+  static const String statusActive = "$_path/statusActive.png";
+  static const String statusInActive = "$_path/statusInActive.png";
+  static const String theme = "$_path/theme.png";
+  static const String userAdd = "$_path/userAdd.png";
+  static const String videoRecorder = "$_path/video-recorder.png";
+  static const String tick = "$_path/tick.png";
+  static const String link = "$_path/link1.png";
+  static const String link2 = "$_path/link2.png";
+  static const String pdfIcon = "$_path/pdfIcon.png";
+  static const String blocked = "$_path/blocked.png";
+  static const String review = "$_path/review.png";
+  static const String approved = "$_path/approved.png";
+  static const String volume = "$_path/volume.png";
+  static const String videoOff = "$_path/videoOff.png";
+  static const String micOff = "$_path/micOff.png";
+  static const String videoOn = "$_path/videoOn.png";
+  static const String expand = "$_path/expand.png";
+  static const String addUser = "$_path/addUser.png";
+}
