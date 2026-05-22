@@ -192,7 +192,7 @@ class OnboardingScreen extends StatelessWidget {
               ),
             ),
             // Extra space underneath for overlapping button
-            const SizedBox(height: 50),
+            const SizedBox(height: 70),
           ],
         ),
       ),

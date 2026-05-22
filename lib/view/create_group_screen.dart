@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/create_group_controller.dart';
@@ -46,7 +47,13 @@ class CreateGroupScreen extends StatelessWidget {
                       strokeWidth: 2,
                     ),
                   )
-                : Icon(Icons.arrow_forward, color: appColor(context).white, size: 24),
+                : Icon(
+                    controller.hasSelectedUsers
+                        ? Icons.check
+                        : Icons.arrow_forward,
+                    color: appColor(context).white,
+                    size: 24,
+                  ),
           ),
         ),
       ),
@@ -111,9 +118,16 @@ class CreateGroupScreen extends StatelessWidget {
                       child: Stack(
                         alignment: Alignment.bottomRight,
                         children: [
-                          const CircleAvatar(
+                          CircleAvatar(
                             radius: 42,
-                            backgroundImage: AssetImage(ImageAssets.maisieAvatar),
+                            backgroundImage:
+                                (controller.pickedImagePath != null &&
+                                    !controller.pickedImagePath!.startsWith(
+                                      'assets',
+                                    ))
+                                ? FileImage(File(controller.pickedImagePath!))
+                                      as ImageProvider
+                                : const AssetImage(ImageAssets.maisieAvatar),
                           ),
                           Positioned(
                             bottom: 0,
@@ -124,7 +138,10 @@ class CreateGroupScreen extends StatelessWidget {
                                 color: appColor(context).secondary,
                                 // shape: BoxShape.circle,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: appColor(context).white, width: 1),
+                                border: Border.all(
+                                  color: appColor(context).white,
+                                  width: 1,
+                                ),
                               ),
                               child: Icon(
                                 Icons.add,
@@ -230,6 +247,7 @@ class CreateGroupScreen extends StatelessWidget {
                               context,
                               name: person["name"],
                               subtitle: person["subtitle"],
+                              avatarUrl: person["avatar"]?.toString() ?? "",
                               isSelected: person["isSelected"],
                             ),
                           );
@@ -247,17 +265,20 @@ class CreateGroupScreen extends StatelessWidget {
     BuildContext context, {
     required String name,
     required String subtitle,
+    required String avatarUrl,
     required bool isSelected,
   }) {
+    final bool isNetworkAvatar = avatarUrl.toLowerCase().startsWith('http');
+    final ImageProvider avatarProvider = isNetworkAvatar
+        ? NetworkImage(avatarUrl)
+        : const AssetImage(ImageAssets.maisieAvatar);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 20.0),
       child: Row(
         children: [
           // Avatar
-          CircleAvatar(
-            radius: 24,
-            backgroundImage: const AssetImage(ImageAssets.maisieAvatar),
-          ),
+          CircleAvatar(radius: 24, backgroundImage: avatarProvider),
           const SizedBox(width: 12),
 
           // Identity Details
@@ -294,7 +315,11 @@ class CreateGroupScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: Icon(Icons.check, color: appColor(context).white, size: 12),
+                    child: Icon(
+                      Icons.check,
+                      color: appColor(context).white,
+                      size: 12,
+                    ),
                   ),
                 )
               : Container(
@@ -302,7 +327,10 @@ class CreateGroupScreen extends StatelessWidget {
                   height: 20,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: appColor(context).grey300, width: 1.2),
+                    border: Border.all(
+                      color: appColor(context).grey300,
+                      width: 1.2,
+                    ),
                   ),
                 ),
         ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shieldconnect_app/controller/edit_profile_controller.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -13,7 +14,7 @@ class EditProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
-        child: Consumer<EditProfileController>(
+        child: Consumer<ProfileController>(
           builder: (context, controller, child) {
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -58,54 +59,83 @@ class EditProfileScreen extends StatelessWidget {
                     const SizedBox(height: 28),
 
                     // 2. Compact Profile Image Uploader Block
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            Container(
-                              width: 90,
-                              height: 90,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
-                                image: const DecorationImage(
-                                  image: AssetImage(ImageAssets.userAvatar),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            // Upload Plus Badge overlay
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
+                    GestureDetector(
+                      onTap: () => controller.pickImage(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              Container(
+                                width: 90,
+                                height: 90,
                                 decoration: BoxDecoration(
-                                  color: appColor(context).secondary,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
+                                  color: appColor(context).grey100,
+                                  borderRadius: BorderRadius.circular(24),
+                                  image: controller.pickedImage != null
+                                      ? DecorationImage(
+                                          image: FileImage(
+                                            controller.pickedImage!,
+                                          ),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : ApiService.getImageUrl(
+                                                controller.imageUrl,
+                                              ).isNotEmpty
+                                          ? DecorationImage(
+                                              image: NetworkImage(
+                                                ApiService.getImageUrl(
+                                                  controller.imageUrl,
+                                                ),
+                                              ),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
+                                ),
+                                child: controller.pickedImage == null &&
+                                        ApiService.getImageUrl(
+                                          controller.imageUrl,
+                                        ).isEmpty
+                                    ? Icon(
+                                        Icons.person,
+                                        color: appColor(context).grey400,
+                                        size: 40,
+                                      )
+                                    : null,
+                              ),
+                              // Upload Plus Badge overlay
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    color: appColor(context).secondary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: appColor(context).white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.add,
                                     color: appColor(context).white,
-                                    width: 2,
+                                    size: 14,
                                   ),
                                 ),
-                                child: Icon(
-                                  Icons.add,
-                                  color: appColor(context).white,
-                                  size: 14,
-                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Replace your photo",
-                          style: fontStyle.clashDisplayMedium10.textColor(
-                            appColor(context).black,
+                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Text(
+                            "Replace your photo",
+                            style: fontStyle.clashDisplayMedium10.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 28),
 
@@ -121,8 +151,8 @@ class EditProfileScreen extends StatelessWidget {
                     CustomTextField(
                       labelText: "About",
                       hintText: "Enter",
-                      controller: controller.aboutController,
-                      focusNode: controller.aboutFocusNode,
+                      controller: controller.bioController,
+                      focusNode: controller.bioFocusNode,
                     ),
                     const SizedBox(height: 20),
 
@@ -132,12 +162,15 @@ class EditProfileScreen extends StatelessWidget {
                       controller: controller.emailController,
                       focusNode: controller.emailFocusNode,
                       keyboardType: TextInputType.emailAddress,
+                      readOnly: true, // Fixed email
                     ),
                     const SizedBox(height: 40),
 
                     // 4. Destructive Save action stadium button
                     GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: controller.isLoading
+                          ? null
+                          : () => controller.updateProfile(context),
                       child: Container(
                         height: 46,
                         width: double.infinity,
@@ -146,15 +179,35 @@ class EditProfileScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(23),
                         ),
                         child: Center(
-                          child: Text(
-                            "Save",
-                            style: fontStyle.clashDisplaySemiBold14.textColor(
-                              appColor(context).white,
-                            ),
-                          ),
+                          child: controller.isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  "Save",
+                                  style: fontStyle.clashDisplaySemiBold14
+                                      .textColor(appColor(context).white),
+                                ),
                         ),
                       ),
                     ),
+                    if (controller.message.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          controller.message,
+                          style: fontStyle.clashDisplayMedium12.textColor(
+                            controller.isError ? Colors.red : Colors.green,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -179,6 +232,7 @@ class CustomTextField extends StatelessWidget {
   final Widget? prefixIcon;
   final String? Function(String?)? validator;
   final int maxLines;
+  final bool readOnly;
 
   const CustomTextField({
     super.key,
@@ -192,6 +246,7 @@ class CustomTextField extends StatelessWidget {
     this.prefixIcon,
     this.validator,
     this.maxLines = 1,
+    this.readOnly = false,
   });
 
   @override
@@ -199,8 +254,9 @@ class CustomTextField extends StatelessWidget {
     final bool hasFocus = focusNode?.hasFocus ?? false;
 
     // Dynamic color resolving for top labels
-    final Color labelColor =
-        hasFocus ? appColor(context).secondary : appColor(context).black;
+    final Color labelColor = hasFocus
+        ? appColor(context).secondary
+        : appColor(context).black;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,17 +291,19 @@ class CustomTextField extends StatelessWidget {
             keyboardType: keyboardType,
             validator: validator,
             maxLines: maxLines,
+            readOnly: readOnly,
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: fontStyle.clashDisplayRegular12.textColor(
                 appColor(context).grey300,
               ),
               filled: true,
-              fillColor: const Color(0xFFF9FAFB),
+              fillColor: readOnly
+                  ? appColor(context).grey100
+                  : const Color(0xFFF9FAFB),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical:
-                    12, // Slightly reduced vertical padding for compact design
+                vertical: 12,
               ),
               prefixIcon: prefixIcon,
               suffixIcon: suffixIcon,
@@ -266,7 +324,7 @@ class CustomTextField extends StatelessWidget {
               ),
             ),
             style: fontStyle.clashDisplaySemiBold14.textColor(
-              appColor(context).black,
+              readOnly ? appColor(context).grey400 : appColor(context).black,
             ),
           ),
         ),

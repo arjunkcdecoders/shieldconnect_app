@@ -22,4 +22,9 @@ class BottomnavController extends ChangeNotifier {
     _currentIndex = index;
     notifyListeners();
   }
+
+  void reset() {
+    _currentIndex = 0;
+    notifyListeners();
+  }
 }

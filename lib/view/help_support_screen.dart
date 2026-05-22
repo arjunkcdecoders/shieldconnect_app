@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/help_support_controller.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/view/support_tickets_screen.dart';
@@ -8,6 +10,17 @@ class HelpSupportScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Fetch FAQs on screen load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = Provider.of<HelpSupportController>(
+        context,
+        listen: false,
+      );
+      if (controller.faqs.isEmpty) {
+        controller.fetchFAQs();
+      }
+    });
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
@@ -68,7 +81,11 @@ class HelpSupportScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildFAQSection(context),
+              Consumer<HelpSupportController>(
+                builder: (context, controller, child) {
+                  return _buildFAQSection(context, controller);
+                },
+              ),
 
               const SizedBox(height: 32),
 
@@ -106,31 +123,38 @@ class HelpSupportScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFAQSection(BuildContext context) {
-    final faqs = [
-      {
-        "q": "How to backup my chats?",
-        "a":
-            "Your chats are automatically backed up to our secure cloud servers every 24 hours.",
-      },
-      {
-        "q": "Can I use Shield Connect on multiple devices?",
-        "a":
-            "Yes, you can link up to 4 devices to your account simultaneously.",
-      },
-      {
-        "q": "How to delete my account?",
-        "a":
-            "You can delete your account from the 'Account' settings menu. This action is permanent.",
-      },
-    ];
+  Widget _buildFAQSection(
+    BuildContext context,
+    HelpSupportController controller,
+  ) {
+    if (controller.isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Center(
+          child: CircularProgressIndicator(color: appColor(context).secondary),
+        ),
+      );
+    }
+
+    if (controller.faqs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Text(
+          "No FAQs available",
+          style: fontStyle.clashDisplayMedium12.textColor(
+            appColor(context).grey400,
+          ),
+        ),
+      );
+    }
 
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: faqs.length,
+      itemCount: controller.faqs.length,
       itemBuilder: (context, index) {
+        final faq = controller.faqs[index];
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
@@ -152,7 +176,7 @@ class HelpSupportScreen extends StatelessWidget {
                 vertical: 4,
               ),
               title: Text(
-                faqs[index]['q']!,
+                faq.question ?? "FAQ",
                 style: fontStyle.clashDisplaySemiBold14.textColor(
                   appColor(context).black,
                 ),
@@ -161,7 +185,7 @@ class HelpSupportScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                   child: Text(
-                    faqs[index]['a']!,
+                    faq.answer ?? "",
                     style: fontStyle.clashDisplayMedium12.textColor(
                       appColor(context).grey600,
                     ),
@@ -242,4 +266,3 @@ class HelpSupportScreen extends StatelessWidget {
     );
   }
 }
-

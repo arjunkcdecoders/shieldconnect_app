@@ -6,39 +6,16 @@ import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
 import 'package:shieldconnect_app/view/reset_password_screen.dart';
 
-class OtpVerificationScreen extends StatefulWidget {
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/forgot_password_controller.dart';
+
+class OtpVerificationScreen extends StatelessWidget {
   const OtpVerificationScreen({super.key});
 
   @override
-  State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
-}
-
-class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  final List<TextEditingController> _controllers = List.generate(6, (index) => TextEditingController());
-  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
-
-  @override
-  void dispose() {
-    for (var controller in _controllers) {
-      controller.dispose();
-    }
-    for (var focusNode in _focusNodes) {
-      focusNode.dispose();
-    }
-    super.dispose();
-  }
-
-  void _nextField(String value, int index) {
-    if (value.length == 1 && index < 5) {
-      _focusNodes[index + 1].requestFocus();
-    }
-    if (value.isEmpty && index > 0) {
-      _focusNodes[index - 1].requestFocus();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = Provider.of<ForgotPasswordController>(context);
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       appBar: AppBar(
@@ -101,8 +78,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     width: 45,
                     height: 55,
                     child: TextFormField(
-                      controller: _controllers[index],
-                      focusNode: _focusNodes[index],
+                      controller: controller.otpControllers[index],
+                      focusNode: controller.otpFocusNodes[index],
                       autofocus: index == 0,
                       textAlign: TextAlign.center,
                       keyboardType: TextInputType.number,
@@ -110,7 +87,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                         LengthLimitingTextInputFormatter(1),
                         FilteringTextInputFormatter.digitsOnly,
                       ],
-                      onChanged: (value) => _nextField(value, index),
+                      onChanged: (value) => controller.nextField(value, index),
                       decoration: InputDecoration(
                         contentPadding: EdgeInsets.zero,
                         filled: true,
@@ -152,15 +129,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: ElevatedButton(
-                  onPressed: () {
-                    ToastHelper.showToast(context, "OTP Verified Successfully!");
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ResetPasswordScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => controller.verifyOtp(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: appColor(context).transparent,
                     shadowColor: appColor(context).transparent,
@@ -169,33 +140,43 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
-                    "Verify OTP",
-                    style: fontStyle.clashDisplaySemiBold18
-                        .textColor(appColor(context).white)
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
+                  child: controller.isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          "Verify OTP",
+                          style: fontStyle.clashDisplaySemiBold18
+                              .textColor(appColor(context).white)
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
                 ),
               ),
+              if (controller.message.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    controller.message,
+                    textAlign: TextAlign.center,
+                    style: fontStyle.clashDisplayMedium14.textColor(
+                      controller.isError
+                          ? appColor(context).red
+                          : appColor(context).green,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 25),
 
               // Back to Email Link
               GestureDetector(
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  controller.clearMessage();
+                  Navigator.pop(context);
+                },
                 child: Text(
                   "Back to Email",
                   style: fontStyle.clashDisplayMedium14.textColor(
                     appColor(context).secondary,
                   ),
-                ),
-              ),
-              const SizedBox(height: 25),
-
-              // OTP Sent Status
-              Text(
-                "OTP sent to your email!",
-                style: fontStyle.clashDisplayMedium14.textColor(
-                  appColor(context).green,
                 ),
               ),
               const SizedBox(height: 40),

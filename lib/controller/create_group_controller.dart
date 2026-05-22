@@ -1,4 +1,13 @@
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/model/group_model.dart';
+import 'package:shieldconnect_app/model/user_model.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
 import 'package:shieldconnect_app/view/group_chat_screen.dart';
 
@@ -19,6 +28,8 @@ class CreateGroupController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool get hasSelectedUsers => _searchResults.any((p) => p['isSelected'] == true);
+
   String? _pickedImagePath;
   String? get pickedImagePath => _pickedImagePath;
 
@@ -38,15 +49,41 @@ class CreateGroupController extends ChangeNotifier {
   }
 
   Future<void> fetchConnectedUsers() async {
-    // Mock fetching connected users
-    await Future.delayed(const Duration(milliseconds: 500));
-    _connectedUsers = [
-      {"id": "1", "name": "Maisie williams", "subtitle": "maisiewilliams@gmail.com", "isSelected": false},
-      {"id": "2", "name": "John Doe", "subtitle": "johndoe@gmail.com", "isSelected": false},
-      {"id": "3", "name": "Jane Smith", "subtitle": "janesmith@gmail.com", "isSelected": false},
-      {"id": "4", "name": "Alex Wilson", "subtitle": "alex@gmail.com", "isSelected": false},
-    ];
-    _searchResults = List.from(_connectedUsers);
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr == null) return;
+
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      final String? userId = user.id;
+      if (userId == null) return;
+
+      final response = await ApiService().get('/connections/friends/$userId');
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        final List<dynamic> data = json['data'] ?? [];
+        _connectedUsers = data.map((item) {
+          final Map<String, dynamic> friend = item as Map<String, dynamic>;
+          // Skip if the user is blocked
+          return {
+            "id": friend['user_id']?.toString() ?? "",
+            "name": friend['name']?.toString() ?? "Unknown",
+            "subtitle": friend['email']?.toString() ?? (friend['bio']?.toString() ?? "Hey there!"),
+            "avatar": friend['avatar']?.toString() ?? "",
+            "isSelected": false,
+          };
+        }).toList();
+
+        _searchResults = List.from(_connectedUsers);
+      }
+    } catch (e) {
+      debugPrint("Error fetching connected users in group controller: $e");
+    }
     notifyListeners();
   }
 
@@ -70,10 +107,16 @@ class CreateGroupController extends ChangeNotifier {
   }
 
   Future<void> pickImage() async {
-    // Mock picking an image
-    await Future.delayed(const Duration(milliseconds: 300));
-    _pickedImagePath = 'assets/images/mock_group_image.png';
-    notifyListeners();
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        _pickedImagePath = image.path;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error picking group image: $e");
+    }
   }
 
   Future<void> createGroup(BuildContext context) async {
@@ -82,30 +125,105 @@ class CreateGroupController extends ChangeNotifier {
       return;
     }
 
-    if (_pickedImagePath == null) {
-      ToastHelper.showToast(context, "Please select a group image");
+    final List<String> memberIds = _searchResults
+        .where((p) => p['isSelected'] == true)
+        .map((p) => p['id'].toString())
+        .toList();
+
+    if (memberIds.isEmpty) {
+      ToastHelper.showToast(context, "Please select at least one member");
       return;
     }
 
     _isLoading = true;
     notifyListeners();
 
-    // Mock group creation delay
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr == null) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
 
-    _isLoading = false;
-    notifyListeners();
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      final String? userId = user.id;
+      if (userId == null) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
 
-    if (context.mounted) {
-      ToastHelper.showToast(context, "Group created successfully!");
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => GroupChatScreen(
-            groupName: groupNameController.text.trim(),
+      // Add the creator's ID to the members list if not already present
+      if (!memberIds.contains(userId)) {
+        memberIds.add(userId);
+      }
+
+      // Prepare multi-part request body using Dio's FormData
+      final Map<String, dynamic> fields = {
+        "name": groupNameController.text.trim(),
+        "admin_id": userId,
+        "description": groupDescController.text.trim(),
+        "members": jsonEncode(memberIds),
+      };
+
+      final FormData formData = FormData.fromMap(fields);
+
+      if (_pickedImagePath != null && !_pickedImagePath!.startsWith('assets/')) {
+        final String filename = _pickedImagePath!.split('/').last;
+        formData.files.add(MapEntry(
+          "group_image",
+          await MultipartFile.fromFile(
+            _pickedImagePath!,
+            filename: filename,
           ),
-        ),
-      );
+        ));
+      }
+
+      final response = await ApiService().post('/groups', data: formData);
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        // Map response using GroupModel
+        final GroupModel createdGroup = GroupModel.fromJson(json['data']);
+        
+        ToastHelper.showToast(context, json['message']?.toString() ?? "Group created successfully!");
+
+        // Refresh recent chats so it shows in the chat list screen immediately
+        if (context.mounted) {
+          Provider.of<HomeScreenController>(context, listen: false)
+              .fetchRecentChats(updateLoadingState: false);
+        }
+
+        if (context.mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => GroupChatScreen(
+                groupName: createdGroup.name ?? groupNameController.text.trim(),
+                groupId: createdGroup.id,
+              ),
+            ),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ToastHelper.showToast(context, json['message']?.toString() ?? "Failed to create group");
+        }
+      }
+    } catch (e) {
+      debugPrint("Error creating group: $e");
+      if (context.mounted) {
+        ToastHelper.showToast(context, "An error occurred while creating group");
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

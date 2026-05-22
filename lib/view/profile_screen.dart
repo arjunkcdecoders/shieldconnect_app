@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/view/delete_account_dialog.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -7,6 +10,8 @@ import 'package:shieldconnect_app/view/edit_profile_screen.dart';
 import 'package:shieldconnect_app/view/account_screen.dart';
 import 'package:shieldconnect_app/view/archived_chats_screen.dart';
 import 'package:shieldconnect_app/view/help_support_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/notification_controller.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -30,91 +35,170 @@ class ProfileScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "Profile",
-                      style: fontStyle.clashDisplaySemiBold20.textColor(
-                        appColor(context).black,
+                    Expanded(
+                      child: Text(
+                        "Profile",
+                        style: fontStyle.clashDisplaySemiBold20.textColor(
+                          appColor(context).black,
+                        ),
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const NotificationScreen(),
+                    Consumer<NotificationController>(
+                      builder: (context, notificationController, child) {
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const NotificationScreen(),
+                              ),
+                            );
+                          },
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: appColor(
+                                    context,
+                                  ).silver.withValues(alpha: 0.1),
+                                ),
+                                child: Center(
+                                  child: Image.asset(
+                                    ImageAssets.notification,
+                                    width: 22,
+                                    height: 22,
+                                    color: appColor(context).secondary,
+                                  ),
+                                ),
+                              ),
+                              if (notificationController.unreadCount > 0)
+                                Positioned(
+                                  right: -2,
+                                  top: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: appColor(context).secondary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: appColor(context).white,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 18,
+                                      minHeight: 18,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        notificationController.unreadCount > 9
+                                            ? '9+'
+                                            : notificationController.unreadCount
+                                                  .toString(),
+                                        style: fontStyle.clashDisplayBold10
+                                            .textColor(appColor(context).white),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: appColor(
-                            context,
-                          ).silver.withValues(alpha: 0.1),
-                        ),
-                        child: Center(
-                          child: Image.asset(
-                            ImageAssets.notification,
-                            width: 22,
-                            height: 22,
-                            color: appColor(context).secondary,
-                          ),
-                        ),
-                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
 
                 // Focused User Summary Block
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Stylized Squircle profile image
-                      Stack(
-                        alignment: Alignment.bottomRight,
+                Consumer<ProfileController>(
+                  builder: (context, controller, child) {
+                    if (controller.isLoading) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 106,
-                            height: 106,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(32),
-                              image: const DecorationImage(
-                                image: AssetImage(ImageAssets.userAvatar),
-                                fit: BoxFit.cover,
+                          // Stylized Squircle profile image
+                          Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              Container(
+                                width: 106,
+                                height: 106,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(24),
+                                  color: appColor(context).grey100,
+                                  image:
+                                      ApiService.getImageUrl(
+                                        controller.imageUrl,
+                                      ).isNotEmpty
+                                      ? DecorationImage(
+                                          image: NetworkImage(
+                                            ApiService.getImageUrl(
+                                              controller.imageUrl,
+                                            ),
+                                          ),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child:
+                                    ApiService.getImageUrl(
+                                      controller.imageUrl,
+                                    ).isEmpty
+                                    ? Icon(
+                                        Icons.person,
+                                        color: appColor(context).grey400,
+                                        size: 48,
+                                      )
+                                    : null,
                               ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Image.asset(
+                                  ImageAssets.tick,
+                                  width: 32,
+                                  height: 32,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            controller.name.isNotEmpty
+                                ? controller.name
+                                : "No Name",
+                            style: fontStyle.clashDisplaySemiBold16.textColor(
+                              appColor(context).black,
                             ),
                           ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Image.asset(
-                              ImageAssets.tick,
-                              width: 32,
-                              height: 32,
+                          if (controller.bio.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              controller.bio,
+                              style: fontStyle.clashDisplayMedium10.textColor(
+                                appColor(context).textMediumGrey,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "Bruce Wayne",
-                        style: fontStyle.clashDisplaySemiBold16.textColor(
-                          appColor(context).black,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "Happy Life !",
-                        style: fontStyle.clashDisplayMedium10.textColor(
-                          appColor(context).textMediumGrey,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 28),
 
@@ -156,6 +240,7 @@ class ProfileScreen extends StatelessWidget {
                   iconAsset: ImageAssets.archive,
                   title: "Archived Chats",
                   onTap: () {
+                    context.read<ProfileController>().fetchArchivedChats();
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -216,7 +301,14 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 Center(
                   child: GestureDetector(
-                    onTap: () => _showDeleteBottomSheet(context),
+                    onTap: () {
+                      context.read<ProfileController>().resetDeleteAccountState();
+                      showDialog(
+                        context: context,
+                        barrierDismissible: true,
+                        builder: (context) => const DeleteAccountDialog(),
+                      );
+                    },
                     child: Text(
                       "Delete Account",
                       style: fontStyle.clashDisplayBold12.textColor(
@@ -326,191 +418,118 @@ class ProfileScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (BuildContext context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Ready to log out",
-                    style: fontStyle.clashDisplaySemiBold18.textColor(
-                      appColor(context).black,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 20.0,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Ready to log out",
+                      style: fontStyle.clashDisplaySemiBold18.textColor(
+                        appColor(context).black,
+                      ),
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Icon(
-                      Icons.close,
-                      color: appColor(context).black,
-                      size: 22,
+                    GestureDetector(
+                      onTap: () => Navigator.pop(sheetContext),
+                      child: Icon(
+                        Icons.close,
+                        color: appColor(context).black,
+                        size: 22,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "People will still be able to see your profile",
-                style: fontStyle.clashDisplayMedium12.textColor(
-                  appColor(context).grey600,
+                  ],
                 ),
-              ),
-              const SizedBox(height: 32),
-
-              // Highlighted Pink Stadium Button Anchor
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  height: 50,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(
-                      color: appColor(context).secondary,
-                      width: 1.2,
-                    ),
+                const SizedBox(height: 12),
+                Text(
+                  "People will still be able to see your profile",
+                  style: fontStyle.clashDisplayMedium12.textColor(
+                    appColor(context).grey600,
                   ),
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.logout_outlined,
-                          color: appColor(context).secondary,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Log Out",
-                          style: fontStyle.clashDisplaySemiBold16.textColor(
-                            appColor(context).secondary,
+                ),
+                const SizedBox(height: 32),
+
+                // Highlighted Pink Stadium Button Anchor
+                Consumer<ProfileController>(
+                  builder: (context, profileController, child) {
+                    return GestureDetector(
+                      onTap: profileController.isLoading
+                          ? null
+                          : () {
+                              profileController.logout(context);
+                            },
+                      child: Container(
+                        height: 50,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(25),
+                          border: Border.all(
+                            color: appColor(context).secondary,
+                            width: 1.2,
                           ),
                         ),
-                      ],
+                        child: Center(
+                          child: profileController.isLoading
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: appColor(context).secondary,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.logout_outlined,
+                                      color: appColor(context).secondary,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "Log Out",
+                                      style: fontStyle.clashDisplaySemiBold16
+                                          .textColor(
+                                            appColor(context).secondary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                Center(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(sheetContext),
+                    child: Text(
+                      "Not Now",
+                      style: fontStyle.clashDisplayBold14.textColor(
+                        appColor(context).black,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Text(
-                    "Not Now",
-                    style: fontStyle.clashDisplayBold14.textColor(
-                      appColor(context).black,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
+                const SizedBox(height: 12),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  /// Renders highly stylized Delete Confirmation Drawer mimicking your mockup asset
-  void _showDeleteBottomSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: appColor(context).white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (BuildContext context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Ready to Delete",
-                    style: fontStyle.clashDisplaySemiBold18.textColor(
-                      appColor(context).black,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Icon(
-                      Icons.close,
-                      color: appColor(context).black,
-                      size: 22,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                "People won’t be able to see your profile",
-                style: fontStyle.clashDisplayMedium12.textColor(
-                  appColor(context).grey600,
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Bold Black Border Action Stadium Button
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  height: 50,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(
-                      color: appColor(context).black,
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.delete_outline_rounded,
-                          color: appColor(context).black,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "Delete Account",
-                          style: fontStyle.clashDisplaySemiBold16.textColor(
-                            appColor(context).black,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Text(
-                    "Not Now",
-                    style: fontStyle.clashDisplayBold14.textColor(
-                      appColor(context).black,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   /// Manages interactive Radio states in a modal dialog to Select Application Theme
   void _showThemeBottomSheet(BuildContext context) {
@@ -523,133 +542,135 @@ class ProfileScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            Widget buildThemeRadio(String value) {
-              final bool isSelected = selectedTheme == value;
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  setState(() {
-                    selectedTheme = value;
-                  });
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected
-                                ? appColor(context).secondary
-                                : appColor(context).grey300,
-                            width: 1.5,
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setState) {
+              Widget buildThemeRadio(String value) {
+                final bool isSelected = selectedTheme == value;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      selectedTheme = value;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected
+                                  ? appColor(context).secondary
+                                  : appColor(context).grey300,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: isSelected
+                                ? Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: appColor(context).secondary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  )
+                                : null,
                           ),
                         ),
-                        child: Center(
-                          child: isSelected
-                              ? Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                    color: appColor(context).secondary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                )
-                              : null,
+                        const SizedBox(width: 16),
+                        Text(
+                          value,
+                          style: fontStyle.clashDisplayMedium14.textColor(
+                            appColor(context).black,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        value,
-                        style: fontStyle.clashDisplayMedium14.textColor(
-                          appColor(context).black,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                );
+              }
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 20.0,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "Select Theme",
+                          style: fontStyle.clashDisplaySemiBold18.textColor(
+                            appColor(context).black,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Icon(
+                            Icons.close,
+                            color: appColor(context).black,
+                            size: 22,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    buildThemeRadio("App Default"),
+                    buildThemeRadio("Light"),
+                    buildThemeRadio("Dark"),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              "Cancel",
+                              style: fontStyle.clashDisplaySemiBold14.textColor(
+                                appColor(context).black,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: Text(
+                              "OK",
+                              style: fontStyle.clashDisplaySemiBold14.textColor(
+                                appColor(context).secondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               );
-            }
-
-            return Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
-                vertical: 20.0,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Select Theme",
-                        style: fontStyle.clashDisplaySemiBold18.textColor(
-                          appColor(context).black,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Icon(
-                          Icons.close,
-                          color: appColor(context).black,
-                          size: 22,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  buildThemeRadio("App Default"),
-                  buildThemeRadio("Light"),
-                  buildThemeRadio("Dark"),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            "Cancel",
-                            style: fontStyle.clashDisplaySemiBold14.textColor(
-                              appColor(context).black,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            "OK",
-                            style: fontStyle.clashDisplaySemiBold14.textColor(
-                              appColor(context).secondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
+            },
+          ),
         );
       },
     );

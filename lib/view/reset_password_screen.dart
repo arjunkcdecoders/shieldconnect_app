@@ -4,40 +4,16 @@ import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
 
-class ResetPasswordScreen extends StatefulWidget {
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/forgot_password_controller.dart';
+
+class ResetPasswordScreen extends StatelessWidget {
   const ResetPasswordScreen({super.key});
 
   @override
-  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
-}
-
-class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
-  final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
-  final FocusNode passwordFocus = FocusNode();
-  final FocusNode confirmPasswordFocus = FocusNode();
-
-  bool _isPasswordVisible = false;
-  bool _isConfirmPasswordVisible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    passwordFocus.addListener(() => setState(() {}));
-    confirmPasswordFocus.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    passwordController.dispose();
-    confirmPasswordController.dispose();
-    passwordFocus.dispose();
-    confirmPasswordFocus.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = Provider.of<ForgotPasswordController>(context);
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       appBar: AppBar(
@@ -45,7 +21,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: appColor(context).black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            controller.clearMessage();
+            Navigator.pop(context);
+          },
         ),
       ),
       body: SafeArea(
@@ -87,15 +66,19 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               CustomTextField(
                 labelText: "New Password *",
                 hintText: "Enter new password",
-                controller: passwordController,
-                focusNode: passwordFocus,
-                obscureText: !_isPasswordVisible,
+                controller: controller.passwordController,
+                focusNode: controller.passwordFocus,
+                obscureText: !controller.isPasswordVisible,
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _isPasswordVisible ? Icons.visibility : Icons.visibility_off_outlined,
-                    color: passwordFocus.hasFocus ? appColor(context).primary : appColor(context).grey,
+                    controller.isPasswordVisible
+                        ? Icons.visibility
+                        : Icons.visibility_off_outlined,
+                    color: controller.passwordFocus.hasFocus
+                        ? appColor(context).primary
+                        : appColor(context).grey,
                   ),
-                  onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                  onPressed: controller.togglePasswordVisibility,
                 ),
               ),
               const SizedBox(height: 25),
@@ -104,15 +87,19 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               CustomTextField(
                 labelText: "Confirm New Password *",
                 hintText: "Confirm new password",
-                controller: confirmPasswordController,
-                focusNode: confirmPasswordFocus,
-                obscureText: !_isConfirmPasswordVisible,
+                controller: controller.confirmPasswordController,
+                focusNode: controller.confirmPasswordFocus,
+                obscureText: !controller.isConfirmPasswordVisible,
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off_outlined,
-                    color: confirmPasswordFocus.hasFocus ? appColor(context).primary : appColor(context).grey,
+                    controller.isConfirmPasswordVisible
+                        ? Icons.visibility
+                        : Icons.visibility_off_outlined,
+                    color: controller.confirmPasswordFocus.hasFocus
+                        ? appColor(context).primary
+                        : appColor(context).grey,
                   ),
-                  onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
+                  onPressed: controller.toggleConfirmPasswordVisibility,
                 ),
               ),
               const SizedBox(height: 40),
@@ -131,10 +118,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: ElevatedButton(
-                  onPressed: () {
-                    ToastHelper.showToast(context, "Password Reset Successfully!");
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  },
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => controller.resetPassword(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: appColor(context).transparent,
                     shadowColor: appColor(context).transparent,
@@ -143,23 +129,30 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
                     elevation: 0,
                   ),
+                  child: controller.isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          "Reset Password",
+                          style: fontStyle.clashDisplaySemiBold18
+                              .textColor(appColor(context).white)
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
+                ),
+              ),
+              if (controller.message.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Center(
                   child: Text(
-                    "Reset Password",
-                    style: fontStyle.clashDisplaySemiBold18
-                        .textColor(appColor(context).white)
-                        .copyWith(fontWeight: FontWeight.w600),
+                    controller.message,
+                    textAlign: TextAlign.center,
+                    style: fontStyle.clashDisplayMedium14.textColor(
+                      controller.isError
+                          ? appColor(context).red
+                          : appColor(context).green,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 25),
-
-              // Status Message
-              Text(
-                "OTP sent to your email!",
-                style: fontStyle.clashDisplayMedium14.textColor(
-                  appColor(context).green,
-                ),
-              ),
+              ],
               const SizedBox(height: 40),
 
               // Footer

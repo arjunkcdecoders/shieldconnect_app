@@ -1,6 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/model/api_response.dart';
 
 class AnnouncementController extends ChangeNotifier {
+  AnnouncementController() {
+    init();
+  }
+
   List<dynamic> _announcements = [];
   List<dynamic> get announcements => _announcements;
 
@@ -8,30 +15,40 @@ class AnnouncementController extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   Future<void> init() async {
-    _isLoading = true;
-    notifyListeners();
-
     await fetchAnnouncements();
-
-    _isLoading = false;
-    notifyListeners();
   }
 
   Future<void> fetchAnnouncements() async {
-    // Mock fetching announcements
-    await Future.delayed(const Duration(milliseconds: 600));
-    _announcements = [
-      {
-        'title': 'New Update Available',
-        'content': 'We have released a new version of the app with improved security features.',
-        'time': '2 hours ago',
-      },
-      {
-        'title': 'System Maintenance',
-        'content': 'The system will be down for maintenance on Sunday from 2 AM to 4 AM.',
-        'time': '1 day ago',
-      },
-    ];
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await ApiService().get('/announcements');
+      
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String 
+          ? jsonDecode(responseData) 
+          : responseData as Map<String, dynamic>;
+
+      // Correctly parsing the nested structure: data -> announcements
+      if (json.containsKey('success') && json['success'] == true) {
+        final data = json['data'];
+        if (data != null && data is Map<String, dynamic>) {
+          _announcements = data['announcements'] as List<dynamic>? ?? [];
+        } else if (data is List<dynamic>) {
+          _announcements = data;
+        } else {
+          _announcements = [];
+        }
+      } else {
+        _announcements = [];
+      }
+    } catch (e) {
+      debugPrint("Error fetching announcements: $e");
+      _announcements = [];
+    }
+
+    _isLoading = false;
     notifyListeners();
   }
 }

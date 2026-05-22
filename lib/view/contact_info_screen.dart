@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/personal_chat_controller.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -8,52 +11,62 @@ import 'package:shieldconnect_app/view/video_calling_screen.dart';
 
 class ContactInfoScreen extends StatelessWidget {
   final String name;
-  const ContactInfoScreen({super.key, required this.name});
+  final String recipientId;
+  const ContactInfoScreen({
+    super.key,
+    required this.name,
+    required this.recipientId,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Fetching consistent network placeholders matching user mockups
-    final List<String> mediaImages = [
-      "https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=400", // jungle
-      "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=400", // nature hills
-      "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?w=400", // poppy field
-      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400", // forest landscape
-    ];
-
-    final List<Map<String, String>> groupItems = [
-      {"title": "Family", "members": "15 Members"},
-      {"title": "Friends", "members": "15 Members"},
-      {"title": "Relatives", "members": "15 Members"},
-      {"title": "College", "members": "15 Members"},
-    ];
-
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Custom Header Bar
-              _buildHeader(context),
+        child: Consumer<PersonalChatController>(
+          builder: (context, controller, child) {
+            final details = controller.personalDetails;
+            final isLoading = controller.isContactInfoLoading;
 
-              // 2. Big Center Profile block
-              _buildProfileBlock(context),
+            if (isLoading && details == null) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
 
-              // 3. Grid/Row of Action Cards
-              _buildActionRow(context),
-              const SizedBox(height: 32),
+            final String displayName = details?['name'] ?? name;
+            final String avatarPath = details?['avatar'] ?? "";
+            final String bio = details?['bio'] ?? "Hey there! I am using ShieldConnect.";
+            
+            final List<dynamic> mediaImages = details?['medias'] ?? [];
+            final List<dynamic> groupsInCommon = details?['groupsInCommon'] ?? [];
 
-              // 4. Media Gallery Section
-              _buildMediaSection(context, mediaImages),
-              const SizedBox(height: 32),
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Custom Header Bar
+                  _buildHeader(context),
 
-              // 5. Groups in Common section
-              _buildGroupsSection(context, groupItems),
-              const SizedBox(height: 24),
-            ],
-          ),
+                  // 2. Big Center Profile block
+                  _buildProfileBlock(context, displayName, avatarPath, bio),
+
+                  // 3. Grid/Row of Action Cards
+                  _buildActionRow(context, displayName),
+                  const SizedBox(height: 32),
+
+                  // 4. Media Gallery Section
+                  _buildMediaSection(context, mediaImages),
+                  const SizedBox(height: 32),
+
+                  // 5. Groups in Common section
+                  _buildGroupsSection(context, groupsInCommon),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -103,51 +116,78 @@ class ContactInfoScreen extends StatelessWidget {
   }
 
   /// Elevated Profile Stack housing the Big CircleAvatar and user info tags
-  Widget _buildProfileBlock(BuildContext context) {
+  Widget _buildProfileBlock(
+    BuildContext context,
+    String displayName,
+    String avatarPath,
+    String bio,
+  ) {
+    final avatarUrl = ApiService.getImageUrl(avatarPath);
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 20, bottom: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Large 108x108 avatar matching mockups
+          // Large 108x108 avatar
           Container(
             width: 108,
             height: 108,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: appColor(context).grey100, width: 3),
-              image: const DecorationImage(
-                image: AssetImage(ImageAssets.maisieAvatar),
-                fit: BoxFit.cover,
-              ),
+            ),
+            child: ClipOval(
+              child: avatarUrl.isNotEmpty
+                  ? Image.network(
+                      avatarUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: appColor(context).grey200,
+                          child: Icon(
+                            Icons.person,
+                            color: appColor(context).secondary,
+                            size: 40,
+                          ),
+                        );
+                      },
+                    )
+                  : Container(
+                      color: appColor(context).grey200,
+                      child: Icon(
+                        Icons.person,
+                        color: appColor(context).secondary,
+                        size: 40,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 16),
 
           // Bold Contact Name
-          Text(
-            name,
-            style: fontStyle.clashDisplaySemiBold20.textColor(
-              appColor(context).black,
-            ),
-          ),
-          const SizedBox(height: 4),
-
-          // Phone tag
-          Text(
-            "9898989898",
-            style: fontStyle.clashDisplayMedium14.textColor(
-              appColor(context).grey400,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Text(
+              displayName,
+              textAlign: TextAlign.center,
+              style: fontStyle.clashDisplaySemiBold20.textColor(
+                appColor(context).black,
+              ),
             ),
           ),
           const SizedBox(height: 12),
 
           // Status emoji text
-          Text(
-            "Happy Life 🥰",
-            style: fontStyle.clashDisplayMedium14.textColor(
-              appColor(context).black,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Text(
+              bio,
+              textAlign: TextAlign.center,
+              style: fontStyle.clashDisplayMedium14.textColor(
+                appColor(context).black,
+              ),
             ),
           ),
         ],
@@ -156,7 +196,7 @@ class ContactInfoScreen extends StatelessWidget {
   }
 
   /// Action deck holding Message, Audio Call and Video Call stadium-shadow cards
-  Widget _buildActionRow(BuildContext context) {
+  Widget _buildActionRow(BuildContext context, String displayName) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Row(
@@ -166,6 +206,7 @@ class ContactInfoScreen extends StatelessWidget {
               context,
               label: "Message",
               asset: ImageAssets.message,
+              onTap: () => Navigator.pop(context), // Pop back to chat
             ),
           ),
           const SizedBox(width: 14),
@@ -178,7 +219,7 @@ class ContactInfoScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => VoiceCallingScreen(userName: name),
+                    builder: (context) => VoiceCallingScreen(userName: displayName),
                   ),
                 );
               },
@@ -194,7 +235,7 @@ class ContactInfoScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => VideoCallingScreen(userName: name),
+                    builder: (context) => VideoCallingScreen(userName: displayName),
                   ),
                 );
               },
@@ -205,7 +246,7 @@ class ContactInfoScreen extends StatelessWidget {
     );
   }
 
-  /// Helper UI yielding pristine glass-elevated action buttons
+  /// Helper UI yielding pristine action buttons
   Widget _buildActionCard(
     BuildContext context, {
     required String label,
@@ -251,13 +292,13 @@ class ContactInfoScreen extends StatelessWidget {
   }
 
   /// Dynamic Media Gallery builder displaying horizontal grid of recent documents
-  Widget _buildMediaSection(BuildContext context, List<String> images) {
+  Widget _buildMediaSection(BuildContext context, List<dynamic> images) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const AllMediaScreen()),
+          MaterialPageRoute(builder: (context) => AllMediaScreen(mediaItems: images)),
         );
       },
       child: Column(
@@ -278,7 +319,7 @@ class ContactInfoScreen extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      "14",
+                      images.length.toString(),
                       style: fontStyle.clashDisplayBold14.textColor(
                         appColor(context).black,
                       ),
@@ -297,37 +338,49 @@ class ContactInfoScreen extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Horizontal list of media thumbnails
-          SizedBox(
-            height: 72,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: images.length,
+          if (images.isEmpty)
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              itemBuilder: (context, index) {
-                return Container(
-                  width: 72,
-                  margin: const EdgeInsets.only(right: 12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      images[index],
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: appColor(context).grey200,
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            color: appColor(context).grey400,
-                          ),
-                        );
-                      },
+              child: Text(
+                "No shared media yet",
+                style: fontStyle.clashDisplayMedium12.textColor(
+                  appColor(context).grey300,
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 72,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: images.length,
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                itemBuilder: (context, index) {
+                  final mediaUrl = ApiService.getImageUrl(images[index].toString());
+                  return Container(
+                    width: 72,
+                    margin: const EdgeInsets.only(right: 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        mediaUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: appColor(context).grey200,
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: appColor(context).grey400,
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -336,15 +389,17 @@ class ContactInfoScreen extends StatelessWidget {
   /// Vertical checklist structuring mutual connections and linked Groups
   Widget _buildGroupsSection(
     BuildContext context,
-    List<Map<String, String>> items,
+    List<dynamic> items,
   ) {
+    final int count = items.length;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "4 Groups in Common",
+            "$count ${count == 1 ? 'Group' : 'Groups'} in Common",
             style: fontStyle.clashDisplayBold16.textColor(
               appColor(context).black,
             ),
@@ -352,60 +407,73 @@ class ContactInfoScreen extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Group Items
-          ...items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 20.0),
-              child: Row(
-                children: [
-                  // Group Foliage Circular avatar representing Group chat imagery
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: Image.network(
-                      "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 48,
-                          height: 48,
-                          color: appColor(context).grey200,
-                          child: Icon(
-                            Icons.group,
-                            color: appColor(context).grey400,
-                            size: 20,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-
-                  // Text Columns
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item["title"]!,
-                          style: fontStyle.clashDisplayBold16.textColor(
-                            appColor(context).black,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item["members"]!,
-                          style: fontStyle.clashDisplayMedium12.textColor(
-                            appColor(context).grey400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          if (items.isEmpty)
+            Text(
+              "No mutual groups",
+              style: fontStyle.clashDisplayMedium12.textColor(
+                appColor(context).grey300,
               ),
-            );
-          }),
+            )
+          else
+            ...items.map((item) {
+              final gName = item["name"]?.toString() ?? "Group";
+              final gImage = item["group_image"]?.toString() ?? "";
+              final int mCount = item["membersCount"] is int ? item["membersCount"] as int : 0;
+              final groupAvatarUrl = ApiService.getImageUrl(gImage, isGroup: true);
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: Row(
+                  children: [
+                    // Group avatar representing Group chat imagery
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Image.network(
+                        groupAvatarUrl,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 48,
+                            height: 48,
+                            color: appColor(context).grey200,
+                            child: Icon(
+                              Icons.group,
+                              color: appColor(context).grey400,
+                              size: 20,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+
+                    // Text Columns
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            gName,
+                            style: fontStyle.clashDisplayBold16.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "$mCount ${mCount == 1 ? 'Member' : 'Members'}",
+                            style: fontStyle.clashDisplayMedium12.textColor(
+                              appColor(context).grey400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

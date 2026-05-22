@@ -5,6 +5,9 @@ import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
 
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/controller/call_list_controller.dart';
+
 class BottomnavScreen extends StatelessWidget {
   const BottomnavScreen({super.key});
 
@@ -27,7 +30,16 @@ class BottomnavScreen extends StatelessWidget {
         ),
         child: BottomNavigationBar(
           currentIndex: controller.currentIndex,
-          onTap: controller.changeTab,
+          onTap: (index) {
+            controller.changeTab(index);
+            if (index == 0) {
+              Provider.of<HomeScreenController>(context, listen: false)
+                  .fetchRecentChats();
+            } else if (index == 1) {
+              Provider.of<CallListController>(context, listen: false)
+                  .init();
+            }
+          },
           type: BottomNavigationBarType.fixed,
           backgroundColor: appColor(context).white,
           elevation: 0,

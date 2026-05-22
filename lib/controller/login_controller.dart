@@ -1,5 +1,14 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/controller/notification_controller.dart';
+import 'package:shieldconnect_app/model/api_response.dart';
+import 'package:shieldconnect_app/model/user_model.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/view/bottomnav_screen.dart';
 
 class LoginController extends ChangeNotifier {
@@ -21,17 +30,14 @@ class LoginController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  void setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
-
   Future<void> init() async {
-    setLoading(true);
+    _isLoading = true;
+    notifyListeners();
 
     await Future.delayed(const Duration(seconds: 2));
 
-    setLoading(false);
+    _isLoading = false;
+    notifyListeners();
   }
 
   LoginController() {
@@ -61,39 +67,75 @@ class LoginController extends ChangeNotifier {
   }
 
   Future<void> login(BuildContext context) async {
-    if (emailController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
+    if (emailController.text.trim().isEmpty ||
+        passwordController.text.trim().isEmpty) {
       _message = "Please fill the fields";
       _isSuccess = false;
       notifyListeners();
     } else {
       _message = "";
       _isSuccess = false;
-      setLoading(true);
-      
-      // Simulate API call delay
-      await Future.delayed(const Duration(seconds: 2));
-      
-      setLoading(false);
+      _isLoading = true;
+      notifyListeners();
 
-      // Mocking a successful login for demonstration
-      bool success = emailController.text.trim() == "user@example.com" && passwordController.text.trim() == "password123";
+      try {
+        final response = await ApiService().post(
+          "/auth/login",
+          data: {
+            "email": emailController.text.trim(),
+            "password": passwordController.text.trim(),
+          },
+        );
 
-      if (success) {
-        _message = "Log In Successful!";
-        _isSuccess = true;
+        final apiResponse = ApiResponse<UserModel>.fromJson(
+          response.data,
+          (json) => UserModel.fromJson(json as Map<String, dynamic>),
+        );
+
+        _isLoading = false;
         notifyListeners();
-        
-        // Wait a bit so user can see the success message before navigating
-        await Future.delayed(const Duration(seconds: 1));
-        
-        if (context.mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const BottomnavScreen()),
+
+        if (apiResponse.success) {
+          final SharedPreferences prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+            'user_session',
+            jsonEncode(apiResponse.data?.toJson()),
           );
+
+          _message = "Log In Successful!";
+          _isSuccess = true;
+          notifyListeners();
+
+          // Wait a bit so user can see the success message before navigating
+          await Future.delayed(const Duration(seconds: 1));
+
+          if (context.mounted) {
+            // Refresh controllers with new session data AFTER the delay, right before navigating,
+            // to ensure the loading syncing spinner is active when ChatlistScreen mounts.
+            context.read<HomeScreenController>().init();
+            context.read<ProfileController>().init();
+            context.read<NotificationController>().init();
+            context.read<CallListController>().init();
+
+            emailController.clear();
+            passwordController.clear();
+            _message = "";
+            _isSuccess = false;
+            notifyListeners();
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const BottomnavScreen()),
+            );
+          }
+        } else {
+          _message = apiResponse.message ?? "Invalid Email or Password";
+          _isSuccess = false;
+          notifyListeners();
         }
-      } else {
-        _message = "Invalid Email or Password";
+      } catch (e) {
+        _isLoading = false;
+        _message = "Oops! We hit a small problem. Please try again.";
         _isSuccess = false;
         notifyListeners();
       }

@@ -3,34 +3,16 @@ import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/view/otp_verification_screen.dart';
 
-class ForgotPasswordScreen extends StatefulWidget {
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/forgot_password_controller.dart';
+
+class ForgotPasswordScreen extends StatelessWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
-  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
-}
-
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final TextEditingController emailController = TextEditingController();
-  final FocusNode emailFocus = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    emailFocus.addListener(() {
-      setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    emailController.dispose();
-    emailFocus.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final controller = Provider.of<ForgotPasswordController>(context);
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       appBar: AppBar(
@@ -38,7 +20,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios, color: appColor(context).black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            controller.clearMessage();
+            Navigator.pop(context);
+          },
         ),
       ),
       body: SafeArea(
@@ -79,8 +64,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               CustomTextField(
                 labelText: "Email",
                 hintText: "Enter your email",
-                controller: emailController,
-                focusNode: emailFocus,
+                controller: controller.emailController,
+                focusNode: controller.emailFocus,
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 30),
@@ -99,14 +84,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const OtpVerificationScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => controller.sendOtp(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: appColor(context).transparent,
                     shadowColor: appColor(context).transparent,
@@ -115,14 +95,30 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                     elevation: 0,
                   ),
-                  child: Text(
-                    "Send OTP",
-                    style: fontStyle.clashDisplaySemiBold18
-                        .textColor(appColor(context).white)
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
+                  child: controller.isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          "Send OTP",
+                          style: fontStyle.clashDisplaySemiBold18
+                              .textColor(appColor(context).white)
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
                 ),
               ),
+              if (controller.message.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    controller.message,
+                    textAlign: TextAlign.center,
+                    style: fontStyle.clashDisplayMedium14.textColor(
+                      controller.isError
+                          ? appColor(context).red
+                          : appColor(context).green,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

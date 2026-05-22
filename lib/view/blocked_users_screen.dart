@@ -1,34 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/account_controller.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
-import 'package:shieldconnect_app/utils/toast_helper.dart';
 
-class BlockedUsersScreen extends StatefulWidget {
+class BlockedUsersScreen extends StatelessWidget {
   const BlockedUsersScreen({super.key});
 
   @override
-  State<BlockedUsersScreen> createState() => _BlockedUsersScreenState();
-}
-
-class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
-  // Mock list of blocked users
-  final List<Map<String, String>> _blockedUsers = [
-    {"name": "Alex Thompson", "image": ImageAssets.obchild1},
-    {"name": "Sarah Jenkins", "image": ImageAssets.obchild2},
-    {"name": "Michael Chen", "image": ImageAssets.obchild3},
-  ];
-
-  void _unblockUser(int index) {
-    setState(() {
-      _blockedUsers.removeAt(index);
-    });
-    // Show a premium toast
-    ToastHelper.showToast(context, "User unblocked successfully");
-  }
-
-  @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AccountController>(context, listen: false).fetchBlockedUsers();
+    });
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
@@ -72,15 +58,29 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
             // 2. Blocked Users List
             Expanded(
-              child: _blockedUsers.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _blockedUsers.length,
-                      itemBuilder: (context, index) {
-                        return _buildBlockedUserCard(index);
-                      },
-                    ),
+              child: Consumer<AccountController>(
+                builder: (context, controller, child) {
+                  if (controller.isLoading) {
+                    return Center(
+                      child: CircularProgressIndicator(
+                        color: appColor(context).secondary,
+                      ),
+                    );
+                  }
+
+                  if (controller.blockedUsers.isEmpty) {
+                    return _buildEmptyState(context);
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: controller.blockedUsers.length,
+                    itemBuilder: (context, index) {
+                      return _buildBlockedUserCard(context, controller, index);
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -89,8 +89,13 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   }
 
   /// Aesthetic card for each blocked user
-  Widget _buildBlockedUserCard(int index) {
-    final user = _blockedUsers[index];
+  Widget _buildBlockedUserCard(BuildContext context, AccountController controller, int index) {
+    final user = controller.blockedUsers[index];
+    final String avatarUrl = ApiService.getImageUrl(user['image']);
+    final ImageProvider imageProvider = avatarUrl.isNotEmpty
+        ? NetworkImage(avatarUrl)
+        : const AssetImage(ImageAssets.userAvatar) as ImageProvider;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -113,7 +118,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               image: DecorationImage(
-                image: AssetImage(user['image']!),
+                image: imageProvider,
                 fit: BoxFit.cover,
               ),
             ),
@@ -127,32 +132,64 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
               ),
             ),
           ),
-          GestureDetector(
-            onTap: () => _unblockUser(index),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: appColor(context).secondary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.lock_open_rounded,
-                    color: appColor(context).secondary,
-                    size: 16,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: controller.unblockingUserId != null
+                    ? null
+                    : () => controller.unblockUser(user['id']!),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: appColor(context).secondary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    "Unblock",
-                    style: fontStyle.clashDisplaySemiBold12.textColor(
-                      appColor(context).secondary,
-                    ),
-                  ),
-                ],
+                  child: controller.unblockingUserId == user['id']
+                      ? SizedBox(
+                          width: 50,
+                          height: 16,
+                          child: Center(
+                            child: SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: appColor(context).secondary,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.lock_open_rounded,
+                              color: appColor(context).secondary,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              "Unblock",
+                              style: fontStyle.clashDisplaySemiBold12.textColor(
+                                appColor(context).secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
-            ),
+              if (controller.unblockErrors.containsKey(user['id'])) ...[
+                const SizedBox(height: 4),
+                Text(
+                  controller.unblockErrors[user['id']]!,
+                  style: fontStyle.clashDisplayRegular10.textColor(
+                    const Color(0xFFB71C44),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -160,7 +197,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   }
 
   /// Centered state for when no users are blocked
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

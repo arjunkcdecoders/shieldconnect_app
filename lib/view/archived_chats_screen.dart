@@ -1,108 +1,258 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
-import 'package:shieldconnect_app/utils/image_assets.dart';
+import 'package:shieldconnect_app/utils/date_helper.dart';
 import 'package:shieldconnect_app/view/chat_screen.dart';
+import 'package:shieldconnect_app/view/group_chat_screen.dart';
 
 class ArchivedChatsScreen extends StatelessWidget {
   const ArchivedChatsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> archivedChats = [
-      {
-        "name": "Maisie williams",
-        "message": "Hii..Are You There?",
-        "time": "Yesterday",
-        "status": "read_filled",
-        "unread": 0,
-        "hasRing": false,
-        "hasStatusDot": false,
-      },
-      {
-        "name": "Family",
-        "message": "Hello everyone!",
-        "time": "May 10",
-        "status": "read_empty",
-        "unread": 0,
-        "hasRing": false,
-        "hasStatusDot": false,
-        "isGroup": true,
-      },
-      {
-        "name": "Bruce Wayne",
-        "message": "Hey! 😊",
-        "time": "May 8",
-        "status": "none",
-        "unread": 0,
-        "hasRing": false,
-        "hasStatusDot": false,
-      },
-    ];
-
     return Scaffold(
       backgroundColor: appColor(context).white,
       appBar: AppBar(
         backgroundColor: appColor(context).white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: appColor(context).black, size: 20),
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            color: appColor(context).black,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           "Archived Chats",
-          style: fontStyle.clashDisplaySemiBold18.textColor(appColor(context).black),
+          style: fontStyle.clashDisplaySemiBold18.textColor(
+            appColor(context).black,
+          ),
         ),
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: archivedChats.length,
-                  itemBuilder: (context, index) {
-                    return _buildChatItem(context, archivedChats[index]);
-                  },
+        child: Consumer<ProfileController>(
+          builder: (context, controller, child) {
+            if (controller.isLoading && controller.archivedChats.isEmpty) {
+              return Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    appColor(context).secondary,
+                  ),
+                ),
+              );
+            }
+
+            final archivedList = controller.archivedChats;
+
+            if (archivedList.isEmpty) {
+              return RefreshIndicator(
+                color: appColor(context).secondary,
+                onRefresh: () => controller.fetchArchivedChats(),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.archive_outlined,
+                            size: 64,
+                            color: appColor(context).grey300,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No archived chats",
+                            style: fontStyle.clashDisplaySemiBold16.textColor(
+                              appColor(context).grey400,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Swipe left to unarchive or pull down to refresh",
+                            style: fontStyle.clashDisplayRegular12.textColor(
+                              appColor(context).grey300,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return RefreshIndicator(
+              color: appColor(context).secondary,
+              onRefresh: () => controller.fetchArchivedChats(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: archivedList.length,
+                        itemBuilder: (context, index) {
+                          final item = archivedList[index];
+                          final Map<String, dynamic> itemMap =
+                              item is Map<String, dynamic>
+                              ? item
+                              : Map<String, dynamic>.from(item);
+                          final conversation = itemMap['conversation'] ?? {};
+                          final String chatId =
+                              conversation['id'] ?? conversation['_id'] ?? "";
+
+                          return Dismissible(
+                            key: Key(chatId),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              margin: const EdgeInsets.only(bottom: 22.0),
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              decoration: BoxDecoration(
+                                color: appColor(
+                                  context,
+                                ).secondary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    "Unarchive",
+                                    style: fontStyle.clashDisplaySemiBold14
+                                        .textColor(appColor(context).secondary),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    Icons.unarchive_rounded,
+                                    color: appColor(context).secondary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            confirmDismiss: (direction) =>
+                                controller.handleUnarchiveChat(context, chatId),
+                            child: _buildChatItem(context, controller, itemMap),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildChatItem(BuildContext context, Map<String, dynamic> chat) {
-    final bool hasRing = chat["hasRing"] ?? false;
-    final bool hasStatusDot = chat["hasStatusDot"] ?? false;
-    final String status = chat["status"] ?? "none";
-    final int unread = chat["unread"] ?? 0;
+  Widget _buildChatItem(
+    BuildContext context,
+    ProfileController controller,
+    Map<String, dynamic> item,
+  ) {
+    final conversation = item['conversation'] ?? {};
+    final lastMessage = item['last_message'] ?? {};
+    final String chatId = conversation['id'] ?? conversation['_id'] ?? "";
+
+    final bool isGroup = conversation['type'] == 'group';
+    final bool isRequest =
+        item['relationship']?['status'] == 'pending' &&
+        item['requested_by'] != null;
+    final String name = conversation['name'] ?? 'Unknown';
+    final String messageContent = lastMessage['content'] ?? 'No messages yet';
+    final String time = lastMessage['created_at'] != null
+        ? DateHelper.formatTime(lastMessage['created_at'])
+        : '';
+    final int unread = item['unread_count'] ?? 0;
+
+    final String rawType =
+        (lastMessage['message_type'] ?? lastMessage['type'] ?? '')
+            .toString()
+            .toLowerCase();
+    IconData? mediaIcon;
+    String? mediaText;
+    if (rawType == 'image') {
+      mediaIcon = Icons.image_outlined;
+      mediaText = 'image';
+    } else if (rawType == 'video') {
+      mediaIcon = Icons.videocam_outlined;
+      mediaText = 'video';
+    } else if (rawType == 'audio' || rawType == 'voice') {
+      mediaIcon = Icons.mic_none_outlined;
+      mediaText = 'audio';
+    } else if (rawType == 'file' || rawType == 'doc' || rawType == 'document') {
+      mediaIcon = Icons.insert_drive_file_outlined;
+      mediaText = 'file';
+    }
+
+    final bool hasRing = false;
+    final bool hasStatusDot = conversation['is_online'] ?? false;
+    final String msgStatus = lastMessage['status'] ?? 'none';
+    final String status = msgStatus == 'read'
+        ? 'read_filled'
+        : (msgStatus == 'sent' ? 'read_empty' : 'none');
+    final String? imagePath = conversation['image'];
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              userName: chat["name"],
-              isGroup: chat["isGroup"] ?? false,
-              isRequest: chat["isRequest"] ?? false,
+        if (isGroup) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => GroupChatScreen(
+                groupName: name,
+                groupId: conversation['id'] ?? conversation['_id'],
+                isArchived: true,
+                isFavorite:
+                    item['is_favorite'] ??
+                    item['isFavorite'] ??
+                    conversation['is_favorite'] ??
+                    conversation['isFavorite'] ??
+                    false,
+              ),
             ),
-          ),
-        );
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                userName: name,
+                isGroup: isGroup,
+                isRequest: isRequest,
+                recipientId: conversation['id'] ?? conversation['_id'],
+                isArchived: true,
+                isFavorite:
+                    item['is_favorite'] ??
+                    item['isFavorite'] ??
+                    conversation['is_favorite'] ??
+                    conversation['isFavorite'] ??
+                    false,
+              ),
+            ),
+          );
+        }
       },
       child: Padding(
         padding: const EdgeInsets.only(bottom: 22.0),
         child: Row(
           children: [
-            // Avatar
+            // Avatar logic
             SizedBox(
               width: 60,
               height: 60,
@@ -119,11 +269,21 @@ class ArchivedChatsScreen extends StatelessWidget {
                         ),
                         child: CircleAvatar(
                           radius: 24,
-                          backgroundImage: (chat["isGroup"] ?? false)
-                              ? const NetworkImage(
-                                  "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
-                                ) as ImageProvider
-                              : const AssetImage(ImageAssets.maisieAvatar),
+                          backgroundColor: appColor(context).grey100,
+                          backgroundImage:
+                              imagePath != null &&
+                                  ApiService.getImageUrl(imagePath).isNotEmpty
+                              ? NetworkImage(ApiService.getImageUrl(imagePath))
+                              : null,
+                          child:
+                              imagePath == null ||
+                                  ApiService.getImageUrl(imagePath).isEmpty
+                              ? Icon(
+                                  isGroup ? Icons.group : Icons.person,
+                                  color: appColor(context).grey400,
+                                  size: 24,
+                                )
+                              : null,
                         ),
                       )
                     : Stack(
@@ -131,11 +291,23 @@ class ArchivedChatsScreen extends StatelessWidget {
                         children: [
                           CircleAvatar(
                             radius: 28,
-                            backgroundImage: (chat["isGroup"] ?? false)
-                                ? const NetworkImage(
-                                    "https://images.unsplash.com/photo-1545241047-6083a3684587?w=200",
-                                  ) as ImageProvider
-                                : const AssetImage(ImageAssets.maisieAvatar),
+                            backgroundColor: appColor(context).grey100,
+                            backgroundImage:
+                                imagePath != null &&
+                                    ApiService.getImageUrl(imagePath).isNotEmpty
+                                ? NetworkImage(
+                                    ApiService.getImageUrl(imagePath),
+                                  )
+                                : null,
+                            child:
+                                imagePath == null ||
+                                    ApiService.getImageUrl(imagePath).isEmpty
+                                ? Icon(
+                                    isGroup ? Icons.group : Icons.person,
+                                    color: appColor(context).grey400,
+                                    size: 24,
+                                  )
+                                : null,
                           ),
                           if (hasStatusDot)
                             Positioned(
@@ -167,7 +339,7 @@ class ArchivedChatsScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    chat["name"],
+                    name,
                     style: fontStyle.clashDisplaySemiBold16.textColor(
                       appColor(context).black,
                     ),
@@ -191,14 +363,34 @@ class ArchivedChatsScreen extends StatelessWidget {
                         const SizedBox(width: 4),
                       ],
                       Expanded(
-                        child: Text(
-                          chat["message"],
-                          style: fontStyle.clashDisplayRegular12.textColor(
-                            appColor(context).grey400,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: mediaIcon != null && mediaText != null
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    mediaIcon,
+                                    color: appColor(context).textMediumGrey,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    mediaText,
+                                    style: fontStyle.clashDisplayRegular12
+                                        .textColor(
+                                          appColor(context).textMediumGrey,
+                                        ),
+                                  ),
+                                ],
+                              )
+                            : Text(
+                                messageContent,
+                                style: fontStyle.clashDisplayRegular12
+                                    .textColor(
+                                      appColor(context).textMediumGrey,
+                                    ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                       ),
                     ],
                   ),
@@ -213,13 +405,23 @@ class ArchivedChatsScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  chat["time"],
-                  style: fontStyle.clashDisplayRegular12.textColor(
-                    appColor(context).grey300,
+                  time,
+                  style: fontStyle.clashDisplayRegular10.textColor(
+                    appColor(context).textSecondary,
                   ),
                 ),
                 const SizedBox(height: 6),
-                unread > 0
+                controller.failedUnarchiveChatIds.contains(chatId)
+                    ? GestureDetector(
+                        onTap: () =>
+                            controller.handleUnarchiveChat(context, chatId),
+                        child: Icon(
+                          Icons.error_outline_rounded,
+                          color: appColor(context).secondary,
+                          size: 20,
+                        ),
+                      )
+                    : unread > 0
                     ? Container(
                         width: 20,
                         height: 20,

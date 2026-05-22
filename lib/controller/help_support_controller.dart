@@ -1,98 +1,175 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shieldconnect_app/model/faq_model.dart';
+import 'package:shieldconnect_app/model/user_model.dart';
+import 'package:shieldconnect_app/model/ticket_model.dart';
+import 'package:shieldconnect_app/model/ticket_chat_model.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:dio/dio.dart' as dio;
 
 class HelpSupportController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
   // FAQs
-  List<Map<String, String>> _faqs = [];
-  List<Map<String, String>> get faqs => _faqs;
+  List<FaqModel> _faqs = [];
+  List<FaqModel> get faqs => _faqs;
 
   // Tickets
-  List<Map<String, dynamic>> _tickets = [];
-  List<Map<String, dynamic>> get tickets => _tickets;
-  
-  Map<String, dynamic>? _selectedTicket;
-  Map<String, dynamic>? get selectedTicket => _selectedTicket;
+  List<TicketModel> _tickets = [];
+  List<TicketModel> get tickets => _tickets;
+
+  TicketModel? _selectedTicket;
+  TicketModel? get selectedTicket => _selectedTicket;
 
   // Admin Chats
   List<Map<String, dynamic>> _adminMessages = [];
   List<Map<String, dynamic>> get adminMessages => _adminMessages;
 
-  // Fetch FAQs
+  // Fetch FAQs from API
   Future<void> fetchFAQs() async {
     _isLoading = true;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 1));
-    _faqs = [
-      {
-        "q": "How to backup my chats?",
-        "a": "Your chats are automatically backed up to our secure cloud servers every 24 hours."
-      },
-      {
-        "q": "Can I use Shield Connect on multiple devices?",
-        "a": "Yes, you can link up to 4 devices to your account simultaneously."
-      },
-      {
-        "q": "How to delete my account?",
-        "a": "You can delete your account from the 'Account' settings menu. This action is permanent."
-      },
-    ];
+    try {
+      final response = await ApiService().get('/admin/faqs?status=Active');
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
 
-    _isLoading = false;
+      if (json['success'] == true) {
+        final List<dynamic> data = json['data'] ?? [];
+        _faqs = data
+            .map((item) => FaqModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint("Error fetching FAQs: $e");
+      // Fallback to empty list on error
+      _faqs = [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  bool _hasFetchedTickets = false;
+  bool get hasFetchedTickets => _hasFetchedTickets;
+
+  void resetHasFetchedTickets() {
+    _hasFetchedTickets = false;
     notifyListeners();
   }
 
   // Fetch All User Tickets
-  Future<void> fetchUserTickets() async {
+  Future<void> fetchUserTickets({bool force = false}) async {
+    if (!force && _hasFetchedTickets) return;
     _isLoading = true;
+    _hasFetchedTickets = true;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 1));
-    _tickets = [
-      {
-        "id": "TCKT-009",
-        "subject": "Bug",
-        "category": "Bug Report",
-        "status": "Open",
-        "lastUpdated": "5/6/2026"
-      },
-      {
-        "id": "TCKT-008",
-        "subject": "Account Recovery",
-        "category": "General Inquiry",
-        "status": "Closed",
-        "lastUpdated": "1/6/2026"
-      },
-    ];
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr == null) {
+        _tickets = [];
+        return;
+      }
 
-    _isLoading = false;
-    notifyListeners();
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      final String? userId = user.id;
+      if (userId == null) {
+        _tickets = [];
+        return;
+      }
+
+      final response = await ApiService().get('/tickets?requesterId=$userId&requesterRole=user');
+      final dynamic responseData = response.data;
+
+      List<dynamic> listData = [];
+      if (responseData is List) {
+        listData = responseData;
+      } else if (responseData is Map<String, dynamic>) {
+        listData = responseData['data'] is List ? responseData['data'] : [];
+      } else if (responseData is String) {
+        final decoded = jsonDecode(responseData);
+        if (decoded is List) {
+          listData = decoded;
+        } else if (decoded is Map<String, dynamic>) {
+          listData = decoded['data'] is List ? decoded['data'] : [];
+        }
+      }
+
+      _tickets = listData
+          .map((item) => TicketModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint("Error fetching user tickets: $e");
+      _tickets = [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   // Create Ticket
-  Future<void> createTicket({
+  Future<bool> createTicket({
     required String subject,
     required String category,
-    required String priority,
   }) async {
     _isLoading = true;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 2));
-    
-    // Add new mock ticket
-    _tickets.insert(0, {
-      "id": "TCKT-010",
-      "subject": subject,
-      "category": category,
-      "status": "Open",
-      "lastUpdated": "Today"
-    });
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr == null) {
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
 
-    _isLoading = false;
-    notifyListeners();
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      final String? userId = user.id;
+      if (userId == null) {
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Instantiate a TicketModel to construct the payload using .toJson()
+      final TicketModel ticket = TicketModel(
+        userId: userId,
+        subject: subject,
+        category: category,
+      );
+
+      final Map<String, dynamic> payload = ticket.toJson()..removeWhere((key, value) => value == null);
+
+      final response = await ApiService().post('/tickets', data: payload);
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true || response.statusCode == 200 || response.statusCode == 201) {
+        await fetchUserTickets(force: true);
+        return true;
+      } else {
+        debugPrint("Failed to create ticket: ${response.data}");
+        return false;
+      }
+    } catch (e) {
+      debugPrint("Error creating ticket: $e");
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   // Search / Filter Tickets
@@ -101,39 +178,42 @@ class HelpSupportController extends ChangeNotifier {
       fetchUserTickets();
       return;
     }
-    
+
     _tickets = _tickets.where((ticket) {
-      return ticket['subject'].toLowerCase().contains(query.toLowerCase()) ||
-             ticket['id'].toLowerCase().contains(query.toLowerCase());
+      final subject = ticket.subject?.toLowerCase() ?? "";
+      final ticketId = ticket.ticketId?.toLowerCase() ?? "";
+      final id = ticket.id?.toLowerCase() ?? "";
+      final q = query.toLowerCase();
+      return subject.contains(q) || ticketId.contains(q) || id.contains(q);
     }).toList();
-    
+
     notifyListeners();
   }
 
   // Fetch Ticket Details
   Future<void> fetchTicketDetails(String ticketId) async {
     _isLoading = true;
+    _selectedTicket = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // Mock details
-    _selectedTicket = {
-      "id": ticketId,
-      "subject": "Bug Report",
-      "category": "Bug",
-      "status": "OPEN",
-      "priority": "MEDIUM",
-      "createdDate": "May 6, 2026",
-      "raisedBy": "Swiss",
-      "assignedAgent": "Unassigned"
-    };
+    try {
+      final response = await ApiService().get('/tickets/$ticketId');
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
 
-    // Also fetch initial chats for this ticket
-    await fetchTicketMessages(ticketId);
-
-    _isLoading = false;
-    notifyListeners();
+      if (json['success'] == true) {
+        final Map<String, dynamic> data = json['data'] as Map<String, dynamic>;
+        _selectedTicket = TicketModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint("Error fetching ticket details: $e");
+      _selectedTicket = null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   // Fetch All Chats between Support/Admin and User
@@ -146,17 +226,20 @@ class HelpSupportController extends ChangeNotifier {
         "time": "09:04 PM",
       },
       {
-        "text": "Hello! I'm sorry to hear that. Could you please provide more details?",
+        "text":
+            "Hello! I'm sorry to hear that. Could you please provide more details?",
         "isMe": false, // Support/Admin message
         "time": "09:05 PM",
       },
       {
-        "text": "It seems like messages from the last hour aren't appearing on my desktop app.",
+        "text":
+            "It seems like messages from the last hour aren't appearing on my desktop app.",
         "isMe": true,
         "time": "09:06 PM",
       },
       {
-        "text": "Thank you for the info. We are looking into our sync servers. Please hold on.",
+        "text":
+            "Thank you for the info. We are looking into our sync servers. Please hold on.",
         "isMe": false,
         "time": "09:10 PM",
       },
@@ -164,26 +247,119 @@ class HelpSupportController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Send Message to Admin
-  Future<void> sendMessageToAdmin(String text) async {
-    // Immediate local update for UI responsiveness
-    _adminMessages.add({
-      "text": text,
-      "isMe": true,
-      "time": "Just now",
-    });
+  // Ticket Chats List
+  List<TicketChatModel> _ticketChats = [];
+  List<TicketChatModel> get ticketChats => _ticketChats;
+
+  bool _isSendingMessage = false;
+  bool get isSendingMessage => _isSendingMessage;
+
+  String? _currentUserId;
+  String? get currentUserId => _currentUserId;
+
+  Future<void> loadCurrentUserId() async {
+    if (_currentUserId != null) return;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr != null) {
+        final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+        final UserModel user = UserModel.fromJson(userMap);
+        _currentUserId = user.id;
+      }
+    } catch (e) {
+      debugPrint("Error loading current user ID: $e");
+    }
+  }
+
+  // Fetch Ticket Chats
+  Future<void> fetchTicketChats(String ticketId) async {
+    await loadCurrentUserId();
+    try {
+      final response = await ApiService().get('/chats/$ticketId');
+      final dynamic responseData = response.data;
+
+      List<dynamic> listData = [];
+      if (responseData is List) {
+        listData = responseData;
+      } else if (responseData is Map<String, dynamic>) {
+        listData = responseData['data'] is List ? responseData['data'] : [];
+      } else if (responseData is String) {
+        final decoded = jsonDecode(responseData);
+        if (decoded is List) {
+          listData = decoded;
+        } else if (decoded is Map<String, dynamic>) {
+          listData = decoded['data'] is List ? decoded['data'] : [];
+        }
+      }
+
+      _ticketChats = listData
+          .map((item) => TicketChatModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint("Error fetching ticket chats: $e");
+      _ticketChats = [];
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  // Send Ticket Message
+  Future<bool> sendTicketMessage({
+    required String ticketId,
+    required String message,
+    String? filePath,
+  }) async {
+    _isSendingMessage = true;
     notifyListeners();
 
-    // Simulate network sync
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    // Optional: Simulate admin reply
-    await Future.delayed(const Duration(seconds: 2));
-    _adminMessages.add({
-      "text": "We have received your message. An agent will be with you shortly.",
-      "isMe": false,
-      "time": "Just now",
-    });
-    notifyListeners();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr == null) return false;
+
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      final String? userId = user.id;
+      if (userId == null) return false;
+
+      dynamic payloadData;
+
+      if (filePath != null && filePath.isNotEmpty) {
+        payloadData = dio.FormData.fromMap({
+          'ticketId': ticketId,
+          'userId': userId,
+          'message': message,
+          'attachment': await dio.MultipartFile.fromFile(
+            filePath,
+            filename: filePath.split('/').last,
+          ),
+        });
+      } else {
+        payloadData = {
+          'ticketId': ticketId,
+          'userId': userId,
+          'message': message,
+        };
+      }
+
+      final response = await ApiService().post('/chats', data: payloadData);
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true || response.statusCode == 200 || response.statusCode == 201) {
+        await fetchTicketChats(ticketId);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Error sending ticket message: $e");
+      return false;
+    } finally {
+      _isSendingMessage = false;
+      notifyListeners();
+    }
   }
 }

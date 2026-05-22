@@ -42,8 +42,32 @@ class StatusModel {
       content: json['content'] as String?,
       backgroundColor: json['background_color'] as String?,
       caption: json['caption'] as String?,
-      viewerIds: (json['viewers'] as List<dynamic>?)?.where((e) => e is String).map((e) => e as String).toList(),
-      viewers: (json['viewers'] as List<dynamic>?)?.where((e) => e is Map).map((e) => UserModel.fromJson(e as Map<String, dynamic>)).toList(),
+      viewerIds: (json['viewers'] as List<dynamic>?)
+          ?.map((e) {
+            if (e is String) return e;
+            if (e is Map) {
+              final userIdField = e['user_id'];
+              if (userIdField is String) {
+                return userIdField;
+              } else if (userIdField is Map) {
+                return userIdField['_id'] as String? ?? userIdField['id'] as String?;
+              }
+              return e['_id'] as String? ?? e['id'] as String?;
+            }
+            return null;
+          })
+          .whereType<String>()
+          .toList(),
+      viewers: (json['viewers'] as List<dynamic>?)
+          ?.whereType<Map>()
+          .map((e) {
+            final map = e as Map<String, dynamic>;
+            if (map['user_id'] is Map<String, dynamic>) {
+              return UserModel.fromJson(map['user_id'] as Map<String, dynamic>);
+            }
+            return UserModel.fromJson(map);
+          })
+          .toList(),
       expireAt: json['expireAt'] != null ? DateTime.tryParse(json['expireAt'] as String) : null,
       createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'] as String) : (json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null),
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.tryParse(json['updated_at'] as String) : null),

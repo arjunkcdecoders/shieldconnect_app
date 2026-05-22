@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
-import 'package:shieldconnect_app/view/add_new_chat_screen.dart';
 import 'package:shieldconnect_app/view/notification_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/call_list_controller.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 
 class CallListScreen extends StatelessWidget {
   const CallListScreen({super.key});
@@ -68,30 +70,43 @@ class CallListScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // Profile avatar stack
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: const DecorationImage(
-                            image: AssetImage(ImageAssets.userAvatar),
-                            fit: BoxFit.cover,
+                  Consumer<CallListController>(
+                    builder: (context, callListController, child) {
+                      final profileImageUrl = ApiService.getImageUrl(
+                        callListController.profileImage,
+                      );
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: appColor(context).grey100,
+                              image: profileImageUrl.isNotEmpty
+                                  ? DecorationImage(
+                                      image: NetworkImage(profileImageUrl),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : const DecorationImage(
+                                      image: AssetImage(ImageAssets.userAvatar),
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: -4,
-                        child: Image.asset(
-                          ImageAssets.tick,
-                          width: 16,
-                          height: 16,
-                        ),
-                      ),
-                    ],
+                          Positioned(
+                            bottom: 0,
+                            right: -4,
+                            child: Image.asset(
+                              ImageAssets.tick,
+                              width: 16,
+                              height: 16,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   // Actions (Notification bell, Plus)
                   Row(
@@ -109,18 +124,18 @@ class CallListScreen extends StatelessWidget {
                         },
                       ),
                       const SizedBox(width: 12),
-                      _buildHeaderAction(
-                        context,
-                        assetPath: ImageAssets.plus,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AddNewChatScreen(),
-                            ),
-                          );
-                        },
-                      ),
+                      // _buildHeaderAction(
+                      //   context,
+                      //   assetPath: ImageAssets.plus,
+                      //   onTap: () {
+                      //     Navigator.push(
+                      //       context,
+                      //       MaterialPageRoute(
+                      //         builder: (context) => const AddNewChatScreen(),
+                      //       ),
+                      //     );
+                      //   },
+                      // ),
                     ],
                   ),
                 ],
