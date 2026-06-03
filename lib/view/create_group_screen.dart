@@ -11,52 +11,13 @@ class CreateGroupScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Provider.of<CreateGroupController>(context);
-
-    // Call init if not already loading and data is empty
-    if (!controller.isLoading && controller.connectedUsers.isEmpty) {
-      Future.microtask(() => controller.init());
-    }
-
-    return Scaffold(
+    return ChangeNotifierProvider<CreateGroupController>(
+      create: (_) => CreateGroupController()..init(),
+      child: Consumer<CreateGroupController>(
+        builder: (context, controller, child) {
+          return Scaffold(
       backgroundColor: appColor(context).white,
-      // Pink FAB in the bottom-right
-      floatingActionButton: GestureDetector(
-        onTap: () => controller.createGroup(context),
-        child: Container(
-          width: 54,
-          height: 54,
-          decoration: BoxDecoration(
-            color: appColor(context).secondary,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: appColor(context).secondary.withValues(alpha: 0.25),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Center(
-            child: controller.isLoading
-                ? SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      color: appColor(context).white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Icon(
-                    controller.hasSelectedUsers
-                        ? Icons.check
-                        : Icons.arrow_forward,
-                    color: appColor(context).white,
-                    size: 24,
-                  ),
-          ),
-        ),
-      ),
+      floatingActionButton: null,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -104,6 +65,7 @@ class CreateGroupScreen extends StatelessWidget {
                 CustomTextField(
                   labelText: "Group Name",
                   hintText: "Family👨‍👩‍👧‍👦",
+                  maxLength: 100,
                   controller: controller.groupNameController,
                   focusNode: controller.groupNameFocus,
                 ),
@@ -118,8 +80,9 @@ class CreateGroupScreen extends StatelessWidget {
                       child: Stack(
                         alignment: Alignment.bottomRight,
                         children: [
-                          CircleAvatar(
+                           CircleAvatar(
                             radius: 42,
+                            backgroundColor: appColor(context).grey200,
                             backgroundImage:
                                 (controller.pickedImagePath != null &&
                                     !controller.pickedImagePath!.startsWith(
@@ -127,7 +90,15 @@ class CreateGroupScreen extends StatelessWidget {
                                     ))
                                 ? FileImage(File(controller.pickedImagePath!))
                                       as ImageProvider
-                                : const AssetImage(ImageAssets.maisieAvatar),
+                                : null,
+                            child: (controller.pickedImagePath == null ||
+                                    controller.pickedImagePath!.startsWith('assets'))
+                                ? Icon(
+                                    Icons.group,
+                                    color: appColor(context).grey400,
+                                    size: 42,
+                                  )
+                                : null,
                           ),
                           Positioned(
                             bottom: 0,
@@ -169,6 +140,7 @@ class CreateGroupScreen extends StatelessWidget {
                   labelText: "Description",
                   hintText: "Enter Group Description...",
                   maxLines: 3,
+                  maxLength: 100,
                   controller: controller.groupDescController,
                   focusNode: controller.groupDescFocus,
                 ),
@@ -222,12 +194,62 @@ class CreateGroupScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // "Select People" Subtitle
-                Text(
-                  "Select People",
-                  style: fontStyle.clashDisplaySemiBold14.textColor(
-                    appColor(context).black,
-                  ),
+                // "Select People" Subtitle Row with small Create Group Button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select People",
+                      style: fontStyle.clashDisplaySemiBold14.textColor(
+                        appColor(context).black,
+                      ),
+                    ),
+                    if (controller.hasSelectedUsers)
+                      GestureDetector(
+                        onTap: () => controller.createGroup(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: appColor(context).secondary,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: appColor(context).secondary.withValues(
+                                      alpha: 0.15,
+                                    ),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (controller.isLoading) ...[
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    color: appColor(context).white,
+                                    strokeWidth: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                "Create Group",
+                                style: fontStyle.clashDisplaySemiBold12.textColor(
+                                  appColor(context).white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 20),
 
@@ -257,6 +279,9 @@ class CreateGroupScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+        },
       ),
     );
   }
@@ -350,6 +375,7 @@ class CustomTextField extends StatelessWidget {
   final Widget? prefixIcon;
   final String? Function(String?)? validator;
   final int maxLines;
+  final int? maxLength;
 
   const CustomTextField({
     super.key,
@@ -363,6 +389,7 @@ class CustomTextField extends StatelessWidget {
     this.prefixIcon,
     this.validator,
     this.maxLines = 1,
+    this.maxLength,
   });
 
   @override
@@ -413,10 +440,14 @@ class CustomTextField extends StatelessWidget {
             keyboardType: keyboardType,
             validator: validator,
             maxLines: maxLines,
+            maxLength: maxLength,
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: fontStyle.clashDisplayRegular14.textColor(
                 appColor(context).textGrey,
+              ),
+              counterStyle: fontStyle.clashDisplayMedium10.textColor(
+                appColor(context).grey400,
               ),
               filled: true,
               fillColor: const Color(0xFFF9FAFB),

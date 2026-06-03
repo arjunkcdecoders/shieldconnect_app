@@ -11,6 +11,9 @@ import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/view/login_screen.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
+import 'package:shieldconnect_app/controller/status_controller.dart';
+import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
 
 import 'package:dio/dio.dart' as dio_lib;
 
@@ -30,6 +33,8 @@ class ProfileController extends ChangeNotifier {
   String _imageUrl = "";
   String _bio = "";
   File? _pickedImage;
+  bool _shouldRemoveAvatar = false;
+  bool _showImageOptions = false;
   List<dynamic> _archivedChats = [];
 
   // Controllers for editing
@@ -55,6 +60,8 @@ class ProfileController extends ChangeNotifier {
   String get imageUrl => _imageUrl;
   String get bio => _bio;
   File? get pickedImage => _pickedImage;
+  bool get shouldRemoveAvatar => _shouldRemoveAvatar;
+  bool get showImageOptions => _showImageOptions;
   List<dynamic> get archivedChats => _archivedChats;
 
   bool get isPasswordVerifying => _isPasswordVerifying;
@@ -74,6 +81,8 @@ class ProfileController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      _shouldRemoveAvatar = false;
+      _showImageOptions = false;
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       final String? sessionStr = prefs.getString('user_session');
       debugPrint("ProfileController: sessionStr: $sessionStr");
@@ -105,6 +114,10 @@ class ProfileController extends ChangeNotifier {
               nameController.text = _name;
               bioController.text = _bio;
               emailController.text = _email;
+
+              // Save the fetched user to SharedPreferences to keep session updated with settings
+              final UserModel fetchedUser = UserModel.fromJson(data);
+              await prefs.setString('user_session', jsonEncode(fetchedUser.toJson()));
             }
           }
         }
@@ -199,17 +212,39 @@ class ProfileController extends ChangeNotifier {
   }
 
   // Pick profile image from device
-  Future<void> pickImage() async {
+  Future<void> pickImage({ImageSource source = ImageSource.gallery}) async {
     final ImagePicker picker = ImagePicker();
     try {
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await picker.pickImage(source: source);
       if (image != null) {
         _pickedImage = File(image.path);
+        _shouldRemoveAvatar = false;
+        _showImageOptions = false;
         notifyListeners();
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
+  }
+
+  // Remove profile image
+  void removeImage() {
+    _pickedImage = null;
+    _imageUrl = "";
+    _shouldRemoveAvatar = true;
+    _showImageOptions = false;
+    notifyListeners();
+  }
+
+  // Toggle/Set showing photo edit options on the right side of image
+  void toggleImageOptions() {
+    _showImageOptions = !_showImageOptions;
+    notifyListeners();
+  }
+
+  void setImageOptions(bool show) {
+    _showImageOptions = show;
+    notifyListeners();
   }
 
   String _message = "";
@@ -253,6 +288,9 @@ class ProfileController extends ChangeNotifier {
           _pickedImage!.path,
           filename: _pickedImage!.path.split('/').last,
         );
+      } else if (_shouldRemoveAvatar) {
+        data["avatar"] = "";
+        data["removeAvatar"] = "true";
       }
 
       final formData = dio_lib.FormData.fromMap(data);
@@ -291,6 +329,7 @@ class ProfileController extends ChangeNotifier {
         _imageUrl = apiResponse.data!.avatar ?? _imageUrl;
         _bio = apiResponse.data!.bio ?? _bio;
         _pickedImage = null; // Clear picked image after success
+        _shouldRemoveAvatar = false;
 
         setMessage(apiResponse.message ?? "Profile updated!");
         
@@ -382,6 +421,9 @@ class ProfileController extends ChangeNotifier {
         final SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.remove('user_session');
 
+        // Disconnect and clean up the active socket connection
+        SocketService().disconnect();
+
         // Clear local state variables
         _name = "";
         _email = "";
@@ -402,6 +444,8 @@ class ProfileController extends ChangeNotifier {
         notifyListeners();
 
         if (context.mounted) {
+          context.read<StatusController>().init();
+          context.read<AddNewChatController>().init();
           // Reset bottom navigation index
           context.read<BottomnavController>().reset();
           // Navigate to LoginScreen
@@ -430,6 +474,9 @@ class ProfileController extends ChangeNotifier {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('user_session');
 
+    // Disconnect and clean up the active socket connection
+    SocketService().disconnect();
+
     // Simulate session cleanup
     await Future.delayed(const Duration(seconds: 1));
 
@@ -446,6 +493,8 @@ class ProfileController extends ChangeNotifier {
     notifyListeners();
 
     if (context.mounted) {
+      context.read<StatusController>().init();
+      context.read<AddNewChatController>().init();
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),

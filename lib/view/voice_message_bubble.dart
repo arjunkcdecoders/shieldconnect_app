@@ -11,6 +11,13 @@ class VoiceMessageBubble extends StatefulWidget {
   final String? avatarUrl;
   final String time;
   final bool isForwarded;
+  final String status;
+  final String? replyTo;
+  final String? replyToSender;
+  final String? parentMessageId;
+  final ValueChanged<String>? onReplyTap;
+  final String? replyToType;
+  final String? replyToUrl;
 
   const VoiceMessageBubble({
     super.key,
@@ -19,6 +26,13 @@ class VoiceMessageBubble extends StatefulWidget {
     this.avatarUrl,
     required this.time,
     this.isForwarded = false,
+    this.status = 'sent',
+    this.replyTo,
+    this.replyToSender,
+    this.parentMessageId,
+    this.onReplyTap,
+    this.replyToType,
+    this.replyToUrl,
   });
 
   @override
@@ -226,6 +240,133 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (widget.replyTo != null) ...[
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (widget.onReplyTap != null && widget.parentMessageId != null) {
+                      widget.onReplyTap!(widget.parentMessageId!);
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.isOutgoing
+                          ? Colors.white.withValues(alpha: 0.18)
+                          : appColor(context).secondary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border(
+                        left: BorderSide(
+                          color: widget.isOutgoing
+                              ? Colors.white
+                              : appColor(context).secondary,
+                          width: 3.5,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.replyToSender ?? "Reply",
+                                style: fontStyle.clashDisplayBold12.textColor(
+                                  widget.isOutgoing
+                                      ? Colors.white
+                                      : appColor(context).secondary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  if (widget.replyToType == 'image') ...[
+                                    Icon(
+                                      Icons.photo_rounded,
+                                      size: 14,
+                                      color: widget.isOutgoing
+                                          ? Colors.white70
+                                          : appColor(context).grey600,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ] else if (widget.replyToType == 'sticker') ...[
+                                    Icon(
+                                      Icons.emoji_emotions_rounded,
+                                      size: 14,
+                                      color: widget.isOutgoing
+                                          ? Colors.white70
+                                          : appColor(context).grey600,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ] else if (widget.replyToType == 'video') ...[
+                                    Icon(
+                                      Icons.videocam_rounded,
+                                      size: 14,
+                                      color: widget.isOutgoing
+                                          ? Colors.white70
+                                          : appColor(context).grey600,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ] else if (widget.replyToType == 'audio') ...[
+                                    Icon(
+                                      Icons.mic_rounded,
+                                      size: 14,
+                                      color: widget.isOutgoing
+                                          ? Colors.white70
+                                          : appColor(context).grey600,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      (widget.replyToType == 'image' && (widget.replyTo == null || widget.replyTo!.isEmpty || widget.replyTo == 'Check out this photo!'))
+                                          ? "Photo"
+                                          : (widget.replyToType == 'video' && (widget.replyTo == null || widget.replyTo!.isEmpty || widget.replyTo == 'Check out this video!'))
+                                              ? "Video"
+                                              : (widget.replyToType == 'audio' && (widget.replyTo == null || widget.replyTo!.isEmpty))
+                                                  ? "Voice Message"
+                                                  : (widget.replyToType == 'sticker' && (widget.replyTo == null || widget.replyTo!.isEmpty))
+                                                      ? "Sticker"
+                                                      : (widget.replyTo ?? ""),
+                                      style: fontStyle.clashDisplayRegular12.textColor(
+                                        widget.isOutgoing
+                                            ? Colors.white.withValues(alpha: 0.95)
+                                            : appColor(context).black.withValues(alpha: 0.8),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if ((widget.replyToType == 'image' || widget.replyToType == 'sticker') && widget.replyToUrl != null && widget.replyToUrl!.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.network(
+                              widget.replyToUrl!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               if (widget.isForwarded) ...[
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -306,7 +447,53 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
             ],
           ),
         ),
-        if (widget.isOutgoing) ...[const SizedBox(width: 8)],
+        if (widget.isOutgoing) ...[
+          const SizedBox(width: 8),
+          () {
+            if (widget.status == 'read') {
+              return Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: appColor(context).green,
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.done_all_rounded,
+                    color: Colors.white,
+                    size: 11,
+                  ),
+                ),
+              );
+            } else if (widget.status == 'delivered') {
+              return Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: appColor(context).green,
+                    width: 1.5,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.done_all_rounded,
+                    color: appColor(context).green,
+                    size: 11,
+                  ),
+                ),
+              );
+            } else {
+              return Icon(
+                Icons.check_circle_outline,
+                color: appColor(context).green,
+                size: 18,
+              );
+            }
+          }(),
+        ],
       ],
     );
   }

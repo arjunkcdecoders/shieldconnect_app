@@ -43,7 +43,7 @@ class ApiService {
     return {};
   }
 
-  Future<Response> post(String url, {dynamic data, Options? options}) async {
+  Future<Response> post(String url, {dynamic data, Options? options, ProgressCallback? onSendProgress}) async {
     try {
       final headers = await _getHeaders();
       final mergedHeaders = {...headers, ...?(options?.headers)};
@@ -53,7 +53,7 @@ class ApiService {
       if (data is FormData) {
         requestOptions.contentType = null; // Clear application/json to let Dio set boundary
       }
-      final response = await _dio.post(url, data: data, options: requestOptions);
+      final response = await _dio.post(url, data: data, options: requestOptions, onSendProgress: onSendProgress);
       return response;
     } on DioException catch (e) {
       if (e.response != null) {

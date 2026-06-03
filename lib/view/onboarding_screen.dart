@@ -17,31 +17,69 @@ class OnboardingScreen extends StatelessWidget {
         bottom: false,
         child: Column(
           children: [
-            // Skip Button at top right
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 20, top: 10),
-                child: TextButton(
-                  onPressed: () => controller.skip(context),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Skip",
-                        style: fontStyle.clashDisplayRegular14
-                            .textColor(appColor(context).black)
-                            .copyWith(fontWeight: FontWeight.w700),
+            // Top Navigation Bar (Back & Skip)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Back Button (shown on 2nd and 3rd screens)
+                  if (controller.currentPage > 0)
+                    TextButton(
+                      onPressed: () => controller.previousPage(),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(50, 30),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: appColor(context).black,
-                        size: 18,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_back,
+                            color: appColor(context).black,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Back",
+                            style: fontStyle.clashDisplayRegular14
+                                .textColor(appColor(context).black)
+                                .copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
                       ),
-                    ],
+                    )
+                  else
+                    const SizedBox.shrink(),
+
+                  // Skip Button
+                  TextButton(
+                    onPressed: () => controller.skip(context),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(50, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Skip",
+                          style: fontStyle.clashDisplayRegular14
+                              .textColor(appColor(context).black)
+                              .copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.arrow_forward,
+                          color: appColor(context).black,
+                          size: 18,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
 

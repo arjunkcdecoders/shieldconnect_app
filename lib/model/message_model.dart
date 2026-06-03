@@ -96,12 +96,16 @@ class MessageModel {
           ? json['parent_message_id'] as String?
           : (json['parent_message_id'] is Map
                 ? json['parent_message_id']['_id'] as String?
-                : null),
+                : (json['parentMessageId'] as String?)),
       parentMessage: json['parent_message_id'] is Map<String, dynamic>
           ? MessageModel.fromJson(
               json['parent_message_id'] as Map<String, dynamic>,
             )
-          : null,
+          : (json['parentMessage'] is Map<String, dynamic>
+                ? MessageModel.fromJson(
+                    json['parentMessage'] as Map<String, dynamic>,
+                  )
+                : null),
       isEdited: json['is_edited'] as bool? ?? false,
       status: json['status'] as String?,
       readAt: json['read_at'] != null

@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shieldconnect_app/controller/status_controller.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
+import 'package:shieldconnect_app/model/settings_model.dart';
+import 'package:shieldconnect_app/utils/toast_helper.dart';
 import 'package:shieldconnect_app/model/status_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
@@ -24,9 +26,21 @@ class StatusScreen extends StatelessWidget {
   Future<void> _pickMedia(BuildContext context, bool isVideo) async {
     final ImagePicker picker = ImagePicker();
     try {
+      final settings = await SettingsModel.loadActiveSettings();
       if (isVideo) {
         final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
         if (file != null) {
+          final int fileSize = await File(file.path).length();
+          final int limit = settings.getVideoLimitBytes();
+          if (fileSize > limit) {
+            if (!context.mounted) return;
+            ToastHelper.showWarningDialog(
+              context,
+              "Video Too Large",
+              "Videos uploaded to status cannot exceed ${settings.videoLimit ?? '100 MB'}. Your selected video is ${SettingsModel.formatBytes(fileSize)}."
+            );
+            return;
+          }
           if (!context.mounted) return;
           final controller = context.read<StatusController>();
           controller.clearMediaStatusPreview();
@@ -50,6 +64,17 @@ class StatusScreen extends StatelessWidget {
       } else {
         final XFile? file = await picker.pickImage(source: ImageSource.gallery);
         if (file != null) {
+          final int fileSize = await File(file.path).length();
+          final int limit = settings.getImageLimitBytes();
+          if (fileSize > limit) {
+            if (!context.mounted) return;
+            ToastHelper.showWarningDialog(
+              context,
+              "Image Too Large",
+              "Images uploaded to status cannot exceed ${settings.imageLimit ?? '10 MB'}. Your selected image is ${SettingsModel.formatBytes(fileSize)}."
+            );
+            return;
+          }
           if (!context.mounted) return;
           final controller = context.read<StatusController>();
           controller.clearMediaStatusPreview();
@@ -222,116 +247,122 @@ class StatusScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<StatusController>(
       builder: (context, controller, child) {
-          final profileImgUrl =
-              controller.profileImage != null &&
-                  controller.profileImage!.isNotEmpty
-              ? ApiService.getImageUrl(controller.profileImage!)
-              : "";
+        final profileImgUrl =
+            controller.profileImage != null &&
+                controller.profileImage!.isNotEmpty
+            ? ApiService.getImageUrl(controller.profileImage!)
+            : "";
 
-          final bool hasMyStatuses = controller.myStatuses.isNotEmpty;
+        final bool hasMyStatuses = controller.myStatuses.isNotEmpty;
 
-          // Split othersStatuses into recent vs viewed dynamically
-          final List<Map<String, dynamic>> recentUpdates = [];
-          final List<Map<String, dynamic>> viewedUpdates = [];
+        final bool myStatusesAllViewed = hasMyStatuses &&
+            controller.myStatuses.every((status) =>
+                status.viewerIds?.contains(controller.userId) == true);
 
-          for (var item in controller.othersStatuses) {
-            if (item is Map<String, dynamic>) {
-              final List<dynamic> rawStatuses = item['statuses'] ?? [];
-              final List<StatusModel> statuses = rawStatuses
-                  .map((e) => StatusModel.fromJson(e as Map<String, dynamic>))
-                  .toList();
-              statuses.sort((a, b) {
-                final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-                final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-                return aTime.compareTo(bTime);
+        // Split othersStatuses into recent vs viewed dynamically
+        final List<Map<String, dynamic>> recentUpdates = [];
+        final List<Map<String, dynamic>> viewedUpdates = [];
+
+        for (var item in controller.othersStatuses) {
+          if (item is Map<String, dynamic>) {
+            final List<dynamic> rawStatuses = item['statuses'] ?? [];
+            final List<StatusModel> statuses = rawStatuses
+                .map((e) => StatusModel.fromJson(e as Map<String, dynamic>))
+                .toList();
+            statuses.sort((a, b) {
+              final aTime =
+                  a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bTime =
+                  b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return aTime.compareTo(bTime);
+            });
+
+            bool allViewed = false;
+            if (statuses.isNotEmpty && controller.userId != null) {
+              allViewed = statuses.every((status) {
+                return status.viewerIds?.contains(controller.userId) == true;
               });
+            }
 
-              bool allViewed = false;
-              if (statuses.isNotEmpty && controller.userId != null) {
-                allViewed = statuses.every((status) {
-                  return status.viewerIds?.contains(controller.userId) == true;
-                });
-              }
+            if (item['all_viewed'] == true) {
+              allViewed = true;
+            }
 
-              if (item['all_viewed'] == true) {
-                allViewed = true;
-              }
+            // Update the item map so both the categorization and individual status list item
+            // styling (such as ring segment indicators) reflect the correct state.
+            item['all_viewed'] = allViewed;
 
-              // Update the item map so both the categorization and individual status list item
-              // styling (such as ring segment indicators) reflect the correct state.
-              item['all_viewed'] = allViewed;
-
-              if (allViewed) {
-                viewedUpdates.add(item);
-              } else {
-                recentUpdates.add(item);
-              }
+            if (allViewed) {
+              viewedUpdates.add(item);
+            } else {
+              recentUpdates.add(item);
             }
           }
+        }
 
-          return Scaffold(
-            backgroundColor: appColor(context).white,
-            body: SafeArea(
-              child: controller.isLoading
-                  ? Center(
-                      child: CircularProgressIndicator(
-                        color: appColor(context).primary,
+        return Scaffold(
+          backgroundColor: appColor(context).white,
+          body: SafeArea(
+            child: controller.isLoading
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: appColor(context).primary,
+                    ),
+                  )
+                : SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      // parent: BouncingScrollPhysics(),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20.0,
+                        vertical: 10.0,
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () => controller.init(),
-                      color: appColor(context).secondary,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(
-                          parent: BouncingScrollPhysics(),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20.0,
-                            vertical: 10.0,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Consistent App Header
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // Consistent App Header
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                              Stack(
+                                clipBehavior: Clip.none,
                                 children: [
-                                  Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          image: DecorationImage(
-                                            image: profileImgUrl.isNotEmpty
-                                                ? NetworkImage(profileImgUrl)
-                                                      as ImageProvider
-                                                : const AssetImage(
-                                                    ImageAssets.userAvatar,
-                                                  ),
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      ),
-                                      Positioned(
-                                        bottom: 0,
-                                        right: -4,
-                                        child: Image.asset(
-                                          ImageAssets.tick,
-                                          width: 16,
-                                          height: 16,
-                                        ),
-                                      ),
-                                    ],
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      color: appColor(context).grey100,
+                                      image: profileImgUrl.isNotEmpty
+                                          ? DecorationImage(
+                                              image: NetworkImage(profileImgUrl),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
+                                    ),
+                                    child: profileImgUrl.isEmpty
+                                        ? Icon(
+                                            Icons.person,
+                                            color: appColor(context).grey400,
+                                            size: 24,
+                                          )
+                                        : null,
                                   ),
-                                  Consumer<NotificationController>(
-                                    builder: (context, notificationController, child) {
+                                  Positioned(
+                                    bottom: 0,
+                                    right: -4,
+                                    child: Image.asset(
+                                      ImageAssets.tick,
+                                      width: 16,
+                                      height: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Consumer<NotificationController>(
+                                builder:
+                                    (context, notificationController, child) {
                                       return GestureDetector(
                                         onTap: () {
                                           Navigator.push(
@@ -416,226 +447,216 @@ class StatusScreen extends StatelessWidget {
                                         ),
                                       );
                                     },
-                                  ),
-                                ],
                               ),
-                              const SizedBox(height: 20),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
 
-                              // Screen Title
-                              Text(
-                                "Status",
-                                style: fontStyle.clashDisplayBold30.textColor(
-                                  appColor(context).black,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
+                          // Screen Title
+                          Text(
+                            "Status",
+                            style: fontStyle.clashDisplayBold30.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
 
-                              // My Status block
-                              GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
-                                  if (hasMyStatuses) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => StatusViewScreen(
-                                          statuses: controller.myStatuses,
-                                          user: UserModel(
-                                            id: controller.userId,
-                                            name: "My status",
-                                            avatar: controller.profileImage,
-                                          ),
-                                        ),
-                                      ),
-                                    ).then((_) {
-                                      controller.init();
-                                    });
-                                  } else {
-                                    _showAddOptions(context);
-                                  }
-                                },
-                                child: Row(
-                                  children: [
-                                    if (hasMyStatuses)
-                                      SizedBox(
-                                        width: 62,
-                                        height: 62,
-                                        child: Stack(
-                                          alignment: Alignment.center,
-                                          children: [
-                                            Positioned.fill(
-                                              child: CustomPaint(
-                                                painter: StatusRingPainter(
-                                                  segments: controller
-                                                      .myStatuses
-                                                      .length,
-                                                  color: appColor(
-                                                    context,
-                                                  ).secondary,
-                                                ),
-                                              ),
-                                            ),
-                                            _buildStatusThumbnail(
-                                              context,
-                                              controller.myStatuses.last,
-                                              26,
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    else
-                                      Stack(
-                                        alignment: Alignment.bottomRight,
-                                        children: [
-                                          CircleAvatar(
-                                            radius: 28,
-                                            backgroundImage:
-                                                profileImgUrl.isNotEmpty
-                                                ? NetworkImage(profileImgUrl)
-                                                      as ImageProvider
-                                                : const AssetImage(
-                                                    ImageAssets.userAvatar,
-                                                  ),
-                                          ),
-                                          Positioned(
-                                            bottom: 0,
-                                            right: 0,
-                                            child: Container(
-                                              padding: const EdgeInsets.all(2),
-                                              decoration: BoxDecoration(
-                                                color: appColor(
-                                                  context,
-                                                ).secondary,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: appColor(
-                                                    context,
-                                                  ).white,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                              child: Icon(
-                                                Icons.add,
-                                                color: appColor(context).white,
-                                                size: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            "My status",
-                                            style: fontStyle
-                                                .clashDisplaySemiBold16
-                                                .textColor(
-                                                  appColor(context).black,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            hasMyStatuses
-                                                ? "Tap to View Status"
-                                                : "Tap to add status update",
-                                            style: fontStyle
-                                                .clashDisplayRegular12
-                                                .textColor(
-                                                  appColor(
-                                                    context,
-                                                  ).textMediumGrey,
-                                                ),
-                                          ),
-                                        ],
+                          // My Status block
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              if (hasMyStatuses) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => StatusViewScreen(
+                                      statuses: controller.myStatuses,
+                                      user: UserModel(
+                                        id: controller.userId,
+                                        name: "My status",
+                                        avatar: controller.profileImage,
                                       ),
                                     ),
-                                    if (hasMyStatuses) ...[
-                                      const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () => _showAddOptions(context),
+                                  ),
+                                ).then((_) {
+                                  controller.init();
+                                });
+                              } else {
+                                _showAddOptions(context);
+                              }
+                            },
+                            child: Row(
+                              children: [
+                                if (hasMyStatuses)
+                                  SizedBox(
+                                    width: 62,
+                                    height: 62,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Positioned.fill(
+                                          child: CustomPaint(
+                                            painter: StatusRingPainter(
+                                              segments:
+                                                  controller.myStatuses.length,
+                                              color: !myStatusesAllViewed
+                                                  ? appColor(context).secondary
+                                                  : appColor(context).grey300,
+                                            ),
+                                          ),
+                                        ),
+                                        _buildStatusThumbnail(
+                                          context,
+                                          controller.myStatuses.last,
+                                          26,
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  Stack(
+                                    alignment: Alignment.bottomRight,
+                                    children: [
+                                       CircleAvatar(
+                                        radius: 28,
+                                        backgroundColor: appColor(context).grey100,
+                                        backgroundImage: profileImgUrl.isNotEmpty
+                                            ? NetworkImage(profileImgUrl)
+                                            : null,
+                                        child: profileImgUrl.isEmpty
+                                            ? Icon(
+                                                Icons.person,
+                                                color: appColor(context).grey400,
+                                                size: 28,
+                                              )
+                                            : null,
+                                      ),
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
                                         child: Container(
-                                          padding: const EdgeInsets.all(3),
+                                          padding: const EdgeInsets.all(2),
                                           decoration: BoxDecoration(
-                                            color: appColor(
-                                              context,
-                                            ).secondary.withValues(alpha: 0.15),
+                                            color: appColor(context).secondary,
                                             shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: appColor(context).white,
+                                              width: 2,
+                                            ),
                                           ),
                                           child: Icon(
                                             Icons.add,
-                                            color: appColor(context).secondary,
-                                            size: 15,
+                                            color: appColor(context).white,
+                                            size: 12,
                                           ),
                                         ),
                                       ),
                                     ],
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 32),
-
-                              // First section: "Recent Updates"
-                              if (recentUpdates.isNotEmpty) ...[
-                                Text(
-                                  "Recent Updates",
-                                  style: fontStyle.clashDisplaySemiBold14
-                                      .textColor(
-                                        appColor(context).textSecondary,
+                                  ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        "My status",
+                                        style: fontStyle.clashDisplaySemiBold16
+                                            .textColor(appColor(context).black),
                                       ),
-                                ),
-                                const SizedBox(height: 20),
-                                ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: recentUpdates.length,
-                                  itemBuilder: (context, index) {
-                                    return _buildStatusItem(
-                                      context,
-                                      recentUpdates[index],
-                                      controller,
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-
-                              // Second section: "Viewed Updates"
-                              if (viewedUpdates.isNotEmpty) ...[
-                                Text(
-                                  "Viewed Updates",
-                                  style: fontStyle.clashDisplaySemiBold14
-                                      .textColor(
-                                        appColor(context).textSecondary,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        hasMyStatuses
+                                            ? "Tap to View Status"
+                                            : "Tap to add status update",
+                                        style: fontStyle.clashDisplayRegular12
+                                            .textColor(
+                                              appColor(context).textMediumGrey,
+                                            ),
                                       ),
+                                    ],
+                                  ),
                                 ),
-                                const SizedBox(height: 20),
-                                ListView.builder(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: viewedUpdates.length,
-                                  itemBuilder: (context, index) {
-                                    return _buildStatusItem(
-                                      context,
-                                      viewedUpdates[index],
-                                      controller,
-                                    );
-                                  },
-                                ),
+                                if (hasMyStatuses) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () => _showAddOptions(context),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        color: appColor(
+                                          context,
+                                        ).secondary.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.add,
+                                        color: appColor(context).secondary,
+                                        size: 15,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 32),
+
+                          // First section: "Recent Updates"
+                          if (recentUpdates.isNotEmpty) ...[
+                            Text(
+                              "Recent Updates",
+                              style: fontStyle.clashDisplaySemiBold14.textColor(
+                                appColor(context).textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: recentUpdates.length,
+                              itemBuilder: (context, index) {
+                                return _buildStatusItem(
+                                  context,
+                                  recentUpdates[index],
+                                  controller,
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Second section: "Viewed Updates"
+                          if (viewedUpdates.isNotEmpty) ...[
+                            Text(
+                              "Viewed Updates",
+                              style: fontStyle.clashDisplaySemiBold14.textColor(
+                                appColor(context).textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: viewedUpdates.length,
+                              itemBuilder: (context, index) {
+                                return _buildStatusItem(
+                                  context,
+                                  viewedUpdates[index],
+                                  controller,
+                                );
+                              },
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-            ),
-          );
-        },
-      );
+                  ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildStatusItem(
@@ -704,16 +725,20 @@ class StatusScreen extends StatelessWidget {
                     ),
                   ),
                   statuses.isNotEmpty
-                      ? _buildStatusThumbnail(
-                          context,
-                          statuses.last,
-                          26,
-                        )
+                      ? _buildStatusThumbnail(context, statuses.last, 26)
                       : CircleAvatar(
                           radius: 26,
+                          backgroundColor: appColor(context).grey100,
                           backgroundImage: formattedAvatar.isNotEmpty
-                              ? NetworkImage(formattedAvatar) as ImageProvider
-                              : const AssetImage(ImageAssets.userAvatar),
+                              ? NetworkImage(formattedAvatar)
+                              : null,
+                          child: formattedAvatar.isEmpty
+                              ? Icon(
+                                  Icons.person,
+                                  color: appColor(context).grey400,
+                                  size: 26,
+                                )
+                              : null,
                         ),
                 ],
               ),
@@ -748,11 +773,16 @@ class StatusScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusThumbnail(BuildContext context, StatusModel latestStatus, double radius) {
+  Widget _buildStatusThumbnail(
+    BuildContext context,
+    StatusModel latestStatus,
+    double radius,
+  ) {
     if (latestStatus.contentType == 'text') {
       final String hex = latestStatus.backgroundColor ?? "#8661D6";
       final Color bgColor = Color(int.parse(hex.replaceFirst('#', '0xFF')));
-      final String firstLetter = (latestStatus.content != null && latestStatus.content!.isNotEmpty)
+      final String firstLetter =
+          (latestStatus.content != null && latestStatus.content!.isNotEmpty)
           ? latestStatus.content![0].toUpperCase()
           : '?';
 
@@ -793,10 +823,14 @@ class StatusScreen extends StatelessWidget {
             child: SizedBox(
               width: 12,
               height: 12,
-              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: Colors.white,
+              ),
             ),
           ),
-          errorWidget: (context, url, error) => const Icon(Icons.image, color: Colors.white, size: 16),
+          errorWidget: (context, url, error) =>
+              const Icon(Icons.image, color: Colors.white, size: 16),
         ),
       );
     }
@@ -863,15 +897,17 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
   void initState() {
     super.initState();
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
-      ..initialize().then((_) {
-        if (mounted) {
-          setState(() {
-            _isInitialized = true;
+      ..initialize()
+          .then((_) {
+            if (mounted) {
+              setState(() {
+                _isInitialized = true;
+              });
+            }
+          })
+          .catchError((e) {
+            debugPrint("Error initializing thumbnail video: $e");
           });
-        }
-      }).catchError((e) {
-        debugPrint("Error initializing thumbnail video: $e");
-      });
   }
 
   @override

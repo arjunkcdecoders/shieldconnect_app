@@ -199,20 +199,133 @@ class SupportTicketsScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: appColor(context).grey100,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.filter_list,
-                                color: appColor(context).secondary,
-                                size: 20,
+                            GestureDetector(
+                              onTap: () {
+                                controller.toggleFilterVisibility();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: controller.showFilter
+                                      ? appColor(context).secondary.withValues(alpha: 0.12)
+                                      : appColor(context).grey100,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: controller.showFilter
+                                      ? Border.all(
+                                          color: appColor(context).secondary,
+                                          width: 1.5,
+                                        )
+                                      : null,
+                                ),
+                                child: Icon(
+                                  Icons.filter_list,
+                                  color: appColor(context).secondary,
+                                  size: 20,
+                                ),
                               ),
                             ),
                           ],
                         ),
+                        if (controller.showFilter) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: appColor(context).grey50,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: appColor(context).grey200,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  "Category: ",
+                                  style: fontStyle.clashDisplaySemiBold14.textColor(
+                                    appColor(context).black,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: appColor(context).white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: appColor(context).grey300,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: controller.selectedCategory,
+                                        isExpanded: true,
+                                        icon: Icon(
+                                          Icons.keyboard_arrow_down,
+                                          color: appColor(context).grey600,
+                                        ),
+                                        style: fontStyle.clashDisplayMedium12.textColor(
+                                          appColor(context).black,
+                                        ),
+                                        dropdownColor: appColor(context).white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        onChanged: (String? newValue) {
+                                          if (newValue != null) {
+                                            controller.setSelectedCategory(newValue);
+                                          }
+                                        },
+                                        items: <String>[
+                                          "All Categories",
+                                          "Billing",
+                                          "Technical Issue",
+                                          "General Inquiry",
+                                          "Bug Report",
+                                        ].map<DropdownMenuItem<String>>((String value) {
+                                          return DropdownMenuItem<String>(
+                                            value: value,
+                                            child: Text(value),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (controller.selectedCategory != "All Categories") ...[
+                                  const SizedBox(width: 12),
+                                  GestureDetector(
+                                    onTap: () {
+                                      controller.clearCategoryFilter();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: appColor(context).secondary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        "Clear",
+                                        style: fontStyle.clashDisplaySemiBold12.textColor(
+                                          appColor(context).secondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 32),
 
                         Text(

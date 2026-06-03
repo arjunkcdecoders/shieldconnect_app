@@ -6,56 +6,16 @@ import 'package:shieldconnect_app/view/notification_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CallListScreen extends StatelessWidget {
   const CallListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> callItems = [
-      {
-        "name": "Maisie williams",
-        "time": "14 April, 5:14 PM",
-        "isMissed": false,
-        "isOutgoing": true,
-        "isVideoButton": false,
-      },
-      {
-        "name": "Maisie williams",
-        "time": "14 April, 5:14 PM",
-        "isMissed": true,
-        "isOutgoing": false,
-        "isVideoButton": true,
-      },
-      {
-        "name": "Maisie williams",
-        "time": "14 April, 5:14 PM",
-        "isMissed": false,
-        "isOutgoing": true,
-        "isVideoButton": false,
-      },
-      {
-        "name": "Maisie williams",
-        "time": "14 April, 5:14 PM",
-        "isMissed": false,
-        "isOutgoing": true,
-        "isVideoButton": false,
-      },
-      {
-        "name": "Maisie williams",
-        "time": "14 April, 5:14 PM",
-        "isMissed": true,
-        "isOutgoing": false,
-        "isVideoButton": true,
-      },
-      {
-        "name": "Maisie williams",
-        "time": "14 April, 5:14 PM",
-        "isMissed": false,
-        "isOutgoing": true,
-        "isVideoButton": false,
-      },
-    ];
+    final callListController = Provider.of<CallListController>(context);
+    final callItems = callListController.callHistory;
+    final isLoading = callListController.isLoading;
 
     return Scaffold(
       backgroundColor: appColor(context).white,
@@ -89,11 +49,15 @@ class CallListScreen extends StatelessWidget {
                                       image: NetworkImage(profileImageUrl),
                                       fit: BoxFit.cover,
                                     )
-                                  : const DecorationImage(
-                                      image: AssetImage(ImageAssets.userAvatar),
-                                      fit: BoxFit.cover,
-                                    ),
+                                  : null,
                             ),
+                            child: profileImageUrl.isEmpty
+                                ? Icon(
+                                    Icons.person,
+                                    color: appColor(context).grey400,
+                                    size: 24,
+                                  )
+                                : null,
                           ),
                           Positioned(
                             bottom: 0,
@@ -124,18 +88,6 @@ class CallListScreen extends StatelessWidget {
                         },
                       ),
                       const SizedBox(width: 12),
-                      // _buildHeaderAction(
-                      //   context,
-                      //   assetPath: ImageAssets.plus,
-                      //   onTap: () {
-                      //     Navigator.push(
-                      //       context,
-                      //       MaterialPageRoute(
-                      //         builder: (context) => const AddNewChatScreen(),
-                      //       ),
-                      //     );
-                      //   },
-                      // ),
                     ],
                   ),
                 ],
@@ -166,6 +118,9 @@ class CallListScreen extends StatelessWidget {
                 ),
                 child: TextField(
                   cursorColor: appColor(context).primary,
+                  onChanged: (val) {
+                    callListController.searchCalls(val);
+                  },
                   decoration: InputDecoration(
                     hintText: "Search...",
                     hintStyle: fontStyle.clashDisplayRegular12.textColor(
@@ -208,13 +163,28 @@ class CallListScreen extends StatelessWidget {
 
               // Calls dynamic list
               Expanded(
-                child: ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: callItems.length,
-                  itemBuilder: (context, index) {
-                    return _buildCallItem(context, callItems[index]);
-                  },
-                ),
+                child: isLoading && callItems.isEmpty
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: appColor(context).primary,
+                        ),
+                      )
+                    : callItems.isEmpty
+                    ? Center(
+                        child: Text(
+                          "No call logs found",
+                          style: fontStyle.clashDisplayMedium14.textColor(
+                            appColor(context).textMediumGrey,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: callItems.length,
+                        itemBuilder: (context, index) {
+                          return _buildCallItem(context, callItems[index]);
+                        },
+                      ),
               ),
             ],
           ),
@@ -253,16 +223,17 @@ class CallListScreen extends StatelessWidget {
     final bool isMissed = item["isMissed"] ?? false;
     final bool isOutgoing = item["isOutgoing"] ?? false;
     final bool isVideoButton = item["isVideoButton"] ?? false;
+    final String name = item["name"] ?? 'User';
+    final String? avatar = item["avatar"];
+    final bool isGroup = item["isGroup"] == true;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 22.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Avatar matching chat list sizes
-          CircleAvatar(
-            radius: 28,
-            backgroundImage: const AssetImage(ImageAssets.maisieAvatar),
-          ),
+          _buildAvatar(context, isGroup, name, avatar),
           const SizedBox(width: 16),
 
           // Middle Column Content
@@ -272,15 +243,17 @@ class CallListScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  item["name"],
-                  style: fontStyle.clashDisplaySemiBold16.textColor(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: fontStyle.clashDisplayBold16.textColor(
                     isMissed ? appColor(context).red : appColor(context).black,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    // Custom arrow direction indicator (North-East for Successful Outgoing/Incoming, South-West for Missed)
+                    // Custom arrow direction indicator (North-East for Outgoing, South-West for Missed/Incoming)
                     Icon(
                       isOutgoing ? Icons.north_east : Icons.south_west,
                       color: isMissed
@@ -290,7 +263,7 @@ class CallListScreen extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      item["time"],
+                      item["time"] ?? "",
                       style: fontStyle.clashDisplayRegular12.textColor(
                         appColor(context).textMediumGrey,
                       ),
@@ -309,6 +282,61 @@ class CallListScreen extends StatelessWidget {
             size: 22,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(
+    BuildContext context,
+    bool isGroup,
+    String name,
+    String? avatar,
+  ) {
+    Widget buildGroupInitialsFallback() {
+      final String initials = name.isNotEmpty ? name[0].toUpperCase() : "?";
+      return Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: appColor(context).secondary,
+        ),
+        child: Center(
+          child: Text(
+            initials,
+            style: fontStyle.clashDisplayBold18.textColor(Colors.white),
+          ),
+        ),
+      );
+    }
+
+    Widget buildUserFallback() {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Image.asset(
+          ImageAssets.maisieAvatar,
+          width: 56,
+          height: 56,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    if (avatar == null || avatar.isEmpty) {
+      return isGroup ? buildGroupInitialsFallback() : buildUserFallback();
+    }
+
+    final imageUrl = ApiService.getImageUrl(avatar);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: CachedNetworkImage(
+        imageUrl: imageUrl,
+        width: 56,
+        height: 56,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(color: appColor(context).grey100),
+        errorWidget: (context, url, error) =>
+            isGroup ? buildGroupInitialsFallback() : buildUserFallback(),
       ),
     );
   }

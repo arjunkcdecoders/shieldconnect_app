@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/model/settings_model.dart';
+import 'package:shieldconnect_app/utils/toast_helper.dart';
 
 class AddMembersController extends ChangeNotifier {
   String? _userId;
@@ -142,7 +144,7 @@ class AddMembersController extends ChangeNotifier {
     }
   }
 
-  Future<bool> addMembers() async {
+  Future<bool> addMembers({BuildContext? context}) async {
     final List<String> selectedIds = _friends
         .where((f) => f['isSelected'] == true)
         .map((f) => f['id'].toString())
@@ -150,6 +152,21 @@ class AddMembersController extends ChangeNotifier {
 
     if (selectedIds.isEmpty) return false;
     if (_userId == null || _groupId == null) return false;
+
+    // Check dynamic member limit!
+    final settings = await SettingsModel.loadActiveSettings();
+    final maxMembers = settings.maxGroupMembers ?? 256;
+    final int projectedTotal = _existingMemberIds.length + selectedIds.length;
+    if (projectedTotal > maxMembers) {
+      if (context != null && context.mounted) {
+        ToastHelper.showWarningDialog(
+          context,
+          "Group Member Limit Exceeded",
+          "This group cannot have more than $maxMembers members. Currently, the group has ${_existingMemberIds.length} members, and you selected ${selectedIds.length} members (Total: $projectedTotal)."
+        );
+      }
+      return false;
+    }
 
     _isSaving = true;
     notifyListeners();

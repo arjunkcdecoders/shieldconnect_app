@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
-import 'package:shieldconnect_app/utils/image_assets.dart';
 
 class EditProfileScreen extends StatelessWidget {
   const EditProfileScreen({super.key});
@@ -59,83 +59,136 @@ class EditProfileScreen extends StatelessWidget {
                     const SizedBox(height: 28),
 
                     // 2. Compact Profile Image Uploader Block
-                    GestureDetector(
-                      onTap: () => controller.pickImage(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Container(
-                                width: 90,
-                                height: 90,
-                                decoration: BoxDecoration(
-                                  color: appColor(context).grey100,
-                                  borderRadius: BorderRadius.circular(24),
-                                  image: controller.pickedImage != null
-                                      ? DecorationImage(
-                                          image: FileImage(
-                                            controller.pickedImage!,
-                                          ),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : ApiService.getImageUrl(
-                                                controller.imageUrl,
-                                              ).isNotEmpty
-                                          ? DecorationImage(
-                                              image: NetworkImage(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: () => controller.toggleImageOptions(),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Stack(
+                                    alignment: Alignment.bottomRight,
+                                    children: [
+                                      Container(
+                                        width: 90,
+                                        height: 90,
+                                        decoration: BoxDecoration(
+                                          color: appColor(context).grey100,
+                                          borderRadius: BorderRadius.circular(24),
+                                          image: controller.pickedImage != null
+                                              ? DecorationImage(
+                                                  image: FileImage(
+                                                    controller.pickedImage!,
+                                                  ),
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : ApiService.getImageUrl(
+                                                        controller.imageUrl,
+                                                      ).isNotEmpty
+                                                  ? DecorationImage(
+                                                      image: NetworkImage(
+                                                        ApiService.getImageUrl(
+                                                          controller.imageUrl,
+                                                        ),
+                                                      ),
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : null,
+                                        ),
+                                        child: controller.pickedImage == null &&
                                                 ApiService.getImageUrl(
                                                   controller.imageUrl,
-                                                ),
-                                              ),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : null,
-                                ),
-                                child: controller.pickedImage == null &&
-                                        ApiService.getImageUrl(
-                                          controller.imageUrl,
-                                        ).isEmpty
-                                    ? Icon(
-                                        Icons.person,
-                                        color: appColor(context).grey400,
-                                        size: 40,
-                                      )
-                                    : null,
-                              ),
-                              // Upload Plus Badge overlay
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: BoxDecoration(
-                                    color: appColor(context).secondary,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: appColor(context).white,
-                                      width: 2,
+                                                ).isEmpty
+                                            ? Icon(
+                                                Icons.person,
+                                                color: appColor(context).grey400,
+                                                size: 40,
+                                              )
+                                            : null,
+                                      ),
+                                      // Upload Edit Badge overlay
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: appColor(context).secondary,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: appColor(context).white,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            Icons.edit,
+                                            color: appColor(context).white,
+                                            size: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    (controller.pickedImage != null ||
+                                            ApiService.getImageUrl(controller.imageUrl).isNotEmpty)
+                                        ? "Edit photo"
+                                        : "Upload photo",
+                                    style: fontStyle.clashDisplayMedium10.textColor(
+                                      appColor(context).black,
                                     ),
                                   ),
-                                  child: Icon(
-                                    Icons.add,
-                                    color: appColor(context).white,
-                                    size: 14,
-                                  ),
+                                ],
+                              ),
+                            ),
+                            if (controller.showImageOptions) ...[
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildOptionButton(
+                                      context,
+                                      icon: Icons.photo_library_outlined,
+                                      label: "Upload photo",
+                                      onTap: () {
+                                        controller.pickImage(source: ImageSource.gallery);
+                                      },
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildOptionButton(
+                                      context,
+                                      icon: Icons.camera_alt_outlined,
+                                      label: "Take photo",
+                                      onTap: () {
+                                        controller.pickImage(source: ImageSource.camera);
+                                      },
+                                    ),
+                                    if (controller.pickedImage != null ||
+                                        ApiService.getImageUrl(controller.imageUrl).isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      _buildOptionButton(
+                                        context,
+                                        icon: Icons.delete_outline,
+                                        label: "Remove photo",
+                                        isDestructive: true,
+                                        onTap: () {
+                                          controller.removeImage();
+                                        },
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Replace your photo",
-                            style: fontStyle.clashDisplayMedium10.textColor(
-                              appColor(context).black,
-                            ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 28),
 
@@ -214,6 +267,46 @@ class EditProfileScreen extends StatelessWidget {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    final Color textColor = isDestructive ? Colors.red.shade600 : appColor(context).black;
+    final Color iconColor = isDestructive ? Colors.red.shade600 : appColor(context).secondary;
+    final Color bgColor = isDestructive 
+        ? Colors.red.shade50.withValues(alpha: 0.5) 
+        : appColor(context).grey100;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDestructive ? Colors.red.shade100 : appColor(context).grey200,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: iconColor),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: fontStyle.clashDisplayMedium12.textColor(textColor),
+            ),
+          ],
         ),
       ),
     );

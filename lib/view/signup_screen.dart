@@ -16,6 +16,7 @@ class SignupScreen extends StatelessWidget {
       backgroundColor: appColor(context).white,
       body: SafeArea(
         child: SingleChildScrollView(
+          controller: controller.scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -33,7 +34,7 @@ class SignupScreen extends StatelessWidget {
                       Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                     ),
                 child: Text(
-                  "Created Account",
+                  "Create Account",
                   style: fontStyle.clashDisplaySemiBold24.textColor(
                     appColor(context).white,
                   ),
@@ -107,7 +108,30 @@ class SignupScreen extends StatelessWidget {
                   onPressed: controller.togglePasswordVisibility,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              // Dynamic validation conditions
+              if (controller.passwordFocus.hasFocus &&
+                  controller.passwordController.text.isNotEmpty) ...[
+                _buildConditionItem(
+                  context: context,
+                  label: 'Between 6 and 8 characters',
+                  isMet: controller.isAtLeast6Chars,
+                ),
+                _buildConditionItem(
+                  context: context,
+                  label: 'Atleast one upper case and one lower case',
+                  isMet: controller.hasUpperAndLowerCase,
+                ),
+                _buildConditionItem(
+                  context: context,
+                  label: 'One number ,one special character',
+                  isMet: controller.hasNumberAndSpecialChar,
+                ),
+                const SizedBox(height: 16),
+              ] else ...[
+                const SizedBox(height: 4),
+              ],
 
               // T&C disclaimer text
               Text(
@@ -133,7 +157,9 @@ class SignupScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: ElevatedButton(
-                  onPressed: controller.isLoading ? null : () => controller.signup(context),
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => controller.signup(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: appColor(context).transparent,
                     disabledBackgroundColor: appColor(context).transparent,
@@ -189,8 +215,10 @@ class SignupScreen extends StatelessWidget {
                   GestureDetector(
                     onTap: () {
                       controller.clearError();
-                      Provider.of<LoginController>(context, listen: false)
-                          .clearError();
+                      Provider.of<LoginController>(
+                        context,
+                        listen: false,
+                      ).clearError();
                       Navigator.pop(context);
                     },
                     child: Text(
@@ -205,6 +233,38 @@ class SignupScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildConditionItem({
+    required BuildContext context,
+    required String label,
+    required bool isMet,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isMet ? Colors.green : Colors.grey[400],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: clashDisplay(
+                fontsize: 12,
+                fontWeight: regular,
+              ).textColor(isMet ? Colors.green : Colors.grey[600]!),
+            ),
+          ),
+        ],
       ),
     );
   }

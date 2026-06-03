@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1022227349700",
+    "project_id": "shieldconnect-36d43",
+    "storage_bucket": "shieldconnect-36d43.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1022227349700:android:74f891a04121fe2d85c991",
+        "android_client_info": {
+          "package_name": "ai.roseshield.shieldconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmqscdTLEIjffeU1y9bWjDje7QGIMkub0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1022227349700:android:a93766d2314fb83885c991",
+        "android_client_info": {
+          "package_name": "com.f5decoders.decochat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmqscdTLEIjffeU1y9bWjDje7QGIMkub0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

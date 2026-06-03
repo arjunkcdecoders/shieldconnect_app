@@ -22,22 +22,22 @@ class MediaViewerScreen extends StatelessWidget {
     required this.fileName,
   });
 
-  Future<void> _launchInBrowser(BuildContext context) async {
-    try {
-      final absoluteUrl = ApiService.getImageUrl(url);
-      final Uri uri = Uri.parse(absoluteUrl);
-      final canLaunch = await canLaunchUrl(uri);
-      if (!context.mounted) return;
-      if (canLaunch) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        ToastHelper.showToast(context, "Could not open external player.");
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ToastHelper.showToast(context, "Error: $e");
-    }
-  }
+  // Future<void> _launchInBrowser(BuildContext context) async {
+  //   try {
+  //     final absoluteUrl = ApiService.getImageUrl(url);
+  //     final Uri uri = Uri.parse(absoluteUrl);
+  //     final canLaunch = await canLaunchUrl(uri);
+  //     if (!context.mounted) return;
+  //     if (canLaunch) {
+  //       await launchUrl(uri, mode: LaunchMode.externalApplication);
+  //     } else {
+  //       ToastHelper.showToast(context, "Could not open external player.");
+  //     }
+  //   } catch (e) {
+  //     if (!context.mounted) return;
+  //     ToastHelper.showToast(context, "Error: $e");
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -55,11 +55,11 @@ class MediaViewerScreen extends StatelessWidget {
           style: fontStyle.clashDisplaySemiBold16.textColor(Colors.white),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.open_in_browser_rounded, color: Colors.white),
-            onPressed: () => _launchInBrowser(context),
-            tooltip: "Open in external browser/player",
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.open_in_browser_rounded, color: Colors.white),
+          //   onPressed: () => _launchInBrowser(context),
+          //   tooltip: "Open in external browser/player",
+          // ),
           DownloadButton(url: url, fileName: fileName),
         ],
       ),
@@ -71,17 +71,22 @@ class MediaViewerScreen extends StatelessWidget {
                 child: CachedNetworkImage(
                   imageUrl: ApiService.getImageUrl(url),
                   fit: BoxFit.contain,
-                  placeholder: (context, url) => const CircularProgressIndicator(
-                    color: Colors.white,
-                  ),
+                  placeholder: (context, url) =>
+                      const CircularProgressIndicator(color: Colors.white),
                   errorWidget: (context, url, error) => Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.broken_image, color: Colors.grey, size: 64),
+                      const Icon(
+                        Icons.broken_image,
+                        color: Colors.grey,
+                        size: 64,
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         "Unable to load image",
-                        style: fontStyle.clashDisplayMedium14.textColor(Colors.white70),
+                        style: fontStyle.clashDisplayMedium14.textColor(
+                          Colors.white70,
+                        ),
                       ),
                     ],
                   ),
@@ -97,11 +102,7 @@ class DownloadButton extends StatefulWidget {
   final String url;
   final String fileName;
 
-  const DownloadButton({
-    super.key,
-    required this.url,
-    required this.fileName,
-  });
+  const DownloadButton({super.key, required this.url, required this.fileName});
 
   @override
   State<DownloadButton> createState() => _DownloadButtonState();
@@ -122,7 +123,7 @@ class _DownloadButtonState extends State<DownloadButton> {
 
     try {
       final dio = Dio();
-      
+
       Directory? targetDir;
       if (Platform.isAndroid) {
         targetDir = Directory('/storage/emulated/0/Download');
@@ -133,17 +134,18 @@ class _DownloadButtonState extends State<DownloadButton> {
         targetDir = await getApplicationDocumentsDirectory();
       }
 
-      final String finalDir = targetDir?.path ?? (await getTemporaryDirectory()).path;
+      final String finalDir =
+          targetDir?.path ?? (await getTemporaryDirectory()).path;
       final String savePath = "$finalDir/${widget.fileName}";
       final absoluteUrl = ApiService.getImageUrl(widget.url);
 
-      await dio.download(
-        absoluteUrl,
-        savePath,
-      );
+      await dio.download(absoluteUrl, savePath);
 
       if (mounted) {
-        ToastHelper.showToast(context, "Successfully downloaded to Downloads folder!");
+        ToastHelper.showToast(
+          context,
+          "Successfully downloaded to Downloads folder!",
+        );
       }
     } catch (e) {
       debugPrint("Download failed: $e");
@@ -196,10 +198,7 @@ class _DownloadButtonState extends State<DownloadButton> {
 class VideoPlayerWidget extends StatefulWidget {
   final String url;
 
-  const VideoPlayerWidget({
-    super.key,
-    required this.url,
-  });
+  const VideoPlayerWidget({super.key, required this.url});
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -218,7 +217,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   Future<void> _initVideoPlayer() async {
     try {
       final absoluteUrl = ApiService.getImageUrl(widget.url);
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(absoluteUrl));
+      _videoController = VideoPlayerController.networkUrl(
+        Uri.parse(absoluteUrl),
+      );
       await _videoController!.initialize();
       if (mounted) {
         setState(() {
@@ -253,10 +254,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         children: [
           CircularProgressIndicator(color: Colors.white),
           SizedBox(height: 16),
-          Text(
-            "Loading video...",
-            style: TextStyle(color: Colors.white70),
-          ),
+          Text("Loading video...", style: TextStyle(color: Colors.white70)),
         ],
       );
     }
@@ -297,7 +295,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                       final duration = value.position;
                       return Text(
                         _formatDuration(duration),
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                       );
                     },
                   ),

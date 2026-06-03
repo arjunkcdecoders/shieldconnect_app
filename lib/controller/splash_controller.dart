@@ -1,8 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/view/bottomnav_screen.dart';
 import 'package:shieldconnect_app/view/onboarding_screen.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
+
+import 'package:shieldconnect_app/services/call_manager.dart';
 
 class SplashController extends ChangeNotifier {
   bool _hasStarted = false;
@@ -14,9 +21,29 @@ class SplashController extends ChangeNotifier {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? userSession = prefs.getString('user_session');
 
+    if (userSession != null) {
+      try {
+        final Map<String, dynamic> userMap = jsonDecode(userSession);
+        final String? userId = userMap['_id'] ?? userMap['id'];
+        if (userId != null) {
+          // Connect to the socket server during the splash screen duration
+          SocketService().connect(userId);
+          CallManager().init(
+            userId,
+            userMap['name']?.toString() ?? 'User',
+            myUserAvatar: userMap['avatar']?.toString(),
+          );
+        }
+      } catch (e) {
+        debugPrint("SplashController: Error parsing user_session for socket: $e");
+      }
+    }
+
     Timer(const Duration(seconds: 3), () {
       if (context.mounted) {
         if (userSession != null) {
+          Provider.of<HomeScreenController>(context, listen: false).init();
+          Provider.of<ProfileController>(context, listen: false).init();
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const BottomnavScreen()),

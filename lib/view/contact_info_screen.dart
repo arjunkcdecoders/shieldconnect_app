@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/personal_chat_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/call_manager.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -29,17 +30,17 @@ class ContactInfoScreen extends StatelessWidget {
             final isLoading = controller.isContactInfoLoading;
 
             if (isLoading && details == null) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
+              return const Center(child: CircularProgressIndicator());
             }
 
             final String displayName = details?['name'] ?? name;
             final String avatarPath = details?['avatar'] ?? "";
-            final String bio = details?['bio'] ?? "Hey there! I am using ShieldConnect.";
-            
+            final String bio =
+                details?['bio'] ?? "Hey there! I am using ShieldConnect.";
+
             final List<dynamic> mediaImages = details?['medias'] ?? [];
-            final List<dynamic> groupsInCommon = details?['groupsInCommon'] ?? [];
+            final List<dynamic> groupsInCommon =
+                details?['groupsInCommon'] ?? [];
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -53,7 +54,7 @@ class ContactInfoScreen extends StatelessWidget {
                   _buildProfileBlock(context, displayName, avatarPath, bio),
 
                   // 3. Grid/Row of Action Cards
-                  _buildActionRow(context, displayName),
+                  _buildActionRow(context, displayName, avatarPath),
                   const SizedBox(height: 32),
 
                   // 4. Media Gallery Section
@@ -109,7 +110,7 @@ class ContactInfoScreen extends StatelessWidget {
               ),
             ],
           ),
-          Icon(Icons.more_vert, color: appColor(context).black, size: 24),
+          //Icon(Icons.more_vert, color: appColor(context).black, size: 24),
         ],
       ),
     );
@@ -196,7 +197,11 @@ class ContactInfoScreen extends StatelessWidget {
   }
 
   /// Action deck holding Message, Audio Call and Video Call stadium-shadow cards
-  Widget _buildActionRow(BuildContext context, String displayName) {
+  Widget _buildActionRow(
+    BuildContext context,
+    String displayName,
+    String avatarPath,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Row(
@@ -216,10 +221,20 @@ class ContactInfoScreen extends StatelessWidget {
               label: "Audio Call",
               asset: ImageAssets.phone,
               onTap: () {
+                context.read<CallManager>().startCall(
+                  recipientId,
+                  displayName,
+                  isVideo: false,
+                  recipientAvatar: avatarPath,
+                  isGroup: false,
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => VoiceCallingScreen(userName: displayName),
+                    builder: (context) => VoiceCallingScreen(
+                      userName: displayName,
+                      avatarUrl: avatarPath,
+                    ),
                   ),
                 );
               },
@@ -232,10 +247,18 @@ class ContactInfoScreen extends StatelessWidget {
               label: "Video Call",
               asset: ImageAssets.videoRecorder,
               onTap: () {
+                context.read<CallManager>().startCall(
+                  recipientId,
+                  displayName,
+                  isVideo: true,
+                  recipientAvatar: avatarPath,
+                  isGroup: false,
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => VideoCallingScreen(userName: displayName),
+                    builder: (context) =>
+                        VideoCallingScreen(userName: displayName),
                   ),
                 );
               },
@@ -298,7 +321,9 @@ class ContactInfoScreen extends StatelessWidget {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => AllMediaScreen(mediaItems: images)),
+          MaterialPageRoute(
+            builder: (context) => AllMediaScreen(mediaItems: images),
+          ),
         );
       },
       child: Column(
@@ -357,7 +382,9 @@ class ContactInfoScreen extends StatelessWidget {
                 itemCount: images.length,
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 itemBuilder: (context, index) {
-                  final mediaUrl = ApiService.getImageUrl(images[index].toString());
+                  final mediaUrl = ApiService.getImageUrl(
+                    images[index].toString(),
+                  );
                   return Container(
                     width: 72,
                     margin: const EdgeInsets.only(right: 12),
@@ -387,10 +414,7 @@ class ContactInfoScreen extends StatelessWidget {
   }
 
   /// Vertical checklist structuring mutual connections and linked Groups
-  Widget _buildGroupsSection(
-    BuildContext context,
-    List<dynamic> items,
-  ) {
+  Widget _buildGroupsSection(BuildContext context, List<dynamic> items) {
     final int count = items.length;
 
     return Padding(
@@ -418,8 +442,13 @@ class ContactInfoScreen extends StatelessWidget {
             ...items.map((item) {
               final gName = item["name"]?.toString() ?? "Group";
               final gImage = item["group_image"]?.toString() ?? "";
-              final int mCount = item["membersCount"] is int ? item["membersCount"] as int : 0;
-              final groupAvatarUrl = ApiService.getImageUrl(gImage, isGroup: true);
+              final int mCount = item["membersCount"] is int
+                  ? item["membersCount"] as int
+                  : 0;
+              final groupAvatarUrl = ApiService.getImageUrl(
+                gImage,
+                isGroup: true,
+              );
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),

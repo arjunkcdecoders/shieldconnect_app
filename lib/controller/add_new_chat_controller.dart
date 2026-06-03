@@ -68,7 +68,19 @@ class AddNewChatController extends ChangeNotifier {
   Set<String> get loadingUserIds => _loadingUserIds;
 
   Future<void> init() async {
+    scrollController.removeListener(_onScroll);
     scrollController.addListener(_onScroll);
+
+    searchController.clear();
+    _searchQuery = "";
+    _activeChipTab = "People";
+    _allUsers = [];
+    _searchResults = [];
+    _currentPage = 1;
+    _totalPages = 1;
+    _isLoadingMore = false;
+    _loadingUserIds.clear();
+
     _isLoading = true;
     notifyListeners();
 
@@ -78,6 +90,8 @@ class AddNewChatController extends ChangeNotifier {
       final Map<String, dynamic> userMap = jsonDecode(sessionStr);
       final UserModel user = UserModel.fromJson(userMap);
       _userId = user.id;
+    } else {
+      _userId = null;
     }
 
     await fetchAllUsers();

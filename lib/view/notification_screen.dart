@@ -12,6 +12,11 @@ class NotificationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<NotificationController>(context, listen: false)
+          .fetchNotificationsInBackground();
+    });
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
@@ -48,53 +53,43 @@ class NotificationScreen extends StatelessWidget {
                       appColor(context).black,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Compact Search Bar
-              Container(
-                decoration: BoxDecoration(
-                  color: appColor(context).white,
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow: [
-                    BoxShadow(
-                      color: appColor(context).black.withValues(alpha: 0.04),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  cursorColor: appColor(context).primary,
-                  decoration: InputDecoration(
-                    hintText: "Search...",
-                    hintStyle: fontStyle.clashDisplayRegular12.textColor(
-                      appColor(context).grey400,
-                    ),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 16.0, right: 10.0),
-                      child: Image.asset(
-                        ImageAssets.searchIcon,
-                        width: 18,
-                        height: 18,
-                        color: appColor(context).secondary,
-                      ),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 38,
-                      minHeight: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(25),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 10,
-                      horizontal: 16,
-                    ),
+                  const Spacer(),
+                  Consumer<NotificationController>(
+                    builder: (context, controller, child) {
+                      if (controller.ticketNotifications.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return GestureDetector(
+                        onTap: () => controller.clearAllNotifications(),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: appColor(context).grey100,
+                          ),
+                          child: Center(
+                            child: controller.isLoading
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: appColor(context).secondary,
+                                    ),
+                                  )
+                                : Image.asset(
+                                    ImageAssets.deleteChat,
+                                    width: 18,
+                                    height: 18,
+                                    color: appColor(context).secondary,
+                                  ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
+                ],
               ),
               const SizedBox(height: 24),
 
@@ -118,7 +113,7 @@ class NotificationScreen extends StatelessWidget {
                     // Combine and sort
                     final allItems = [
                       ...controller.ticketNotifications.map((n) => {...n.toJson(), "ui_type": "support_update", "sort_date": n.createdAt?.toIso8601String() ?? ""}),
-                      ...controller.connectionRequests.map((r) => {...r, "ui_type": "request_received", "sort_date": r["created_at"] ?? ""}),
+                      ...controller.connectionRequests.map((r) => {...r, "ui_type": "request_received", "sort_date": r["updated_at"] ?? r["updatedAt"] ?? r["created_at"] ?? r["createdAt"] ?? ""}),
                     ];
 
                     allItems.sort((a, b) => b["sort_date"].toString().compareTo(a["sort_date"].toString()));

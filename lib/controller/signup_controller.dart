@@ -15,6 +15,8 @@ class SignupController extends ChangeNotifier {
   final FocusNode emailFocus = FocusNode();
   final FocusNode passwordFocus = FocusNode();
 
+  final ScrollController scrollController = ScrollController();
+
   String _message = '';
   String get message => _message;
 
@@ -36,6 +38,22 @@ class SignupController extends ChangeNotifier {
     emailController.addListener(clearError);
     passwordController.addListener(clearError);
     passwordController.addListener(notifyListeners);
+
+    passwordFocus.addListener(_onPasswordFocusChange);
+  }
+
+  void _onPasswordFocusChange() {
+    if (passwordFocus.hasFocus) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (scrollController.hasClients) {
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
   }
 
   void clearError() {
@@ -158,6 +176,7 @@ class SignupController extends ChangeNotifier {
     userNameFocus.dispose();
     emailFocus.dispose();
     passwordFocus.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 

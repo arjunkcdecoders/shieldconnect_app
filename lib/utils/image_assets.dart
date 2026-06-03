@@ -22,6 +22,7 @@ class ImageAssets {
   static const String deleteChat = "$_path/deleteChaT.png";
   static const String edit = "$_path/edit.png";
   static const String emoji = "$_path/emoji.png";
+  static const String stickers = "$_path/stickers.png";
   static const String favorite = "$_path/favorite.png";
   static const String file = "$_path/file.png";
   static const String gallery = "$_path/gallery.png";
@@ -48,6 +49,7 @@ class ImageAssets {
   static const String statusActive = "$_path/statusActive.png";
   static const String statusInActive = "$_path/statusInActive.png";
   static const String theme = "$_path/theme.png";
+  static const String chatSettings = "$_path/chatSettings.png";
   static const String userAdd = "$_path/userAdd.png";
   static const String videoRecorder = "$_path/video-recorder.png";
   static const String tick = "$_path/tick.png";
@@ -63,4 +65,9 @@ class ImageAssets {
   static const String videoOn = "$_path/videoOn.png";
   static const String expand = "$_path/expand.png";
   static const String addUser = "$_path/addUser.png";
+  static const String ok = "$_path/ok.png";
+  static const String pause = "$_path/pause.png";
+  static const String appeal = "$_path/appeal.png";
+  static const String answerCall = "$_path/answerCall.png";
+  static const String endCall = "$_path/endCall.png";
 }

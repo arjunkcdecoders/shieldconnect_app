@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -12,6 +13,7 @@ import 'package:shieldconnect_app/view/announcement_details_screen.dart';
 
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
 import 'package:shieldconnect_app/controller/announcement_controller.dart';
 import 'package:shieldconnect_app/controller/notification_controller.dart';
 import 'package:shieldconnect_app/utils/date_helper.dart';
@@ -94,7 +96,11 @@ class ChatlistScreen extends StatelessWidget {
                                       builder: (context) =>
                                           const NotificationScreen(),
                                     ),
-                                  );
+                                  ).then((_) {
+                                    if (context.mounted) {
+                                      homeController.init();
+                                    }
+                                  });
                                 },
                                 child: Stack(
                                   clipBehavior: Clip.none,
@@ -139,8 +145,8 @@ class ChatlistScreen extends StatelessWidget {
                                             child: Text(
                                               notificationController
                                                           .unreadCount >
-                                                      9
-                                                  ? '9+'
+                                                      99
+                                                  ? '99+'
                                                   : notificationController
                                                         .unreadCount
                                                         .toString(),
@@ -163,13 +169,18 @@ class ChatlistScreen extends StatelessWidget {
                             context,
                             assetPath: ImageAssets.plus,
                             onTap: () {
+                              context.read<AddNewChatController>().init();
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
                                       const AddNewChatScreen(),
                                 ),
-                              );
+                              ).then((_) {
+                                if (context.mounted) {
+                                  homeController.init();
+                                }
+                              });
                             },
                           ),
                         ],
@@ -178,12 +189,97 @@ class ChatlistScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // Page Title
-                  Text(
-                    "Chats",
-                    style: fontStyle.clashDisplayBold30.textColor(
-                      appColor(context).black,
-                    ),
+                  // Page Title Row / Search Bar Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Chats",
+                        style: fontStyle.clashDisplayBold30.textColor(
+                          appColor(context).black,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: homeController.isSearching
+                              ? Container(
+                                  key: const ValueKey('search_active'),
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: appColor(context).grey100,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: TextField(
+                                    controller: homeController.searchController,
+                                    focusNode: homeController.searchFocusNode,
+                                    onChanged: (value) {
+                                      homeController.setSearchQuery(value);
+                                    },
+                                    cursorColor: appColor(context).primary,
+                                    style: fontStyle.clashDisplayMedium14
+                                        .textColor(appColor(context).black),
+                                    decoration: InputDecoration(
+                                      hintText: "Search...",
+                                      hintStyle: fontStyle.clashDisplayMedium14
+                                          .textColor(appColor(context).grey400),
+                                      prefixIcon: Padding(
+                                        padding: const EdgeInsets.all(11.0),
+                                        child: Image.asset(
+                                          ImageAssets.searchIcon,
+                                          width: 18,
+                                          height: 18,
+                                          color: appColor(context).secondary,
+                                        ),
+                                      ),
+                                      suffixIcon: GestureDetector(
+                                        onTap: () {
+                                          if (homeController
+                                              .searchController
+                                              .text
+                                              .isNotEmpty) {
+                                            homeController.searchController
+                                                .clear();
+                                            homeController.setSearchQuery("");
+                                          } else {
+                                            homeController.setSearching(false);
+                                          }
+                                        },
+                                        child: Icon(
+                                          Icons.close,
+                                          color: appColor(context).primary,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      border: InputBorder.none,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                          ),
+                                    ),
+                                  ),
+                                )
+                              : Align(
+                                  key: const ValueKey('search_inactive'),
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      homeController.setSearching(true);
+                                      homeController.searchFocusNode
+                                          .requestFocus();
+                                    },
+                                    child: Image.asset(
+                                      ImageAssets.searchIcon,
+                                      width: 18,
+                                      height: 18,
+                                      color: appColor(context).secondary,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
 
@@ -195,13 +291,17 @@ class ChatlistScreen extends StatelessWidget {
                       children: [
                         _buildFilterTag(
                           context,
-                          text: "All",
+                          text: homeController.totalUnreadCount > 0
+                              ? "All (${homeController.totalUnreadCount})"
+                              : "All",
                           isActive: homeController.activeTab == 'All',
                           onTap: () => homeController.setActiveTab('All'),
                         ),
                         _buildFilterTag(
                           context,
-                          text: "Unread",
+                          text: homeController.totalUnreadCount > 0
+                              ? "Unread (${homeController.totalUnreadCount})"
+                              : "Unread",
                           isActive: homeController.activeTab == 'Unread',
                           onTap: () => homeController.setActiveTab('Unread'),
                         ),
@@ -257,6 +357,31 @@ class ChatlistScreen extends StatelessWidget {
                                   announcements.isNotEmpty &&
                                   homeController.activeTab == 'All';
                               final chats = homeController.recentChats;
+
+                              if (chats.isEmpty) {
+                                if (hasAnnouncement) {
+                                  return ListView(
+                                    physics: const BouncingScrollPhysics(),
+                                    children: [
+                                      _buildAnnouncementCard(
+                                        context,
+                                        announcements,
+                                      ),
+                                      _buildEmptyState(
+                                        context,
+                                        homeController.activeTab,
+                                        isEmbedded: true,
+                                      ),
+                                    ],
+                                  );
+                                } else {
+                                  return _buildEmptyState(
+                                    context,
+                                    homeController.activeTab,
+                                    isEmbedded: false,
+                                  );
+                                }
+                              }
 
                               return ListView.builder(
                                 physics: const BouncingScrollPhysics(),
@@ -344,8 +469,17 @@ class ChatlistScreen extends StatelessWidget {
   }
 
   Widget _buildChatItem(BuildContext context, Map<String, dynamic> item) {
+    final homeController = Provider.of<HomeScreenController>(
+      context,
+      listen: false,
+    );
     final conversation = item['conversation'] ?? {};
     final lastMessage = item['last_message'] ?? {};
+    final String chatId = (conversation['id'] ?? conversation['_id'] ?? '')
+        .toString();
+    final String? typingIndicatorText = homeController.getTypingIndicatorText(
+      chatId,
+    );
 
     final bool isGroup = conversation['type'] == 'group';
     final bool isRequest =
@@ -358,7 +492,10 @@ class ChatlistScreen extends StatelessWidget {
         : '';
     final int unread = item['unread_count'] ?? 0;
 
-    final String rawType = (lastMessage['message_type'] ?? lastMessage['type'] ?? '').toString().toLowerCase();
+    final String rawType =
+        (lastMessage['message_type'] ?? lastMessage['type'] ?? '')
+            .toString()
+            .toLowerCase();
     IconData? mediaIcon;
     String? mediaText;
     if (rawType == 'image') {
@@ -373,19 +510,52 @@ class ChatlistScreen extends StatelessWidget {
     } else if (rawType == 'file' || rawType == 'doc' || rawType == 'document') {
       mediaIcon = Icons.insert_drive_file_outlined;
       mediaText = 'file';
+    } else if (rawType == 'sticker') {
+      mediaIcon = Icons.sticky_note_2_outlined;
+      mediaText = 'sticker';
     }
 
     final bool hasRing = false;
     final bool hasStatusDot = conversation['is_online'] ?? false;
+    final String? senderId =
+        lastMessage['sender_id']?.toString() ??
+        lastMessage['sender']?.toString();
+    final bool isOutgoing =
+        senderId != null && senderId == homeController.userId;
     final String msgStatus = lastMessage['status'] ?? 'none';
-    final String status = msgStatus == 'read'
-        ? 'read_filled'
-        : (msgStatus == 'sent' ? 'read_empty' : 'none');
     final String? imagePath = conversation['image'];
+
+    bool showNewGroupBadge = false;
+    if (isGroup && messageContent == 'No messages yet' && lastMessage['created_at'] != null) {
+      try {
+        final DateTime createdAt = DateTime.parse(lastMessage['created_at'].toString()).toUtc();
+        final DateTime now = DateTime.now().toUtc();
+        final Duration difference = now.difference(createdAt);
+        if (difference.inHours >= 0 && difference.inHours < 10) {
+          showNewGroupBadge = true;
+        }
+      } catch (_) {}
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
+        final String chatId = (conversation['id'] ?? conversation['_id'] ?? '')
+            .toString();
+        if (chatId.isNotEmpty) {
+          homeController.markChatAsReadLocally(chatId);
+
+          final String currentUserId = homeController.userId ?? '';
+          if (currentUserId.isNotEmpty) {
+            SocketService().markAsRead(
+              chatId: chatId,
+              userId: currentUserId,
+              otherId: isGroup ? '' : chatId,
+              isGroup: isGroup,
+            );
+          }
+        }
+
         if (isGroup) {
           Navigator.push(
             context,
@@ -393,10 +563,20 @@ class ChatlistScreen extends StatelessWidget {
               builder: (context) => GroupChatScreen(
                 groupName: name,
                 groupId: conversation['id'] ?? conversation['_id'],
-                isFavorite: item['is_favorite'] ?? item['isFavorite'] ?? conversation['is_favorite'] ?? conversation['isFavorite'] ?? false,
+                isFavorite:
+                    item['is_favorite'] ??
+                    item['isFavorite'] ??
+                    conversation['is_favorite'] ??
+                    conversation['isFavorite'] ??
+                    false,
               ),
             ),
-          );
+          ).then((_) {
+            if (context.mounted) {
+              homeController.setSearching(false);
+              homeController.init();
+            }
+          });
         } else {
           Navigator.push(
             context,
@@ -406,10 +586,20 @@ class ChatlistScreen extends StatelessWidget {
                 isGroup: isGroup,
                 isRequest: isRequest,
                 recipientId: conversation['id'] ?? conversation['_id'],
-                isFavorite: item['is_favorite'] ?? item['isFavorite'] ?? conversation['is_favorite'] ?? conversation['isFavorite'] ?? false,
+                isFavorite:
+                    item['is_favorite'] ??
+                    item['isFavorite'] ??
+                    conversation['is_favorite'] ??
+                    conversation['isFavorite'] ??
+                    false,
               ),
             ),
-          );
+          ).then((_) {
+            if (context.mounted) {
+              homeController.setSearching(false);
+              homeController.init();
+            }
+          });
         }
       },
       child: Padding(
@@ -473,7 +663,7 @@ class ChatlistScreen extends StatelessWidget {
                                   )
                                 : null,
                           ),
-                          if (hasStatusDot)
+                          if (!isGroup)
                             Positioned(
                               bottom: 0,
                               right: 0,
@@ -481,7 +671,9 @@ class ChatlistScreen extends StatelessWidget {
                                 width: 14,
                                 height: 14,
                                 decoration: BoxDecoration(
-                                  color: appColor(context).secondary,
+                                  color: hasStatusDot
+                                      ? appColor(context).green
+                                      : appColor(context).grey,
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: appColor(context).white,
@@ -502,57 +694,93 @@ class ChatlistScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    name,
-                    style: fontStyle.clashDisplaySemiBold16.textColor(
-                      appColor(context).black,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          style: fontStyle.clashDisplaySemiBold16.textColor(
+                            appColor(context).black,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (showNewGroupBadge) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: appColor(context).secondary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: appColor(context).secondary.withValues(alpha: 0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            "NEW GROUP",
+                            style: fontStyle.clashDisplayBold10.textColor(
+                              appColor(context).secondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      if (status == "read_empty") ...[
-                        Icon(
-                          Icons.check_circle_outline,
-                          color: appColor(context).green,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                      ] else if (status == "read_filled") ...[
-                        Icon(
-                          Icons.check_circle,
-                          color: appColor(context).green,
-                          size: 16,
-                        ),
+                      if (typingIndicatorText == null && isOutgoing && msgStatus != 'none' && msgStatus.isNotEmpty) ...[
+                        _buildListReadReceipt(context, msgStatus),
                         const SizedBox(width: 4),
                       ],
                       Expanded(
-                        child: mediaIcon != null && mediaText != null
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    mediaIcon,
-                                    color: appColor(context).textMediumGrey,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    mediaText,
-                                    style: fontStyle.clashDisplayRegular12.textColor(
-                                      appColor(context).textMediumGrey,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Text(
-                                messageContent,
-                                style: fontStyle.clashDisplayRegular12.textColor(
-                                  appColor(context).textMediumGrey,
+                        child: typingIndicatorText != null
+                            ? Text(
+                                typingIndicatorText,
+                                style: fontStyle.clashDisplayMedium12.textColor(
+                                  appColor(context).secondary,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                              ),
+                              )
+                            : (mediaIcon != null && mediaText != null
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          mediaIcon,
+                                          color: appColor(
+                                            context,
+                                          ).textMediumGrey,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          mediaText,
+                                          style: fontStyle.clashDisplayRegular12
+                                              .textColor(
+                                                appColor(
+                                                  context,
+                                                ).textMediumGrey,
+                                              ),
+                                        ),
+                                      ],
+                                    )
+                                  : Text(
+                                      messageContent,
+                                      style: fontStyle.clashDisplayRegular12
+                                          .textColor(
+                                            appColor(context).textMediumGrey,
+                                          ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    )),
                       ),
                     ],
                   ),
@@ -615,7 +843,11 @@ class ChatlistScreen extends StatelessWidget {
             builder: (context) =>
                 AnnouncementDetailsScreen(announcements: announcements),
           ),
-        );
+        ).then((_) {
+          if (context.mounted) {
+            Provider.of<HomeScreenController>(context, listen: false).init();
+          }
+        });
       },
       child: Padding(
         padding: const EdgeInsets.only(bottom: 22.0),
@@ -652,7 +884,7 @@ class ChatlistScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    "Announcements",
+                    "RoseShield",
                     style: fontStyle.clashDisplaySemiBold16.textColor(
                       appColor(context).black,
                     ),
@@ -675,5 +907,145 @@ class ChatlistScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildEmptyState(
+    BuildContext context,
+    String tab, {
+    bool isEmbedded = false,
+  }) {
+    IconData iconData;
+    String title;
+    String subtitle;
+
+    switch (tab) {
+      case 'Unread':
+        iconData = Icons.mark_chat_unread_outlined;
+        title = "All Caught Up";
+        subtitle =
+            "You have no unread messages. Any new messages will appear here.";
+        break;
+      case 'Requests':
+        iconData = Icons.question_answer_outlined;
+        title = "No Requests";
+        subtitle =
+            "You have no pending message requests from non-connected users.";
+        break;
+      case 'Groups':
+        iconData = Icons.groups_outlined;
+        title = "No Groups Yet";
+        subtitle =
+            "Create a group or ask someone to add you to their group to get started.";
+        break;
+      case 'Favourite':
+        iconData = Icons.star_border_rounded;
+        title = "No Favourites";
+        subtitle =
+            "Mark important chats as favourites to find them easily at the top.";
+        break;
+      case 'All':
+      default:
+        iconData = Icons.chat_bubble_outline_rounded;
+        title = "No Chats Yet";
+        subtitle =
+            "Start a new conversation by tapping the '+' button in the top right corner.";
+        break;
+    }
+
+    final content = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: isEmbedded ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        if (!isEmbedded) const Spacer(flex: 2),
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: appColor(context).secondary.withValues(alpha: 0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(iconData, color: appColor(context).secondary, size: 36),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          title,
+          style: fontStyle.clashDisplaySemiBold18.textColor(
+            appColor(context).black,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: fontStyle.clashDisplayRegular14.textColor(
+              appColor(context).grey400,
+            ),
+          ),
+        ),
+        if (!isEmbedded) const Spacer(flex: 3),
+      ],
+    );
+
+    if (isEmbedded) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 40.0, bottom: 20.0),
+        child: content,
+      );
+    }
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.55,
+        child: content,
+      ),
+    );
+  }
+
+  Widget _buildListReadReceipt(BuildContext context, String status) {
+    if (status == 'read') {
+      return Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          color: appColor(context).green,
+          shape: BoxShape.circle,
+        ),
+        child: const Center(
+          child: Icon(
+            Icons.done_all_rounded,
+            color: Colors.white,
+            size: 10,
+          ),
+        ),
+      );
+    } else if (status == 'delivered') {
+      return Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: appColor(context).green,
+            width: 1.2,
+          ),
+        ),
+        child: Center(
+          child: Icon(
+            Icons.done_all_rounded,
+            color: appColor(context).green,
+            size: 10,
+          ),
+        ),
+      );
+    } else {
+      return Icon(
+        Icons.check_circle_outline,
+        color: appColor(context).green,
+        size: 16,
+      );
+    }
   }
 }

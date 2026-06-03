@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
 import 'package:shieldconnect_app/model/wallpaper_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
-import 'package:shieldconnect_app/utils/toast_helper.dart';
 
 class AccountController extends ChangeNotifier {
   bool _isLoading = false;
@@ -29,6 +28,10 @@ class AccountController extends ChangeNotifier {
   List<WallpaperModel> get wallpapers => _wallpapers;
   String? _selectedWallpaperId;
   String? get selectedWallpaperId => _selectedWallpaperId;
+  String? _selectingWallpaperId;
+  String? get selectingWallpaperId => _selectingWallpaperId;
+  String? _failedWallpaperId;
+  String? get failedWallpaperId => _failedWallpaperId;
 
   // Privacy Settings
   String _statusPrivacy = "all"; // 'all' or 'selected'
@@ -46,7 +49,7 @@ class AccountController extends ChangeNotifier {
   bool get isReadReceiptsEnabled => _isReadReceiptsEnabled;
   bool get isTypingIndicatorEnabled => _isTypingIndicatorEnabled;
 
-  // Load current selected wallpaper from local user session
+  // Load current selected wallpaper from live user profile API
   Future<void> init() async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -54,12 +57,25 @@ class AccountController extends ChangeNotifier {
       if (sessionStr != null) {
         final Map<String, dynamic> userMap = jsonDecode(sessionStr);
         final UserModel user = UserModel.fromJson(userMap);
-        _selectedWallpaperId = user.chatWallpaper;
         _userId = user.id;
         notifyListeners();
       }
+
+      if (_userId != null && _userId!.isNotEmpty) {
+        final response = await ApiService().get('/users/$_userId?currentUserId=$_userId');
+        final dynamic responseData = response.data;
+        final Map<String, dynamic> json = responseData is String
+            ? jsonDecode(responseData)
+            : responseData as Map<String, dynamic>;
+
+        if (json['success'] == true && json['data'] != null) {
+          final data = json['data'];
+          _selectedWallpaperId = data['chat_wallpaper']?.toString();
+          notifyListeners();
+        }
+      }
     } catch (e) {
-      debugPrint("AccountController: Error loading selected wallpaper from session: $e");
+      debugPrint("AccountController: Error loading selected wallpaper: $e");
     }
   }
 
@@ -184,53 +200,54 @@ class AccountController extends ChangeNotifier {
   }
 
   // Select Wallpaper
-  Future<void> selectWallpaper(BuildContext context, String wallpaperId) async {
-    _isLoading = true;
+  Future<bool> selectWallpaper(BuildContext context, String wallpaperId) async {
+    if (_userId == null) {
+      return false;
+    }
+
+    _selectingWallpaperId = wallpaperId;
+    _failedWallpaperId = null; // Clear previous failure status
     notifyListeners();
 
     try {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final String? sessionStr = prefs.getString('user_session');
-      if (sessionStr != null) {
-        final Map<String, dynamic> userMap = jsonDecode(sessionStr);
-        final UserModel user = UserModel.fromJson(userMap);
+      final response = await ApiService().put(
+        '/users/profile/$_userId',
+        data: {"chat_wallpaper": wallpaperId},
+      );
 
-        final response = await ApiService().put(
-          '/users/profile/${user.id}',
-          data: {"chat_wallpaper": wallpaperId},
-        );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
 
-        final dynamic responseData = response.data;
-        final Map<String, dynamic> json = responseData is String
-            ? jsonDecode(responseData)
-            : responseData as Map<String, dynamic>;
-
-        if (json['success'] == true && json['data'] != null) {
-          final updatedUser = UserModel.fromJson(json['data'] as Map<String, dynamic>);
-          await prefs.setString('user_session', jsonEncode(updatedUser.toJson()));
-          _selectedWallpaperId = updatedUser.chatWallpaper;
-          if (context.mounted) {
-            ToastHelper.showToast(context, "Wallpaper updated successfully!");
-          }
-        } else {
-          if (context.mounted) {
-            ToastHelper.showToast(context, json['message'] ?? "Failed to update wallpaper");
-          }
-        }
+      if (json['success'] == true && json['data'] != null) {
+        final data = json['data'];
+        _selectedWallpaperId = data['chat_wallpaper']?.toString();
+        _selectingWallpaperId = null;
+        notifyListeners();
+        return true;
       } else {
-        if (context.mounted) {
-          ToastHelper.showToast(context, "User session not found");
-        }
+        _failedWallpaperId = wallpaperId;
       }
     } catch (e) {
       debugPrint("Error selecting wallpaper: $e");
-      if (context.mounted) {
-        ToastHelper.showToast(context, "Connection error. Please try again.");
-      }
+      _failedWallpaperId = wallpaperId;
     }
 
-    _isLoading = false;
+    _selectingWallpaperId = null;
     notifyListeners();
+
+    // Auto-reset the failure state after 3 seconds so the error icon disappears gracefully
+    if (_failedWallpaperId != null) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (_failedWallpaperId == wallpaperId) {
+          _failedWallpaperId = null;
+          notifyListeners();
+        }
+      });
+    }
+
+    return false;
   }
 
   // Change Password

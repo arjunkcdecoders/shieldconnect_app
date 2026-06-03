@@ -7,6 +7,7 @@ import 'package:shieldconnect_app/utils/image_assets.dart';
 
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
+import 'package:shieldconnect_app/controller/status_controller.dart';
 
 class BottomnavScreen extends StatelessWidget {
   const BottomnavScreen({super.key});
@@ -33,11 +34,11 @@ class BottomnavScreen extends StatelessWidget {
           onTap: (index) {
             controller.changeTab(index);
             if (index == 0) {
-              Provider.of<HomeScreenController>(context, listen: false)
-                  .fetchRecentChats();
+              Provider.of<HomeScreenController>(context, listen: false).init();
             } else if (index == 1) {
-              Provider.of<CallListController>(context, listen: false)
-                  .init();
+              Provider.of<CallListController>(context, listen: false).init();
+            } else if (index == 2) {
+              Provider.of<StatusController>(context, listen: false).init();
             }
           },
           type: BottomNavigationBarType.fixed,

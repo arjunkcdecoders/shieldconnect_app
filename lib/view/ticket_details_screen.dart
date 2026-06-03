@@ -4,6 +4,7 @@ import 'package:shieldconnect_app/controller/help_support_controller.dart';
 import 'package:shieldconnect_app/model/ticket_chat_model.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
+import 'package:shieldconnect_app/utils/linkified_text.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
@@ -387,8 +388,8 @@ class TicketDetailsScreen extends StatelessWidget {
                               chat.message!.isNotEmpty &&
                               !chat.message!.startsWith('Attachment:')) ...[
                             const SizedBox(height: 6),
-                            Text(
-                              chat.message!,
+                            LinkifiedText(
+                              text: chat.message!,
                               style: fontStyle.clashDisplayMedium12.textColor(
                                 isMe ? Colors.white : appColor(context).black,
                               ),
@@ -429,8 +430,8 @@ class TicketDetailsScreen extends StatelessWidget {
                           ),
                         ],
                       ))
-                : Text(
-                    chat.message ?? "",
+                : LinkifiedText(
+                    text: chat.message ?? "",
                     style: fontStyle.clashDisplayMedium12.textColor(
                       isMe ? Colors.white : appColor(context).black,
                     ),

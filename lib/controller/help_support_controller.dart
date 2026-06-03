@@ -17,8 +17,52 @@ class HelpSupportController extends ChangeNotifier {
   List<FaqModel> get faqs => _faqs;
 
   // Tickets
-  List<TicketModel> _tickets = [];
-  List<TicketModel> get tickets => _tickets;
+  List<TicketModel> _allTickets = [];
+  String _searchQuery = "";
+  String _selectedCategory = "All Categories";
+  bool _showFilter = false;
+
+  List<TicketModel> get tickets {
+    List<TicketModel> list = _allTickets;
+    
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((ticket) {
+        final subject = ticket.subject?.toLowerCase() ?? "";
+        final ticketId = ticket.ticketId?.toLowerCase() ?? "";
+        final id = ticket.id?.toLowerCase() ?? "";
+        return subject.contains(q) || ticketId.contains(q) || id.contains(q);
+      }).toList();
+    }
+    
+    if (_selectedCategory != "All Categories") {
+      final cat = _selectedCategory.toLowerCase();
+      list = list.where((ticket) {
+        final category = ticket.category?.toLowerCase() ?? "";
+        return category == cat;
+      }).toList();
+    }
+    
+    return list;
+  }
+
+  String get selectedCategory => _selectedCategory;
+  bool get showFilter => _showFilter;
+
+  void toggleFilterVisibility() {
+    _showFilter = !_showFilter;
+    notifyListeners();
+  }
+
+  void setSelectedCategory(String category) {
+    _selectedCategory = category;
+    notifyListeners();
+  }
+
+  void clearCategoryFilter() {
+    _selectedCategory = "All Categories";
+    notifyListeners();
+  }
 
   TicketModel? _selectedTicket;
   TicketModel? get selectedTicket => _selectedTicket;
@@ -74,7 +118,7 @@ class HelpSupportController extends ChangeNotifier {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       final String? sessionStr = prefs.getString('user_session');
       if (sessionStr == null) {
-        _tickets = [];
+        _allTickets = [];
         return;
       }
 
@@ -82,7 +126,7 @@ class HelpSupportController extends ChangeNotifier {
       final UserModel user = UserModel.fromJson(userMap);
       final String? userId = user.id;
       if (userId == null) {
-        _tickets = [];
+        _allTickets = [];
         return;
       }
 
@@ -103,12 +147,12 @@ class HelpSupportController extends ChangeNotifier {
         }
       }
 
-      _tickets = listData
+      _allTickets = listData
           .map((item) => TicketModel.fromJson(item as Map<String, dynamic>))
           .toList();
     } catch (e) {
       debugPrint("Error fetching user tickets: $e");
-      _tickets = [];
+      _allTickets = [];
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -174,19 +218,7 @@ class HelpSupportController extends ChangeNotifier {
 
   // Search / Filter Tickets
   void searchTickets(String query) {
-    if (query.isEmpty) {
-      fetchUserTickets();
-      return;
-    }
-
-    _tickets = _tickets.where((ticket) {
-      final subject = ticket.subject?.toLowerCase() ?? "";
-      final ticketId = ticket.ticketId?.toLowerCase() ?? "";
-      final id = ticket.id?.toLowerCase() ?? "";
-      final q = query.toLowerCase();
-      return subject.contains(q) || ticketId.contains(q) || id.contains(q);
-    }).toList();
-
+    _searchQuery = query;
     notifyListeners();
   }
 

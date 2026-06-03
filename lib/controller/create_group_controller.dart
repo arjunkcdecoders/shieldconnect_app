@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/model/group_model.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
+import 'package:shieldconnect_app/model/settings_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
 import 'package:shieldconnect_app/view/group_chat_screen.dart';
@@ -161,6 +162,47 @@ class CreateGroupController extends ChangeNotifier {
         memberIds.add(userId);
       }
 
+      final homeScreenController = Provider.of<HomeScreenController>(context, listen: false);
+      final int userGroupCount = homeScreenController.recentChats.where((chat) {
+        if (chat is Map) {
+          final conversation = chat['conversation'];
+          if (conversation is Map) {
+            return conversation['type'] == 'group';
+          }
+        }
+        return false;
+      }).length;
+
+      final settings = await SettingsModel.loadActiveSettings();
+      final maxGroup = settings.maxGroup ?? 50;
+
+      if (userGroupCount >= maxGroup) {
+        _isLoading = false;
+        notifyListeners();
+        if (context.mounted) {
+          ToastHelper.showWarningDialog(
+            context,
+            "Group Limit Reached",
+            "You cannot be in or create more than $maxGroup groups. Currently, you are in $userGroupCount groups."
+          );
+        }
+        return;
+      }
+
+      final int maxMembers = settings.maxGroupMembers ?? 256;
+      if (memberIds.length > maxMembers) {
+        _isLoading = false;
+        notifyListeners();
+        if (context.mounted) {
+          ToastHelper.showWarningDialog(
+            context,
+            "Group Member Limit Exceeded",
+            "This group cannot have more than $maxMembers members (including you). Currently, you have selected ${memberIds.length} members."
+          );
+        }
+        return;
+      }
+
       // Prepare multi-part request body using Dio's FormData
       final Map<String, dynamic> fields = {
         "name": groupNameController.text.trim(),
@@ -225,6 +267,18 @@ class CreateGroupController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void reset() {
+    groupNameController.clear();
+    groupDescController.clear();
+    searchController.clear();
+    _pickedImagePath = null;
+    for (var user in _connectedUsers) {
+      user['isSelected'] = false;
+    }
+    _searchResults = List.from(_connectedUsers);
+    notifyListeners();
   }
 
   @override

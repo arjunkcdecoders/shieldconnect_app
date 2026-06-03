@@ -61,6 +61,15 @@ class OnboardingController extends ChangeNotifier {
     }
   }
 
+  void previousPage() {
+    if (_currentPage > 0) {
+      pageController.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   void skip(BuildContext context) {
     Navigator.pushReplacement(
       context,

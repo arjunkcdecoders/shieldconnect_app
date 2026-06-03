@@ -6,6 +6,7 @@ import 'package:shieldconnect_app/controller/group_chat_controller.dart';
 import 'package:shieldconnect_app/controller/add_members_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/call_manager.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -146,7 +147,7 @@ class GroupInfoScreen extends StatelessWidget {
                   ),
 
                   // 3. Action Deck (Audio, Video, Add)
-                  _buildActionRow(context, groupName, isUserAdmin),
+                  _buildActionRow(context, groupName, groupImage, isUserAdmin),
                   const SizedBox(height: 24),
 
                   // 4. Metadata Segment (Status, Creator info)
@@ -303,9 +304,9 @@ class GroupInfoScreen extends StatelessWidget {
                   ),
                 ),
               ],
-            )
-          else
-            Icon(Icons.more_vert, color: appColor(context).grey300, size: 24),
+            ),
+          // else
+          //   Icon(Icons.more_vert, color: appColor(context).grey300, size: 24),
         ],
       ),
     );
@@ -834,6 +835,7 @@ class GroupInfoScreen extends StatelessWidget {
   Widget _buildActionRow(
     BuildContext context,
     String groupName,
+    String? groupImage,
     bool canAddMembers,
   ) {
     return Padding(
@@ -846,11 +848,20 @@ class GroupInfoScreen extends StatelessWidget {
               label: "Audio Call",
               asset: ImageAssets.phone,
               onTap: () {
+                context.read<CallManager>().startCall(
+                  groupId,
+                  groupName,
+                  isVideo: false,
+                  recipientAvatar: groupImage,
+                  isGroup: true,
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        VoiceCallingScreen(userName: groupName),
+                    builder: (context) => VoiceCallingScreen(
+                      userName: groupName,
+                      avatarUrl: groupImage,
+                    ),
                   ),
                 );
               },
@@ -863,6 +874,13 @@ class GroupInfoScreen extends StatelessWidget {
               label: "Video Call",
               asset: ImageAssets.videoRecorder,
               onTap: () {
+                context.read<CallManager>().startCall(
+                  groupId,
+                  groupName,
+                  isVideo: true,
+                  recipientAvatar: groupImage,
+                  isGroup: true,
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1694,13 +1712,15 @@ class GroupInfoScreen extends StatelessWidget {
                                   ? null
                                   : () async {
                                       final success = await addController
-                                          .addMembers();
+                                          .addMembers(context: context);
                                       if (success && context.mounted) {
-                                        // Refresh the group chat details
-                                        Provider.of<GroupChatController>(
-                                          context,
-                                          listen: false,
-                                        ).fetchGroupDetails(groupId);
+                                        // Refresh the group chat details using parent controller
+                                        chatController.fetchGroupDetails(
+                                          groupId,
+                                        );
+                                        chatController.fetchChatHistory(
+                                          groupId,
+                                        );
                                         Navigator.pop(context);
                                       }
                                     },

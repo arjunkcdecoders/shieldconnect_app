@@ -131,50 +131,71 @@ class ProfileScreen extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Stylized Squircle profile image
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Container(
-                                width: 106,
-                                height: 106,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(24),
-                                  color: appColor(context).grey100,
-                                  image:
-                                      ApiService.getImageUrl(
-                                        controller.imageUrl,
-                                      ).isNotEmpty
-                                      ? DecorationImage(
-                                          image: NetworkImage(
-                                            ApiService.getImageUrl(
-                                              controller.imageUrl,
-                                            ),
-                                          ),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
+                          GestureDetector(
+                            onTap: () {
+                              final String fullImageUrl =
+                                  ApiService.getImageUrl(controller.imageUrl);
+                              if (fullImageUrl.isNotEmpty) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        FullScreenProfilePictureScreen(
+                                          imageUrl: fullImageUrl,
+                                          heroTag: 'profile_avatar',
+                                        ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                Hero(
+                                  tag: 'profile_avatar',
+                                  child: Container(
+                                    width: 106,
+                                    height: 106,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(24),
+                                      color: appColor(context).grey100,
+                                      image:
+                                          ApiService.getImageUrl(
+                                            controller.imageUrl,
+                                          ).isNotEmpty
+                                          ? DecorationImage(
+                                              image: NetworkImage(
+                                                ApiService.getImageUrl(
+                                                  controller.imageUrl,
+                                                ),
+                                              ),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
+                                    ),
+                                    child:
+                                        ApiService.getImageUrl(
+                                          controller.imageUrl,
+                                        ).isEmpty
+                                        ? Icon(
+                                            Icons.person,
+                                            color: appColor(context).grey400,
+                                            size: 48,
+                                          )
+                                        : null,
+                                  ),
                                 ),
-                                child:
-                                    ApiService.getImageUrl(
-                                      controller.imageUrl,
-                                    ).isEmpty
-                                    ? Icon(
-                                        Icons.person,
-                                        color: appColor(context).grey400,
-                                        size: 48,
-                                      )
-                                    : null,
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Image.asset(
-                                  ImageAssets.tick,
-                                  width: 32,
-                                  height: 32,
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Image.asset(
+                                    ImageAssets.tick,
+                                    width: 32,
+                                    height: 32,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 12),
                           Text(
@@ -302,7 +323,9 @@ class ProfileScreen extends StatelessWidget {
                 Center(
                   child: GestureDetector(
                     onTap: () {
-                      context.read<ProfileController>().resetDeleteAccountState();
+                      context
+                          .read<ProfileController>()
+                          .resetDeleteAccountState();
                       showDialog(
                         context: context,
                         barrierDismissible: true,
@@ -530,7 +553,6 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-
   /// Manages interactive Radio states in a modal dialog to Select Application Theme
   void _showThemeBottomSheet(BuildContext context) {
     String selectedTheme = "App Default";
@@ -673,6 +695,78 @@ class ProfileScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class FullScreenProfilePictureScreen extends StatelessWidget {
+  final String imageUrl;
+  final String heroTag;
+
+  const FullScreenProfilePictureScreen({
+    super.key,
+    required this.imageUrl,
+    required this.heroTag,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: Hero(
+              tag: heroTag,
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(
+                        Icons.broken_image,
+                        color: Colors.white54,
+                        size: 48,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 20,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black54,
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.chevron_left,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

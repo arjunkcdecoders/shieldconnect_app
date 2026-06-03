@@ -36,4 +36,54 @@ class ToastHelper {
       overlayEntry.remove();
     });
   }
+
+  static void showWarningDialog(BuildContext context, String title, String content) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: appColor(context).secondary,
+                size: 28,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: fontStyle.clashDisplayBold18.textColor(
+                    appColor(context).black,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            content,
+            style: fontStyle.clashDisplayRegular14.textColor(
+              appColor(context).grey500,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                "OK",
+                style: fontStyle.clashDisplaySemiBold14.textColor(
+                  appColor(context).secondary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

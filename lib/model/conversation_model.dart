@@ -29,15 +29,25 @@ class ConversationModel {
 
   factory ConversationModel.fromJson(Map<String, dynamic> json) {
     return ConversationModel(
-      conversation: json['conversation'] != null ? ConversationEntity.fromJson(json['conversation'] as Map<String, dynamic>) : null,
-      lastMessage: json['last_message'] != null ? MessageModel.fromJson(json['last_message'] as Map<String, dynamic>) : null,
+      conversation: json['conversation'] != null
+          ? ConversationEntity.fromJson(
+              json['conversation'] as Map<String, dynamic>,
+            )
+          : null,
+      lastMessage: json['last_message'] != null
+          ? MessageModel.fromJson(json['last_message'] as Map<String, dynamic>)
+          : null,
       unreadCount: json['unread_count'] as int?,
       isFavorite: json['is_favorite'] as bool?,
       isConnected: json['is_connected'] as bool?,
-      relationship: json['relationship'] != null ? FriendModel.fromJson(json['relationship'] as Map<String, dynamic>) : null,
+      relationship: json['relationship'] != null
+          ? FriendModel.fromJson(json['relationship'] as Map<String, dynamic>)
+          : null,
       requestedBy: json['requested_by'] as String?,
       hasLeft: json['has_left'] as bool?,
-      leftAt: json['left_at'] != null ? DateTime.tryParse(json['left_at'] as String) : null,
+      leftAt: json['left_at'] != null
+          ? DateTime.tryParse(json['left_at'] as String)
+          : null,
       chatParams: json['chat_params'] as Map<String, dynamic>?,
     );
   }
@@ -94,7 +104,9 @@ class ConversationEntity {
       image: json['image'] as String?,
       bio: json['bio'] as String?,
       isOnline: json['is_online'] as bool?,
-      lastSeen: json['last_seen'] != null ? DateTime.tryParse(json['last_seen'] as String) : null,
+      lastSeen: json['last_seen'] != null
+          ? DateTime.tryParse(json['last_seen'] as String)
+          : null,
       showLastSeen: json['show_last_seen'] as bool?,
       showProfilePic: json['show_profile_pic'] as bool?,
       showBio: json['show_bio'] as bool?,

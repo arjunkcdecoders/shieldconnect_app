@@ -10,6 +10,7 @@ import 'package:shieldconnect_app/view/chat_settings_screen.dart';
 import 'package:shieldconnect_app/view/blocked_users_screen.dart';
 import 'package:shieldconnect_app/view/delete_account_dialog.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/controller/change_password_controller.dart';
 
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key});
@@ -83,7 +84,7 @@ class AccountScreen extends StatelessWidget {
                 ),
                 _buildOptionCard(
                   context,
-                  iconAsset: ImageAssets.settingsInActive,
+                  iconAsset: ImageAssets.chatSettings,
                   title: "Chat Settings",
                   onTap: () {
                     Navigator.push(
@@ -99,6 +100,7 @@ class AccountScreen extends StatelessWidget {
                   iconAsset: ImageAssets.password,
                   title: "Change Password",
                   onTap: () {
+                    context.read<ChangePasswordController>().clearAll();
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -194,7 +196,6 @@ class AccountScreen extends StatelessWidget {
     );
   }
 
-
   /// Renders a beautiful grid of active wallpapers for chat customization
   void _showWallpaperBottomSheet(BuildContext context) {
     showModalBottomSheet(
@@ -243,8 +244,9 @@ class _WallpaperBottomSheetContentState
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: appColor(context).white,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(32)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -297,7 +299,9 @@ class _WallpaperBottomSheetContentState
                         else if (controller.wallpapers.isEmpty)
                           Center(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 40.0),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 40.0,
+                              ),
                               child: Text(
                                 "No wallpapers available",
                                 style: fontStyle.clashDisplayMedium14.textColor(
@@ -312,23 +316,42 @@ class _WallpaperBottomSheetContentState
                             physics: const NeverScrollableScrollPhysics(),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 0.65,
-                            ),
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 0.65,
+                                ),
                             itemCount: controller.wallpapers.length,
                             itemBuilder: (context, index) {
                               final wallpaper = controller.wallpapers[index];
                               final isSelected =
-                                  controller.selectedWallpaperId == wallpaper.id;
-                              final imageUrl =
-                                  ApiService.getImageUrl(wallpaper.wallpaperImage);
+                                  controller.selectedWallpaperId ==
+                                  wallpaper.id;
+                              final isSelecting =
+                                  controller.selectingWallpaperId ==
+                                  wallpaper.id;
+                              final isFailed =
+                                  controller.failedWallpaperId ==
+                                  wallpaper.id;
+                              final imageUrl = ApiService.getImageUrl(
+                                wallpaper.wallpaperImage,
+                              );
 
                               return GestureDetector(
                                 onTap: () {
-                                  if (wallpaper.id != null) {
-                                    controller.selectWallpaper(context, wallpaper.id!);
+                                  if (wallpaper.id != null && !isSelecting) {
+                                    controller.selectWallpaper(
+                                      context,
+                                      wallpaper.id!,
+                                    ).then((success) {
+                                      if (success && context.mounted) {
+                                        Future.delayed(const Duration(milliseconds: 600), () {
+                                          if (context.mounted) {
+                                            Navigator.pop(context);
+                                          }
+                                        });
+                                      }
+                                    });
                                   }
                                 },
                                 child: Container(
@@ -342,9 +365,9 @@ class _WallpaperBottomSheetContentState
                                         : null,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: appColor(context)
-                                            .black
-                                            .withValues(alpha: 0.1),
+                                        color: appColor(
+                                          context,
+                                        ).black.withValues(alpha: 0.1),
                                         blurRadius: 8,
                                         offset: const Offset(0, 4),
                                       ),
@@ -356,14 +379,53 @@ class _WallpaperBottomSheetContentState
                                           )
                                         : null,
                                   ),
-                                  child: isSelected
-                                      ? Align(
+                                  child: Stack(
+                                    children: [
+                                      if (isSelecting)
+                                        Center(
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.5),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      else if (isFailed)
+                                        Align(
+                                          alignment: Alignment.topRight,
+                                          child: Container(
+                                            margin: const EdgeInsets.all(8),
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.red,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.error,
+                                              color: Colors.white,
+                                              size: 14,
+                                            ),
+                                          ),
+                                        )
+                                      else if (isSelected)
+                                        Align(
                                           alignment: Alignment.topRight,
                                           child: Container(
                                             margin: const EdgeInsets.all(8),
                                             padding: const EdgeInsets.all(4),
                                             decoration: BoxDecoration(
-                                              color: appColor(context).secondary,
+                                              color: appColor(
+                                                context,
+                                              ).secondary,
                                               shape: BoxShape.circle,
                                             ),
                                             child: const Icon(
@@ -372,17 +434,18 @@ class _WallpaperBottomSheetContentState
                                               size: 14,
                                             ),
                                           ),
-                                        )
-                                      : null,
+                                        ),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 16),
+                      ],
                     ),
                   ),
+                ),
               ],
             ),
           ),

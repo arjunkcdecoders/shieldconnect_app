@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:dio/dio.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
@@ -13,6 +15,8 @@ import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/date_helper.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
+import 'package:shieldconnect_app/utils/linkified_text.dart';
+import 'package:shieldconnect_app/services/call_manager.dart';
 import 'package:shieldconnect_app/view/group_info_screen.dart';
 import 'package:shieldconnect_app/view/voice_calling_screen.dart';
 import 'package:shieldconnect_app/view/video_calling_screen.dart';
@@ -20,6 +24,8 @@ import 'package:shieldconnect_app/view/media_viewer_screen.dart';
 import 'package:shieldconnect_app/view/voice_message_bubble.dart';
 import 'package:shieldconnect_app/view/forward_screen.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/view/typing_indicator_bubble.dart';
+import 'package:shieldconnect_app/view/message_info_bottom_sheet.dart';
 
 class GroupChatScreen extends StatelessWidget {
   final String groupName;
@@ -128,8 +134,86 @@ class GroupChatScreen extends StatelessWidget {
                                 vertical: 16,
                               ),
                               physics: const BouncingScrollPhysics(),
-                              itemCount: controller.messages.length,
+                              itemCount:
+                                  controller.messages.length +
+                                  (controller.typingUsers.isNotEmpty ? 1 : 0),
                               itemBuilder: (context, index) {
+                                if (index == controller.messages.length) {
+                                  String? typingAvatar;
+                                  if (controller.typingUsers.isNotEmpty &&
+                                      controller.groupDetails != null &&
+                                      controller.groupDetails!['members'] !=
+                                          null) {
+                                    final String firstTypingName =
+                                        controller.typingUsers.first;
+                                    final dynamic members =
+                                        controller.groupDetails!['members'];
+                                    if (members is List) {
+                                      for (final dynamic m in members) {
+                                        if (m is Map) {
+                                          final dynamic userVal =
+                                              m['user_id'] ?? m['user'] ?? m;
+                                          String name = "";
+                                          String avatar = "";
+                                          if (userVal is Map) {
+                                            name =
+                                                userVal['name']?.toString() ??
+                                                "";
+                                            avatar =
+                                                userVal['avatar']?.toString() ??
+                                                "";
+                                          } else {
+                                            name = m['name']?.toString() ?? "";
+                                            avatar =
+                                                m['avatar']?.toString() ?? "";
+                                          }
+                                          if (name == firstTypingName) {
+                                            typingAvatar = avatar;
+                                            break;
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                  final String avatarUrl = typingAvatar != null
+                                      ? ApiService.getImageUrl(typingAvatar)
+                                      : "";
+                                  final bool hasAvatar = avatarUrl.isNotEmpty;
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: 16.0,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.start,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: appColor(
+                                            context,
+                                          ).grey100,
+                                          backgroundImage: hasAvatar
+                                              ? NetworkImage(avatarUrl)
+                                              : null,
+                                          child: hasAvatar
+                                              ? null
+                                              : Icon(
+                                                  Icons.person,
+                                                  color: appColor(
+                                                    context,
+                                                  ).secondary,
+                                                  size: 14,
+                                                ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const TypingIndicatorBubble(),
+                                      ],
+                                    ),
+                                  );
+                                }
                                 final message = controller.messages[index];
                                 final String msgId =
                                     message['id']?.toString() ?? '';
@@ -144,6 +228,23 @@ class GroupChatScreen extends StatelessWidget {
                                 final bool isOutgoing =
                                     message['isOutgoing'] == true;
                                 final String? createdAt = message['createdAt'];
+
+                                final bool isBadge =
+                                    (type == 'system' || type == 'status') &&
+                                    (() {
+                                      final String msgText =
+                                          message['text'] ?? "";
+                                      final String msgLower = msgText
+                                          .toLowerCase();
+                                      return msgLower.contains("created") ||
+                                          msgLower.contains(
+                                            "system_group_created",
+                                          ) ||
+                                          msgLower.contains("added") ||
+                                          msgLower.contains("joined") ||
+                                          msgLower.contains("left") ||
+                                          msgLower.contains("removed");
+                                    })();
 
                                 // Calculate if we need to show the date header
                                 bool showDateHeader = false;
@@ -181,30 +282,67 @@ class GroupChatScreen extends StatelessWidget {
                                   final String msgText = message['text'] ?? "";
                                   final String msgLower = msgText.toLowerCase();
                                   if (msgLower.contains("created") ||
-                                      msgLower.contains("system_group_created") ||
+                                      msgLower.contains(
+                                        "system_group_created",
+                                      ) ||
                                       msgLower.contains("added") ||
                                       msgLower.contains("joined") ||
                                       msgLower.contains("left") ||
                                       msgLower.contains("removed")) {
                                     String displayStr = msgText;
-                                    if (msgLower.contains("created") || msgLower.contains("system_group_created")) {
+                                    if (msgLower.contains("created") ||
+                                        msgLower.contains(
+                                          "system_group_created",
+                                        )) {
                                       displayStr = 'Group "$groupName" created';
-                                    } else if (msgText.startsWith("system_member_added:")) {
+                                    } else if (msgText.startsWith(
+                                      "system_member_added:",
+                                    )) {
                                       final parts = msgText.split(':');
-                                      final name = parts.length >= 3 ? parts[2] : (parts.length == 2 ? parts[1] : "A member");
+                                      final name = parts.length >= 3
+                                          ? parts[2]
+                                          : (parts.length == 2
+                                                ? parts[1]
+                                                : "A member");
                                       displayStr = "$name added to group";
-                                    } else if (msgText.startsWith("system_member_removed:")) {
+                                    } else if (msgText.startsWith(
+                                      "system_member_removed:",
+                                    )) {
                                       final parts = msgText.split(':');
-                                      final name = parts.length >= 3 ? parts[2] : (parts.length == 2 ? parts[1] : "A member");
+                                      final name = parts.length >= 3
+                                          ? parts[2]
+                                          : (parts.length == 2
+                                                ? parts[1]
+                                                : "A member");
                                       displayStr = "$name removed from group";
-                                    } else if (msgText.startsWith("system_member_joined:")) {
+                                    } else if (msgText.startsWith(
+                                      "system_member_joined:",
+                                    )) {
                                       final parts = msgText.split(':');
-                                      final name = parts.length >= 3 ? parts[2] : (parts.length == 2 ? parts[1] : "A member");
+                                      final name = parts.length >= 3
+                                          ? parts[2]
+                                          : (parts.length == 2
+                                                ? parts[1]
+                                                : "A member");
                                       displayStr = "$name joined the group";
-                                    } else if (msgText.startsWith("system_member_left:")) {
+                                    } else if (msgText.startsWith(
+                                      "system_member_left:",
+                                    )) {
                                       final parts = msgText.split(':');
-                                      final name = parts.length >= 3 ? parts[2] : (parts.length == 2 ? parts[1] : "A member");
-                                      displayStr = "$name left the group";
+                                      final memberId = parts.length >= 2
+                                          ? parts[1]
+                                          : '';
+                                      if (memberId ==
+                                          (controller.userId ?? '')) {
+                                        displayStr = "You left the group";
+                                      } else {
+                                        final name = parts.length >= 3
+                                            ? parts[2]
+                                            : (parts.length == 2
+                                                  ? parts[1]
+                                                  : "A member");
+                                        displayStr = "$name left the group";
+                                      }
                                     }
                                     messageWidget = Column(
                                       children: [
@@ -293,6 +431,7 @@ class GroupChatScreen extends StatelessWidget {
                                             ),
                                         isForwarded:
                                             message['is_forwarded'] == true,
+                                        isEdited: message['isEdited'] == true,
                                       ),
                                       SizedBox(height: isOutgoing ? 8 : 16),
                                     ],
@@ -337,8 +476,18 @@ class GroupChatScreen extends StatelessWidget {
                                 return GestureDetector(
                                   key: key,
                                   behavior: HitTestBehavior.opaque,
-                                  onLongPress: () {
-                                    controller.selectMessageForOptions(message);
+                                  onLongPress: isBadge
+                                      ? null
+                                      : () {
+                                          controller.selectMessageForOptions(
+                                            message,
+                                          );
+                                        },
+                                  onTap: () {
+                                    if (controller.selectedMessageForOptions !=
+                                        null) {
+                                      controller.selectMessageForOptions(null);
+                                    }
                                   },
                                   child: AnimatedContainer(
                                     duration: const Duration(milliseconds: 300),
@@ -353,27 +502,41 @@ class GroupChatScreen extends StatelessWidget {
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 4,
                                     ),
-                                    child: Dismissible(
-                                      key: Key(
-                                        'reply_${message['id'] ?? index}',
-                                      ),
-                                      direction: DismissDirection.startToEnd,
-                                      confirmDismiss: (direction) async {
-                                        controller.selectReplyMessage(message);
-                                        return false;
-                                      },
-                                      background: Container(
-                                        alignment: Alignment.centerLeft,
-                                        padding: const EdgeInsets.only(
-                                          left: 16,
+                                    child: AbsorbPointer(
+                                      absorbing:
+                                          controller
+                                              .selectedMessageForOptions !=
+                                          null,
+                                      child: Dismissible(
+                                        key: Key(
+                                          'reply_${message['id'] ?? index}',
                                         ),
-                                        child: Icon(
-                                          Icons.reply_rounded,
-                                          color: appColor(context).secondary,
-                                          size: 24,
-                                        ),
+                                        direction: isBadge
+                                            ? DismissDirection.none
+                                            : DismissDirection.startToEnd,
+                                        confirmDismiss: (direction) async {
+                                          controller.selectReplyMessage(
+                                            message,
+                                          );
+                                          return false;
+                                        },
+                                        background: isBadge
+                                            ? null
+                                            : Container(
+                                                alignment: Alignment.centerLeft,
+                                                padding: const EdgeInsets.only(
+                                                  left: 16,
+                                                ),
+                                                child: Icon(
+                                                  Icons.reply_rounded,
+                                                  color: appColor(
+                                                    context,
+                                                  ).secondary,
+                                                  size: 24,
+                                                ),
+                                              ),
+                                        child: itemWidget,
                                       ),
-                                      child: itemWidget,
                                     ),
                                   ),
                                 );
@@ -459,19 +622,36 @@ class GroupChatScreen extends StatelessWidget {
                       size: 22,
                     ),
                     onPressed: () {
+                      final String messageId = (msg['_id'] ?? msg['id'] ?? '')
+                          .toString();
+                      final String? createdAt = msg['createdAt']?.toString();
                       controller.selectMessageForOptions(null);
+                      if (messageId.isNotEmpty) {
+                        MessageInfoBottomSheet.show(
+                          context,
+                          messageId: messageId,
+                          createdAt: createdAt,
+                          isGroup: true,
+                          groupDetails: controller.groupDetails,
+                          currentUserId: controller.userId ?? '',
+                        );
+                      }
                     },
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.edit_outlined,
-                      color: appColor(context).secondary,
-                      size: 22,
+                  if ((msg['type'] == null ||
+                          msg['type'] == 'text' ||
+                          msg['type'] == '') &&
+                      _isMessageWithinEditLimit(msg))
+                    IconButton(
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        color: appColor(context).secondary,
+                        size: 22,
+                      ),
+                      onPressed: () {
+                        _showEditOverlay(context, controller);
+                      },
                     ),
-                    onPressed: () {
-                      _showEditOverlay(context, controller);
-                    },
-                  ),
                 ],
                 IconButton(
                   icon: Icon(
@@ -619,10 +799,20 @@ class GroupChatScreen extends StatelessWidget {
           if (controller.isUserMemberOfGroup) ...[
             GestureDetector(
               onTap: () {
+                context.read<CallManager>().startCall(
+                  groupId ?? '',
+                  groupName,
+                  isVideo: false,
+                  recipientAvatar: groupImage,
+                  isGroup: true,
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => VoiceCallingScreen(userName: groupName),
+                    builder: (context) => VoiceCallingScreen(
+                      userName: groupName,
+                      avatarUrl: groupImage,
+                    ),
                   ),
                 );
               },
@@ -638,10 +828,18 @@ class GroupChatScreen extends StatelessWidget {
             ),
             GestureDetector(
               onTap: () {
+                context.read<CallManager>().startCall(
+                  groupId ?? '',
+                  groupName,
+                  isVideo: true,
+                  recipientAvatar: groupImage,
+                  isGroup: true,
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => VideoCallingScreen(userName: groupName),
+                    builder: (context) =>
+                        VideoCallingScreen(userName: groupName),
                   ),
                 );
               },
@@ -714,9 +912,9 @@ class GroupChatScreen extends StatelessWidget {
                       "Failed to update favorite status",
                     );
                   }
-                } else if (value == "Clear") {
+                } else if (value == "Clear Chat") {
                   _showClearChatConfirmation(context, controller);
-                } else if (value == "Delete") {
+                } else if (value == "Delete Chat") {
                   _showDeleteChatConfirmation(context, controller);
                 }
               },
@@ -846,6 +1044,13 @@ class GroupChatScreen extends StatelessWidget {
       ToastHelper.showToast(context, "Only the sender can edit this message");
       return;
     }
+    if (!_isMessageWithinEditLimit(msg)) {
+      ToastHelper.showToast(
+        context,
+        "Messages can only be edited within 24 hours of sending",
+      );
+      return;
+    }
     final String messageId = msg['id']?.toString() ?? "";
     final String oldText = msg['text']?.toString() ?? "";
 
@@ -949,6 +1154,18 @@ class GroupChatScreen extends StatelessWidget {
     );
   }
 
+  bool _isMessageWithinEditLimit(Map<String, dynamic> msg) {
+    if (msg['createdAt'] == null) return true;
+    try {
+      final DateTime createdAt = DateTime.parse(msg['createdAt'].toString());
+      final DateTime now = DateTime.now().toUtc();
+      final difference = now.difference(createdAt.toUtc());
+      return difference.inHours < 24;
+    } catch (e) {
+      return true;
+    }
+  }
+
   /// Creates high-stadium, visually unified popup row items driven by specific branding image assets
   PopupMenuItem<String> _buildPopupMenuItem(
     BuildContext context,
@@ -989,6 +1206,7 @@ class GroupChatScreen extends StatelessWidget {
     String? parentMessageId,
     ValueChanged<String>? onReplyTap,
     bool isForwarded = false,
+    bool isEdited = false,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -1083,18 +1301,44 @@ class GroupChatScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                Text(
-                  text,
+                LinkifiedText(
+                  text: text,
                   style: fontStyle.clashDisplayMedium14.textColor(
                     appColor(context).white,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  time,
-                  style: fontStyle.clashDisplayMedium10.textColor(
-                    appColor(context).white.withValues(alpha: 0.7),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      time,
+                      style: fontStyle.clashDisplayMedium10.textColor(
+                        appColor(context).white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    if (isEdited) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: appColor(
+                            context,
+                          ).white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Edited',
+                          style: fontStyle.clashDisplayMedium10.textColor(
+                            appColor(context).white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -1115,7 +1359,11 @@ class GroupChatScreen extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Center(
-        child: Icon(Icons.check, color: appColor(context).white, size: 11),
+        child: Icon(
+          Icons.done_all_rounded,
+          color: appColor(context).white,
+          size: 11,
+        ),
       ),
     );
   }
@@ -1132,6 +1380,7 @@ class GroupChatScreen extends StatelessWidget {
     String? parentMessageId,
     ValueChanged<String>? onReplyTap,
     bool isForwarded = false,
+    bool isEdited = false,
   }) {
     final String imageUrl = ApiService.getImageUrl(avatar);
     final bool hasImage = imageUrl.isNotEmpty;
@@ -1257,8 +1506,8 @@ class GroupChatScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Flexible(
-                    child: Text(
-                      text,
+                    child: LinkifiedText(
+                      text: text,
                       style: fontStyle.clashDisplayMedium14.textColor(
                         appColor(context).black,
                       ),
@@ -1271,6 +1520,25 @@ class GroupChatScreen extends StatelessWidget {
                       appColor(context).grey400,
                     ),
                   ),
+                  if (isEdited) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: appColor(context).black.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Edited',
+                        style: fontStyle.clashDisplayMedium10.textColor(
+                          appColor(context).black54,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -1295,6 +1563,7 @@ class GroupChatScreen extends StatelessWidget {
     String? parentMessageId,
     ValueChanged<String>? onReplyTap,
     bool isForwarded = false,
+    bool isEdited = false,
   }) {
     if (type == 'image') {
       return _buildImageBubble(
@@ -1362,6 +1631,7 @@ class GroupChatScreen extends StatelessWidget {
               parentMessageId: parentMessageId,
               onReplyTap: onReplyTap,
               isForwarded: isForwarded,
+              isEdited: isEdited,
             )
           : _buildIncomingText(
               context,
@@ -1374,6 +1644,7 @@ class GroupChatScreen extends StatelessWidget {
               parentMessageId: parentMessageId,
               onReplyTap: onReplyTap,
               isForwarded: isForwarded,
+              isEdited: isEdited,
             );
     }
   }
@@ -1821,6 +2092,11 @@ class GroupChatScreen extends StatelessWidget {
     final String avatarUrl = ApiService.getImageUrl(avatar);
     final bool hasAvatar = avatarUrl.isNotEmpty;
 
+    // Define state variables here so they persist perfectly across local StatefulBuilder rebuilds!
+    bool isDownloading = false;
+    bool isCancelled = false;
+    double progress = 0.0;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisAlignment: isOutgoing
@@ -1897,77 +2173,201 @@ class GroupChatScreen extends StatelessWidget {
                 children: [
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: isOutgoing
-                                ? appColor(
-                                    context,
-                                  ).white.withValues(alpha: 0.15)
-                                : appColor(
-                                    context,
-                                  ).black.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.insert_drive_file,
-                                color: textColor.withValues(alpha: 0.8),
-                                size: 16,
+                    child: StatefulBuilder(
+                      builder: (BuildContext context, StateSetter setState) {
+                        Future<void> downloadAndOpen() async {
+                          if (url == null || url.isEmpty) return;
+
+                          setState(() {
+                            isDownloading = true;
+                            isCancelled = false;
+                            progress = 0.0;
+                          });
+
+                          try {
+                            final absoluteUrl = ApiService.getImageUrl(url);
+                            final dio = Dio();
+                            final cancelToken = CancelToken();
+                            final dir = await getTemporaryDirectory();
+                            final sanitizedFileName = resolvedFileName
+                                .replaceAll(RegExp(r'[^\w\.\-]'), '_');
+                            final savePath = '${dir.path}/$sanitizedFileName';
+
+                            final downloadFuture = dio.download(
+                              absoluteUrl,
+                              savePath,
+                              cancelToken: cancelToken,
+                            );
+
+                            for (int i = 1; i <= 20; i++) {
+                              if (isCancelled) {
+                                cancelToken.cancel();
+                                return;
+                              }
+                              await Future.delayed(
+                                const Duration(milliseconds: 100),
+                              );
+                              if (isCancelled) {
+                                cancelToken.cancel();
+                                return;
+                              }
+                              setState(() {
+                                progress = i / 20.0;
+                              });
+                            }
+
+                            await downloadFuture;
+
+                            if (isCancelled) return;
+
+                            setState(() {
+                              isDownloading = false;
+                            });
+
+                            final uri = Uri.file(savePath);
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          } catch (e) {
+                            if (!isCancelled) {
+                              debugPrint(
+                                "Error downloading/opening document: $e",
+                              );
+                              try {
+                                final absoluteUrl = ApiService.getImageUrl(url);
+                                final remoteUri = Uri.parse(absoluteUrl);
+                                await launchUrl(
+                                  remoteUri,
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              } catch (err) {
+                                debugPrint("Error launching remote URL: $err");
+                              }
+                            }
+                            setState(() {
+                              isDownloading = false;
+                            });
+                          }
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: isOutgoing
+                                    ? appColor(
+                                        context,
+                                      ).white.withValues(alpha: 0.15)
+                                    : appColor(
+                                        context,
+                                      ).black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(6),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                extension,
-                                style: fontStyle.clashDisplayBold10
-                                    .copyWith(fontSize: 7)
-                                    .textColor(
-                                      textColor.withValues(alpha: 0.8),
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (!isOutgoing) ...[
-                                Text(
-                                  senderName,
-                                  style: fontStyle.clashDisplayBold12.textColor(
-                                    appColor(context).secondary,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.insert_drive_file,
+                                    color: textColor.withValues(alpha: 0.8),
+                                    size: 16,
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                              ],
-                              Text(
-                                resolvedFileName.toUpperCase(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: fontStyle.clashDisplayBold12.textColor(
-                                  textColor,
-                                ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    extension,
+                                    style: fontStyle.clashDisplayBold10
+                                        .copyWith(fontSize: 7)
+                                        .textColor(
+                                          textColor.withValues(alpha: 0.8),
+                                        ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                "$extension • $sizeStr",
-                                style: fontStyle.clashDisplayMedium10.textColor(
-                                  subtitleColor,
-                                ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (!isOutgoing) ...[
+                                    Text(
+                                      senderName,
+                                      style: fontStyle.clashDisplayBold12
+                                          .textColor(
+                                            appColor(context).secondary,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                  ],
+                                  Text(
+                                    resolvedFileName.toUpperCase(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: fontStyle.clashDisplayBold12
+                                        .textColor(textColor),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "$extension • $sizeStr",
+                                    style: fontStyle.clashDisplayMedium10
+                                        .textColor(subtitleColor),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                      ],
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: isDownloading
+                                  ? GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          isCancelled = true;
+                                          isDownloading = false;
+                                        });
+                                      },
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          CircularProgressIndicator(
+                                            value: progress,
+                                            strokeWidth: 2.5,
+                                            backgroundColor: textColor
+                                                .withValues(alpha: 0.15),
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  isOutgoing
+                                                      ? Colors.white
+                                                      : Colors.black,
+                                                ),
+                                          ),
+                                          Icon(
+                                            Icons.close,
+                                            color: textColor.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            size: 12,
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : GestureDetector(
+                                      onTap: downloadAndOpen,
+                                      child: Icon(
+                                        Icons.download_rounded,
+                                        color: textColor.withValues(alpha: 0.8),
+                                        size: 22,
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   Positioned(
@@ -2214,6 +2614,9 @@ class GroupChatScreen extends StatelessWidget {
 
   /// Integrated Footer Composer incorporating real interactive TextFields and conditional action bars
   Widget _buildComposer(BuildContext context, GroupChatController controller) {
+    if (controller.isLoading || controller.userId == null) {
+      return const SizedBox.shrink();
+    }
     if (!controller.isUserMemberOfGroup) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -2648,7 +3051,7 @@ class GroupChatScreen extends StatelessWidget {
                         GestureDetector(
                           onTap: () => _showStickersBottomSheet(context),
                           child: Image.asset(
-                            ImageAssets.emoji,
+                            ImageAssets.stickers,
                             width: 22,
                             height: 22,
                             color: appColor(context).black87,
@@ -2705,7 +3108,7 @@ class GroupChatScreen extends StatelessWidget {
                               setState(() {
                                 isAttachmentOpen = false;
                               });
-                              await controller.pickMedia();
+                              await controller.pickMedia(context);
                             },
                           ),
                           _buildAttachmentOption(
@@ -2720,18 +3123,18 @@ class GroupChatScreen extends StatelessWidget {
                               await controller.pickDocument(context: context);
                             },
                           ),
-                          _buildAttachmentOption(
-                            context,
-                            title: "Location",
-                            asset: ImageAssets.map,
-                            color: Colors.green.shade800,
-                            onTap: () async {
-                              setState(() {
-                                isAttachmentOpen = false;
-                              });
-                              await controller.sendLocation();
-                            },
-                          ),
+                          // _buildAttachmentOption(
+                          //   context,
+                          //   title: "Location",
+                          //   asset: ImageAssets.map,
+                          //   color: Colors.green.shade800,
+                          //   onTap: () async {
+                          //     setState(() {
+                          //       isAttachmentOpen = false;
+                          //     });
+                          //     await controller.sendLocation();
+                          //   },
+                          // ),
                         ],
                       ),
                     ),
@@ -2801,125 +3204,251 @@ class GroupChatScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return ChangeNotifierProvider<GroupChatController>.value(
-          value: chatController,
-          child: SafeArea(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              height: MediaQuery.of(context).size.height * 0.5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        String activeTab = "Stickers";
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return ChangeNotifierProvider<GroupChatController>.value(
+              value: chatController,
+              child: SafeArea(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 20,
+                  ),
+                  height: MediaQuery.of(context).size.height * 0.5,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "Stickers",
-                        style: fontStyle.clashDisplayBold18.textColor(
-                          appColor(context).black,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            activeTab,
+                            style: fontStyle.clashDisplayBold18.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: appColor(context).grey100,
+                              ),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: appColor(context).grey500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(ctx),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: appColor(context).grey100,
+                      const SizedBox(height: 16),
+                      // Chips Row
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                activeTab = "Stickers";
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: activeTab == "Stickers"
+                                    ? appColor(context).secondary
+                                    : appColor(context).grey100,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                "Stickers",
+                                style: fontStyle.clashDisplaySemiBold12
+                                    .textColor(
+                                      activeTab == "Stickers"
+                                          ? appColor(context).white
+                                          : appColor(context).black,
+                                    ),
+                              ),
+                            ),
                           ),
-                          child: Icon(
-                            Icons.close,
-                            size: 16,
-                            color: appColor(context).grey500,
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                activeTab = "Emojis";
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: activeTab == "Emojis"
+                                    ? appColor(context).secondary
+                                    : appColor(context).grey100,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                "Emojis",
+                                style: fontStyle.clashDisplaySemiBold12
+                                    .textColor(
+                                      activeTab == "Emojis"
+                                          ? appColor(context).white
+                                          : appColor(context).black,
+                                    ),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Expanded(
+                        child: activeTab == "Stickers"
+                            ? Consumer<GroupChatController>(
+                                builder: (context, controller, child) {
+                                  if (controller.isLoadingStickers) {
+                                    return Center(
+                                      child: CircularProgressIndicator(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              appColor(context).secondary,
+                                            ),
+                                      ),
+                                    );
+                                  }
+
+                                  final stickers = controller.stickers;
+                                  if (stickers.isEmpty) {
+                                    return Center(
+                                      child: Text(
+                                        "No stickers available.",
+                                        style: fontStyle.clashDisplayMedium12
+                                            .textColor(
+                                              appColor(context).grey400,
+                                            ),
+                                      ),
+                                    );
+                                  }
+
+                                  return GridView.builder(
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 4,
+                                          mainAxisSpacing: 16,
+                                          crossAxisSpacing: 16,
+                                        ),
+                                    itemCount: stickers.length,
+                                    itemBuilder: (context, index) {
+                                      final sticker = stickers[index];
+                                      final relativePath =
+                                          sticker['sticker_image'] ??
+                                          sticker['file_url'] ??
+                                          "";
+                                      final imageUrl = ApiService.getImageUrl(
+                                        relativePath,
+                                      );
+
+                                      return GestureDetector(
+                                        onTap: () {
+                                          Navigator.pop(ctx);
+                                          controller.sendStickerMessage(
+                                            relativePath,
+                                          );
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: appColor(context).grey50,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Image.network(
+                                              imageUrl,
+                                              fit: BoxFit.contain,
+                                              loadingBuilder:
+                                                  (
+                                                    context,
+                                                    child,
+                                                    loadingProgress,
+                                                  ) {
+                                                    if (loadingProgress == null)
+                                                      return child;
+                                                    return const Center(
+                                                      child:
+                                                          CircularProgressIndicator(),
+                                                    );
+                                                  },
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => Icon(
+                                                    Icons
+                                                        .image_not_supported_outlined,
+                                                    color: appColor(
+                                                      context,
+                                                    ).grey400,
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              )
+                            : Consumer<GroupChatController>(
+                                builder: (context, controller, child) {
+                                  return GridView.builder(
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 7,
+                                          mainAxisSpacing: 8,
+                                          crossAxisSpacing: 8,
+                                        ),
+                                    itemCount: _emojisList.length,
+                                    itemBuilder: (context, index) {
+                                      final emoji = _emojisList[index];
+                                      return GestureDetector(
+                                        onTap: () {
+                                          Navigator.pop(ctx);
+                                          final tempText =
+                                              controller.messageController.text;
+                                          controller.messageController.text =
+                                              emoji;
+                                          controller.sendMessage();
+                                          controller.messageController.text =
+                                              tempText;
+                                        },
+                                        child: Center(
+                                          child: Text(
+                                            emoji,
+                                            style: const TextStyle(
+                                              fontSize: 28,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: Consumer<GroupChatController>(
-                      builder: (context, controller, child) {
-                        if (controller.isLoadingStickers) {
-                          return Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                appColor(context).secondary,
-                              ),
-                            ),
-                          );
-                        }
-
-                        final stickers = controller.stickers;
-                        if (stickers.isEmpty) {
-                          return Center(
-                            child: Text(
-                              "No stickers available.",
-                              style: fontStyle.clashDisplayMedium12.textColor(
-                                appColor(context).grey400,
-                              ),
-                            ),
-                          );
-                        }
-
-                        return GridView.builder(
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 4,
-                                mainAxisSpacing: 16,
-                                crossAxisSpacing: 16,
-                              ),
-                          itemCount: stickers.length,
-                          itemBuilder: (context, index) {
-                            final sticker = stickers[index];
-                            final relativePath =
-                                sticker['sticker_image'] ??
-                                sticker['file_url'] ??
-                                "";
-                            final imageUrl = ApiService.getImageUrl(
-                              relativePath,
-                            );
-
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.pop(ctx);
-                                controller.sendStickerMessage(relativePath);
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: appColor(context).grey50,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: Image.network(
-                                    imageUrl,
-                                    fit: BoxFit.contain,
-                                    loadingBuilder:
-                                        (context, child, loadingProgress) {
-                                          if (loadingProgress == null)
-                                            return child;
-                                          return const Center(
-                                            child: CircularProgressIndicator(),
-                                          );
-                                        },
-                                    errorBuilder:
-                                        (context, error, stackTrace) => Icon(
-                                          Icons.image_not_supported_outlined,
-                                          color: appColor(context).grey400,
-                                        ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -3108,3 +3637,52 @@ class GroupChatScreen extends StatelessWidget {
     );
   }
 }
+
+const List<String> _emojisList = [
+  // Smileys & Emotion
+  '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇',
+  '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚',
+  '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩',
+  '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣',
+  '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬',
+  '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗',
+  '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯',
+  '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐',
+  '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈',
+  '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾',
+  '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿',
+  '😾',
+  // Hearts & Hands
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
+  '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟',
+  '👍', '👎', '✊', '👊', '🤛', '🤜', '🤝', '🙌', '👏', '🙏',
+  '✍️', '💅', '🤳', '💪', '🦾', '🦵', '🦿', '👂', '🦻', '👃',
+  '🧠', '🦷', '🦴', '👀', '👁️', '👅', '👄', '💋', '🩸',
+  // Animals & Nature
+  '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
+  '🦁', '🐮', '🐷', '🐽', '🐸', '🐵', '🙈', '🙉', '🙊', '🐒',
+  '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇',
+  '🐺', '🐗', '🐴', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜',
+  '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🐙', '🦑',
+  '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊',
+  '🐅', '🐆', '🦓', '🦍', '🦧', '🦣', '🐘', '🦛', '🦏', '🐪',
+  '🐫', '🦒', '🦘', '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏',
+  '🐑', '🦙', '🐐', '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛',
+  '🐓', '🦃', '🦚', '🦜', '🦢', '🦩', '🕊️', '🐇', '🦝', '🦨',
+  '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔', '🐾', '🐉',
+  '🐲', '🌵', '🎄', '🌲', '🌳', '🌴', '🌱', '🌿', '☘️', '🍀',
+  '🍁', '🍂', '🍃',
+  // Food & Drink
+  '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐',
+  '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑',
+  '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧅', '🧄',
+  '🍄', '🥜', '🌰', '🍞', '🥐', '🥖', '🥨', '🥯', '🥞',
+  '🫑', '🧀', '🍖', '🍗', '🥩', '🥓', '🍔', '🍟', '🍕', '🌭',
+  '🥪', '🌮', '🌯', '🫔', '🥙', '🧆', '🍳', '🥘', '🍲', '🫕',
+  '🥣', '🥗', '🍿', '🍟', '🧂', '🥫', '🍱', '🍘', '🍙', '🍚',
+  '🍛', '🍜', '🍝', '🍠', '🍢', '🍣', '🍤', '🍥', '🥮', '🍡',
+  '🥟', '🥠', '🥡', '🍦', '🍧', '🍨', '🍩', '🍪', '🎂', '🍰',
+  '🧁', '🥧', '🍫', '🍬', '🍭', '🍮', '🍯', '🍼', '🥛', '☕',
+  '🫖', '🍵', '🍶', '🍾', '🍷', '🍸', '🍹', '🍺', '🍻', '🥂',
+  '🥃', '🥤', '🧋', '🧃', '🧉', '🧊',
+];

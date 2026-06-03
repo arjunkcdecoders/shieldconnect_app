@@ -1,4 +1,4 @@
-package com.example.shieldconnect_app
+package ai.roseshield.shieldconnect
 
 import io.flutter.embedding.android.FlutterActivity
 

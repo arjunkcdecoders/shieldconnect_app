@@ -231,6 +231,10 @@ class AddNewChatScreen extends StatelessWidget {
                                   relationship != null &&
                                   relationship['status'] == 'blocked' &&
                                   relationship['requested_by'] != user['_id'];
+                              final bool isIncoming =
+                                  relationship != null &&
+                                  relationship['status'] == 'pending' &&
+                                  relationship['requested_by'] == user['_id'];
                               final bool isLoadingButton =
                                   controller.loadingUserIds.contains(user['_id']);
 
@@ -242,6 +246,7 @@ class AddNewChatScreen extends StatelessWidget {
                                 avatar: user['avatar'],
                                 isRequested: isRequested,
                                 isBlockedByReceiver: isBlockedByReceiver,
+                                isIncoming: isIncoming,
                                 status: relationship?['status'],
                                 isLoadingButton: isLoadingButton,
                               );
@@ -265,6 +270,7 @@ class AddNewChatScreen extends StatelessWidget {
     required bool isRequested,
     required bool isBlockedByReceiver,
     required bool isLoadingButton,
+    required bool isIncoming,
     String? avatar,
     String? status,
   }) {
@@ -282,7 +288,7 @@ class AddNewChatScreen extends StatelessWidget {
           MaterialPageRoute(
             builder: (context) => ChatScreen(
               userName: name,
-              isNewChat: true,
+              isNewChat: status != 'accepted',
               recipientId: userId,
             ),
           ),
@@ -331,12 +337,14 @@ class AddNewChatScreen extends StatelessWidget {
                         ? "Connected" 
                         : (isBlockedByReceiver
                             ? "Blocked"
-                            : (isRequested ? "Requested" : subtitle)),
+                            : (isRequested 
+                                ? "Requested" 
+                                : (isIncoming ? "Sent you a request" : subtitle))),
                     style: fontStyle.clashDisplayRegular12
                         .textColor(
                           isBlockedByReceiver
                               ? const Color(0xFFB71C1C)
-                              : ((isRequested || status == 'accepted')
+                              : ((isRequested || status == 'accepted' || isIncoming)
                                   ? appColor(context).secondary
                                   : appColor(context).grey300),
                         )
@@ -348,7 +356,7 @@ class AddNewChatScreen extends StatelessWidget {
             const SizedBox(width: 8),
 
             // Action Button
-            if (!isBlockedByReceiver)
+            if (!isBlockedByReceiver && !isIncoming)
               GestureDetector(
               onTap: () {
                 if (status == 'accepted' || isLoadingButton) return;

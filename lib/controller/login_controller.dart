@@ -10,6 +10,11 @@ import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/view/bottomnav_screen.dart';
+import 'package:shieldconnect_app/controller/status_controller.dart';
+import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
+
+import 'package:shieldconnect_app/services/call_manager.dart';
 
 class LoginController extends ChangeNotifier {
   final TextEditingController emailController = TextEditingController();
@@ -102,6 +107,17 @@ class LoginController extends ChangeNotifier {
             jsonEncode(apiResponse.data?.toJson()),
           );
 
+          // Connect to the socket server using the newly active user session
+          final String? userId = apiResponse.data?.id;
+          if (userId != null) {
+            SocketService().connect(userId);
+            CallManager().init(
+              userId,
+              apiResponse.data?.name ?? 'User',
+              myUserAvatar: apiResponse.data?.avatar,
+            );
+          }
+
           _message = "Log In Successful!";
           _isSuccess = true;
           notifyListeners();
@@ -116,6 +132,8 @@ class LoginController extends ChangeNotifier {
             context.read<ProfileController>().init();
             context.read<NotificationController>().init();
             context.read<CallListController>().init();
+            context.read<StatusController>().init();
+            context.read<AddNewChatController>().init();
 
             emailController.clear();
             passwordController.clear();

@@ -7,10 +7,7 @@ import 'package:shieldconnect_app/utils/date_helper.dart';
 class AnnouncementDetailsScreen extends StatelessWidget {
   final List<dynamic> announcements;
 
-  const AnnouncementDetailsScreen({
-    super.key,
-    required this.announcements,
-  });
+  const AnnouncementDetailsScreen({super.key, required this.announcements});
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +23,9 @@ class AnnouncementDetailsScreen extends StatelessWidget {
         ),
         title: Text(
           "Announcements",
-          style: fontStyle.clashDisplaySemiBold18
-              .textColor(appColor(context).black),
+          style: fontStyle.clashDisplaySemiBold18.textColor(
+            appColor(context).black,
+          ),
         ),
         centerTitle: true,
       ),
@@ -36,81 +34,120 @@ class AnnouncementDetailsScreen extends StatelessWidget {
             ? Center(
                 child: Text(
                   "No announcements available",
-                  style: fontStyle.clashDisplayMedium14
-                      .textColor(appColor(context).grey400),
+                  style: fontStyle.clashDisplayMedium14.textColor(
+                    appColor(context).grey400,
+                  ),
                 ),
               )
             : ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-                itemCount: announcements.length,
-                separatorBuilder: (context, index) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32.0),
-                  child: Divider(color: appColor(context).grey100, thickness: 1),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 20.0,
                 ),
+                itemCount: announcements.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 20.0),
                 itemBuilder: (context, index) {
                   final ann = announcements[index];
                   final String title = ann["title"] ?? "Announcement";
-                  final String description = ann["content"] ?? ann["message"] ?? "";
-                  final String date = DateHelper.formatDate(ann["createdAt"] ?? ann["time"]);
+                  final String description =
+                      ann["content"] ?? ann["message"] ?? "";
+                  final String date = DateHelper.formatAnnouncementDate(
+                    ann["createdAt"] ?? ann["time"],
+                  );
                   final String? media = ann["media"];
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: appColor(context).secondary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
+                  return Container(
+                    padding: const EdgeInsets.all(20.0),
+                    decoration: BoxDecoration(
+                      color: appColor(
+                        context,
+                      ).bgGrey, // Beautiful modern soft viewing color
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: appColor(context).grey100,
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: appColor(
+                            context,
+                          ).black.withValues(alpha: 0.02),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                        child: Text(
-                          "Admin",
-                          style: fontStyle.clashDisplaySemiBold12
-                              .textColor(appColor(context).secondary),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Row for Admin Badge & Date/Time
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: appColor(
+                                  context,
+                                ).secondary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                "Admin",
+                                style: fontStyle.clashDisplaySemiBold12
+                                    .textColor(appColor(context).secondary),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                date,
+                                textAlign: TextAlign.end,
+                                style: fontStyle.clashDisplayMedium12.textColor(
+                                  appColor(context).grey500,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                      // Title
-                      Text(
-                        title,
-                        style: fontStyle.clashDisplayBold24
-                            .textColor(appColor(context).black),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Date
-                      Text(
-                        date,
-                        style: fontStyle.clashDisplayMedium14
-                            .textColor(appColor(context).grey400),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Media Image (if available)
-                      if (media != null && media.isNotEmpty) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.network(
-                            ApiService.getImageUrl(media),
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const SizedBox.shrink(),
+                        // Title
+                        Text(
+                          title,
+                          style: fontStyle.clashDisplayBold20.textColor(
+                            appColor(context).black,
                           ),
                         ),
-                        const SizedBox(height: 24),
-                      ],
+                        const SizedBox(height: 16),
 
-                      // Description
-                      Text(
-                        description,
-                        style: fontStyle.clashDisplayRegular16
-                            .textColor(appColor(context).black87)
-                            .copyWith(height: 1.6),
-                      ),
-                    ],
+                        // Media Image (if available)
+                        if (media != null && media.isNotEmpty) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              ApiService.getImageUrl(media),
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const SizedBox.shrink(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+
+                        // Description
+                        Text(
+                          description,
+                          style: fontStyle.clashDisplayRegular14
+                              .textColor(appColor(context).black87)
+                              .copyWith(height: 1.5),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),

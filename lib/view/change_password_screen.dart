@@ -135,27 +135,50 @@ class ChangePasswordScreen extends StatelessWidget {
 
                     // 3. Bottom Update action button
                     GestureDetector(
-                      onTap: () {
-                        // Implement update logic here
-                        Navigator.pop(context);
-                      },
+                      onTap: controller.isLoading
+                          ? null
+                          : () => controller.changePassword(context),
                       child: Container(
                         height: 46,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: appColor(context).secondary,
+                          color: controller.isLoading
+                              ? appColor(
+                                  context,
+                                ).secondary.withValues(alpha: 0.6)
+                              : appColor(context).secondary,
                           borderRadius: BorderRadius.circular(23),
                         ),
                         child: Center(
-                          child: Text(
-                            "Update Password",
-                            style: fontStyle.clashDisplaySemiBold14.textColor(
-                              appColor(context).white,
-                            ),
-                          ),
+                          child: controller.isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  "Update Password",
+                                  style: fontStyle.clashDisplaySemiBold14
+                                      .textColor(appColor(context).white),
+                                ),
                         ),
                       ),
                     ),
+                    if (controller.feedbackMessage.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Text(
+                          controller.feedbackMessage,
+                          style: fontStyle.clashDisplayMedium12.textColor(
+                            controller.isError ? Colors.red : Colors.green,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -232,8 +255,9 @@ class CustomTextField extends StatelessWidget {
     final bool hasFocus = focusNode?.hasFocus ?? false;
 
     // Resolved dynamics for label formatting
-    final Color labelColor =
-        hasFocus ? appColor(context).secondary : appColor(context).black;
+    final Color labelColor = hasFocus
+        ? appColor(context).secondary
+        : appColor(context).black;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

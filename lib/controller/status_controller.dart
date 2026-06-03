@@ -10,6 +10,8 @@ import 'package:dio/dio.dart' as dio_lib;
 import 'package:video_player/video_player.dart';
 import 'package:image/image.dart' as img;
 import 'package:video_compress/video_compress.dart';
+import 'package:shieldconnect_app/utils/app_colors.dart';
+import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:path_provider/path_provider.dart';
 
 class StatusController extends ChangeNotifier {
@@ -32,6 +34,18 @@ class StatusController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool _isUploading = false;
+  bool get isUploading => _isUploading;
+
+  int _uploadSentBytes = 0;
+  int get uploadSentBytes => _uploadSentBytes;
+
+  int _uploadTotalBytes = 0;
+  int get uploadTotalBytes => _uploadTotalBytes;
+
+  double _uploadProgress = 0.0;
+  double get uploadProgress => _uploadProgress;
+
   String? _userId;
   String? get userId => _userId;
 
@@ -43,8 +57,113 @@ class StatusController extends ChangeNotifier {
   bool _isVideoInitialized = false;
   bool get isVideoInitialized => _isVideoInitialized;
 
+  // --- Text Status Creator State ---
+  final TextEditingController textStatusController = TextEditingController();
+
+  final List<String> hexColors = [
+    "#5ABED6", // Light Blue
+    "#6B8ECC", // Pastel Blue
+    "#8661D6", // Purple
+    "#C762D2", // Magenta/pink
+    "#78E266", // Light Green
+    "#0F9C35", // Dark Green
+    "#E2A814", // Gold/Orange
+    "#D64D4D", // Red
+  ];
+
+  final List<String> fontFamilies = [
+    'ClashDisplay',
+    'Roboto',
+    'PlayfairDisplay',
+    'Courier',
+  ];
+
+  int _selectedColorIndex = 0;
+  int get selectedColorIndex => _selectedColorIndex;
+
+  int _selectedFontIndex = 0;
+  int get selectedFontIndex => _selectedFontIndex;
+
+  String _previousValidText = "";
+
+  void cycleFont() {
+    _selectedFontIndex = (_selectedFontIndex + 1) % fontFamilies.length;
+    notifyListeners();
+  }
+
+  void selectColor(int index) {
+    _selectedColorIndex = index;
+    notifyListeners();
+  }
+
+  void handleTextStatusChanged(BuildContext context) {
+    final text = textStatusController.text;
+    final lines = text.split('\n').length;
+
+    if (text.length > 700 || lines > 10) {
+      textStatusController.text = _previousValidText;
+      textStatusController.selection = TextSelection.fromPosition(
+        TextPosition(offset: textStatusController.text.length),
+      );
+      _showLimitExceededDialog(context);
+    } else {
+      _previousValidText = text;
+    }
+    notifyListeners();
+  }
+
+  void clearTextStatus() {
+    textStatusController.clear();
+    _selectedColorIndex = 0;
+    _selectedFontIndex = 0;
+    _previousValidText = "";
+  }
+
+  void _showLimitExceededDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            "Status Limit Exceeded",
+            style: fontStyle.clashDisplayBold18.textColor(
+              appColor(context).black,
+            ),
+          ),
+          content: Text(
+            "Your status update cannot exceed 700 characters or 10 lines.",
+            style: fontStyle.clashDisplayRegular14.textColor(
+              appColor(context).grey500,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                "OK",
+                style: fontStyle.clashDisplaySemiBold14.textColor(
+                  appColor(context).secondary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> init() async {
     _isLoading = true;
+    _myStatuses = [];
+    _othersStatuses = [];
+    _viewersCache.clear();
+    _profileImage = null;
+    _userId = null;
     notifyListeners();
 
     await fetchProfileImage();
@@ -265,10 +384,24 @@ class StatusController extends ChangeNotifier {
   Future<bool> uploadMediaStatus(File file, String caption, String contentType) async {
     if (_userId == null) return false;
     _isLoading = true;
+    _isUploading = false;
+    _uploadSentBytes = 0;
+    _uploadTotalBytes = 0;
+    _uploadProgress = 0.0;
     notifyListeners();
 
     File? compressedFile;
     try {
+      if (contentType == 'video') {
+        final int originalSize = await file.length();
+        if (originalSize > 100 * 1024 * 1024) {
+          debugPrint("StatusController: Video size exceeds 100MB, aborting upload");
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
       File fileToUpload = file;
 
       if (contentType == 'image') {
@@ -280,6 +413,12 @@ class StatusController extends ChangeNotifier {
       }
 
       final filename = fileToUpload.path.split('/').last;
+      
+      // Update upload state
+      _uploadTotalBytes = fileToUpload.lengthSync();
+      _isUploading = true;
+      notifyListeners();
+
       final formData = dio_lib.FormData.fromMap({
         "user_id": _userId,
         "caption": caption,
@@ -290,6 +429,12 @@ class StatusController extends ChangeNotifier {
       final response = await ApiService().post(
         '/status',
         data: formData,
+        onSendProgress: (sent, total) {
+          _uploadSentBytes = sent;
+          _uploadTotalBytes = total > 0 ? total : fileToUpload.lengthSync();
+          _uploadProgress = _uploadTotalBytes > 0 ? sent / _uploadTotalBytes : 0.0;
+          notifyListeners();
+        },
       );
       final dynamic responseData = response.data;
       final Map<String, dynamic> json = responseData is String
@@ -298,6 +443,7 @@ class StatusController extends ChangeNotifier {
 
       if (json['success'] == true) {
         await fetchMyStatuses();
+        _isUploading = false;
         _isLoading = false;
         notifyListeners();
         return true;
@@ -305,6 +451,11 @@ class StatusController extends ChangeNotifier {
     } catch (e) {
       debugPrint("Error uploading media status: $e");
     } finally {
+      _isUploading = false;
+      _uploadSentBytes = 0;
+      _uploadTotalBytes = 0;
+      _uploadProgress = 0.0;
+
       if (compressedFile != null && compressedFile.path != file.path) {
         try {
           if (await compressedFile.exists()) {
@@ -432,6 +583,7 @@ class StatusController extends ChangeNotifier {
   @override
   void dispose() {
     captionController.dispose();
+    textStatusController.dispose();
     _videoPlayerController?.dispose();
     super.dispose();
   }

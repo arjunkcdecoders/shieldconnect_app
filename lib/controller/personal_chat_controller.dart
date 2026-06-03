@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -7,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/model/message_model.dart';
 import 'package:shieldconnect_app/model/friend_model.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
+import 'package:shieldconnect_app/model/settings_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/date_helper.dart';
 import 'package:dio/dio.dart';
@@ -15,6 +18,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/controller/notification_controller.dart';
+import 'package:shieldconnect_app/view/media_caption_screen.dart';
+import 'package:record/record.dart';
 
 class PersonalChatController extends ChangeNotifier {
   bool _isDisposed = false;
@@ -61,6 +69,15 @@ class PersonalChatController extends ChangeNotifier {
   String? _wallpaperUrl;
   String? get wallpaperUrl => _wallpaperUrl;
 
+  String? _userName;
+  String? get userName => _userName;
+
+  bool _isRecipientTyping = false;
+  bool get isRecipientTyping => _isRecipientTyping;
+
+  DateTime? _lastTypingEmit;
+  Timer? _stopTypingTimer;
+
   final TextEditingController messageController = TextEditingController();
   final ScrollController scrollController = ScrollController();
 
@@ -105,6 +122,259 @@ class PersonalChatController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _isAttachmentOpen = false;
+  bool get isAttachmentOpen => _isAttachmentOpen;
+
+  void setAttachmentOpen(bool open) {
+    _isAttachmentOpen = open;
+    notifyListeners();
+  }
+
+  void toggleAttachmentOpen() {
+    _isAttachmentOpen = !_isAttachmentOpen;
+    notifyListeners();
+  }
+
+  bool _isRecording = false;
+  bool get isRecording => _isRecording;
+
+  VoidCallback? onCancelRecording;
+
+  void setRecordingState(bool recording) {
+    _isRecording = recording;
+    notifyListeners();
+  }
+
+  set isRecording(bool val) {
+    _isRecording = val;
+    notifyListeners();
+  }
+
+  bool isRecordingPaused = false;
+  int recordingSeconds = 0;
+  int recordingTicks = 0;
+  Timer? recordingTimer;
+  AudioRecorder? audioRecorder;
+  String? recordedFilePath;
+
+  bool _isSearchActive = false;
+  bool get isSearchActive => _isSearchActive;
+
+  String _searchQuery = "";
+  String get searchQuery => _searchQuery;
+
+  List<String> _searchMatchMessageIds = [];
+  List<String> get searchMatchMessageIds => _searchMatchMessageIds;
+
+  int _currentSearchMatchIndex = -1;
+  int get currentSearchMatchIndex => _currentSearchMatchIndex;
+
+  String? get currentMatchedMessageId {
+    if (_currentSearchMatchIndex >= 0 &&
+        _currentSearchMatchIndex < _searchMatchMessageIds.length) {
+      return _searchMatchMessageIds[_currentSearchMatchIndex];
+    }
+    return null;
+  }
+
+  void toggleSearchActive(bool active) {
+    _isSearchActive = active;
+    if (!active) {
+      _searchQuery = "";
+      _searchMatchMessageIds.clear();
+      _currentSearchMatchIndex = -1;
+    }
+    notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    _searchMatchMessageIds.clear();
+    _currentSearchMatchIndex = -1;
+
+    if (query.isNotEmpty) {
+      for (final msg in _messages) {
+        final String text = msg['text']?.toString() ?? "";
+        final String type = msg['type']?.toString() ?? "text";
+        final String modStatus = msg['moderation_status'] ?? 'Approved';
+        final bool isDeleted = msg['isDeleted'] == true;
+        if (type != 'system' &&
+            type != 'status' &&
+            !isDeleted &&
+            modStatus == 'Approved' &&
+            text.toLowerCase().contains(query.toLowerCase())) {
+          final String? idStr = msg['id']?.toString();
+          if (idStr != null && idStr.isNotEmpty) {
+            _searchMatchMessageIds.add(idStr);
+          }
+        }
+      }
+
+      if (_searchMatchMessageIds.isNotEmpty) {
+        _currentSearchMatchIndex = _searchMatchMessageIds.length - 1;
+      }
+    }
+    notifyListeners();
+  }
+
+  void nextSearchMatch() {
+    if (_searchMatchMessageIds.isEmpty) return;
+    if (_currentSearchMatchIndex < _searchMatchMessageIds.length - 1) {
+      _currentSearchMatchIndex++;
+    } else {
+      _currentSearchMatchIndex = 0;
+    }
+    notifyListeners();
+  }
+
+  void prevSearchMatch() {
+    if (_searchMatchMessageIds.isEmpty) return;
+    if (_currentSearchMatchIndex > 0) {
+      _currentSearchMatchIndex--;
+    } else {
+      _currentSearchMatchIndex = _searchMatchMessageIds.length - 1;
+    }
+    notifyListeners();
+  }
+
+  Map<String, dynamic> _unwrapMessagePayload(Map<String, dynamic> rawMsg) {
+    if (rawMsg['message'] != null && rawMsg['message'] is Map) {
+      return Map<String, dynamic>.from(rawMsg['message'] as Map);
+    } else if (rawMsg['data'] != null && rawMsg['data'] is Map) {
+      final dataMap = rawMsg['data'] as Map;
+      if (dataMap['message'] != null && dataMap['message'] is Map) {
+        return Map<String, dynamic>.from(dataMap['message'] as Map);
+      } else {
+        return Map<String, dynamic>.from(dataMap);
+      }
+    }
+    return rawMsg;
+  }
+
+  void _onMessageQueueChanged() {
+    if (_isDisposed) return;
+    final queue = SocketService().messageQueueNotifier.value;
+    if (queue.isEmpty) return;
+
+    final toProcess = List<Map<String, dynamic>>.from(queue);
+    // Drain/clear the queue
+    SocketService().messageQueueNotifier.value = [];
+
+    debugPrint(
+      "PersonalChatController: received real-time messages: $toProcess",
+    );
+
+    bool hasNewMsg = false;
+    for (final rawMsg in toProcess) {
+      final unwrapped = _unwrapMessagePayload(rawMsg);
+      final messageModel = MessageModel.fromJson(unwrapped);
+
+      final msgSenderId = messageModel.senderId;
+      final msgRecipientId = messageModel.recipientId;
+
+      if ((msgSenderId == _recipientId && msgRecipientId == _userId) ||
+          (msgSenderId == _userId && msgRecipientId == _recipientId)) {
+        final bool isOutgoing = msgSenderId == _userId;
+        final String senderName = isOutgoing
+            ? "You"
+            : (_headerDetails?["name"] ?? "Sender");
+
+        final String? parentMessageId = messageModel.parentMessageId;
+        String? replyTo;
+        String? replyToSender;
+        String? replyToType;
+        String? replyToUrl;
+
+        if (messageModel.parentMessage != null) {
+          replyTo = messageModel.parentMessage!.content;
+          replyToSender = messageModel.parentMessage!.senderId == _userId
+              ? "You"
+              : (_headerDetails?["name"] ?? "Sender");
+          replyToType = messageModel.parentMessage!.messageType;
+          replyToUrl = messageModel.parentMessage!.fileUrl != null
+              ? ApiService.getImageUrl(messageModel.parentMessage!.fileUrl!)
+              : null;
+        } else if (parentMessageId != null) {
+          final parentMsg = _messages.firstWhere(
+            (item) =>
+                (item['id']?.toString() ?? item['_id']?.toString()) ==
+                parentMessageId,
+            orElse: () => <String, dynamic>{},
+          );
+          if (parentMsg.isNotEmpty) {
+            replyTo = parentMsg['text']?.toString() ?? parentMsg['content']?.toString();
+            replyToType = parentMsg['type']?.toString() ?? parentMsg['message_type']?.toString();
+            replyToUrl = parentMsg['url']?.toString() ?? parentMsg['file_url']?.toString();
+            replyToSender = parentMsg['sender']?.toString();
+          }
+        }
+
+        final bool isDeleted = messageModel.isDeletedForEveryone ?? false;
+        final newMsgMap = {
+          "id": messageModel.id,
+          "sender": senderName,
+          "text": isDeleted ? "This message was deleted" : (messageModel.content ?? ''),
+          "time": messageModel.createdAt != null
+              ? DateHelper.formatTime(messageModel.createdAt!.toIso8601String())
+              : 'Now',
+          "createdAt": messageModel.createdAt != null
+              ? messageModel.createdAt!.toIso8601String()
+              : DateTime.now().toIso8601String(),
+          "isOutgoing": isOutgoing,
+          "type": isDeleted ? "text" : (messageModel.messageType ?? 'text'),
+          "file_name": isDeleted ? null : messageModel.fileName,
+          "url": (isDeleted || messageModel.fileUrl == null)
+              ? null
+              : ApiService.getImageUrl(messageModel.fileUrl!),
+          "avatar": isOutgoing ? "" : (_headerDetails?["avatar"] ?? ""),
+          "moderation_status": messageModel.moderationStatus ?? 'Approved',
+          "moderated_by": messageModel.moderatedBy,
+          "parent_message_id": parentMessageId,
+          "replyTo": replyTo,
+          "replyToSender": replyToSender,
+          "replyToType": replyToType,
+          "replyToUrl": replyToUrl,
+          "is_forwarded": messageModel.isForwarded ?? false,
+          "status": messageModel.status ?? 'sent',
+          "isDeleted": isDeleted,
+          "isEdited": messageModel.isEdited ?? false,
+        };
+
+        // Avoid duplicate messages if already in list, or update existing message state
+        final existingIndex = _messages.indexWhere(
+          (item) =>
+              (item['id']?.toString() ?? '') ==
+              (newMsgMap['id']?.toString() ?? ''),
+        );
+        if (existingIndex != -1) {
+          _messages[existingIndex] = {
+            ..._messages[existingIndex],
+            ...newMsgMap,
+          };
+          hasNewMsg = true;
+        } else {
+          _messages.add(newMsgMap);
+          hasNewMsg = true;
+        }
+      }
+    }
+
+    if (hasNewMsg) {
+      notifyListeners();
+      scrollToBottom();
+
+      // Auto-acknowledge / mark-as-read since the chat is currently open!
+      if (_recipientId != null && _userId != null) {
+        SocketService().markAsRead(
+          chatId: _recipientId!,
+          userId: _userId!,
+          otherId: _recipientId!,
+          isGroup: false,
+        );
+      }
+    }
+  }
+
   Future<void> init(
     String targetUserId, {
     bool isGroup = false,
@@ -112,11 +382,42 @@ class PersonalChatController extends ChangeNotifier {
     bool isNewChat = false,
     bool isFavorite = false,
   }) async {
+    SocketService().messageQueueNotifier.removeListener(_onMessageQueueChanged);
+    SocketService().messageQueueNotifier.addListener(_onMessageQueueChanged);
+
+    SocketService().userStatusChangeNotifier.removeListener(
+      _onUserStatusChange,
+    );
+    SocketService().userStatusChangeNotifier.addListener(_onUserStatusChange);
+
+    SocketService().messagesReadNotifier.removeListener(_onMessagesRead);
+    SocketService().messagesReadNotifier.addListener(_onMessagesRead);
+
+    SocketService().messagesDeliveredNotifier.removeListener(_onMessagesDelivered);
+    SocketService().messagesDeliveredNotifier.addListener(_onMessagesDelivered);
+
+    SocketService().typingIndicatorNotifier.removeListener(
+      _onTypingIndicatorChanged,
+    );
+    SocketService().typingIndicatorNotifier.addListener(
+      _onTypingIndicatorChanged,
+    );
+
     _isLoading = true;
     _recipientId = targetUserId;
     _isRequest = isRequest;
     _isNewChat = isNewChat;
     _isFavorite = isFavorite;
+    _isRecipientTyping = false; // Reset status on init
+    _isSearchActive = false;
+    _searchQuery = "";
+    _searchMatchMessageIds = [];
+    _currentSearchMatchIndex = -1;
+
+    // Set active chat ID globally
+    SocketService().activeChatId = targetUserId;
+    SocketService().isActiveChatGroup = false;
+
     notifyListeners();
 
     // Fetch local user id from session
@@ -126,8 +427,28 @@ class PersonalChatController extends ChangeNotifier {
       final Map<String, dynamic> userMap = jsonDecode(sessionStr);
       final UserModel user = UserModel.fromJson(userMap);
       _userId = user.id;
-      if (user.chatWallpaper != null && user.chatWallpaper!.isNotEmpty) {
-        fetchSelectedWallpaper(user.chatWallpaper!);
+      _userName = user.name;
+    }
+
+    if (_userId != null) {
+      // Fetch current user details from API directly to read the live chat_wallpaper field with wallpaperid
+      try {
+        final userRes = await ApiService().get('/users/$_userId?currentUserId=$_userId');
+        final dynamic userResData = userRes.data;
+        final Map<String, dynamic> userJson = userResData is String
+            ? jsonDecode(userResData)
+            : userResData as Map<String, dynamic>;
+        if (userJson['success'] == true && userJson['data'] != null) {
+          final userData = userJson['data'];
+          final String? wallpaperId = userData['chat_wallpaper']?.toString();
+          if (wallpaperId != null && wallpaperId.isNotEmpty) {
+            await fetchSelectedWallpaper(wallpaperId);
+          } else {
+            _wallpaperUrl = null;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error fetching current user details for wallpaper: $e");
       }
     }
 
@@ -138,6 +459,14 @@ class PersonalChatController extends ChangeNotifier {
       if (_messages.isNotEmpty) {
         _isNewChat = false;
       }
+
+      // Mark as read immediately on open
+      SocketService().markAsRead(
+        chatId: targetUserId,
+        userId: _userId!,
+        otherId: targetUserId,
+        isGroup: false,
+      );
     } else {
       _messages = [];
     }
@@ -149,6 +478,25 @@ class PersonalChatController extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     scrollToBottom(immediate: true);
+  }
+
+  void _onUserStatusChange() {
+    if (_isDisposed || _recipientId == null) return;
+
+    final data = SocketService().userStatusChangeNotifier.value;
+    if (data == null) return;
+
+    final String? userId = data['userId']?.toString();
+    final String? status = data['status']?.toString();
+    final String? lastSeen = data['lastSeen']?.toString();
+
+    if (userId == _recipientId && _headerDetails != null) {
+      final bool isOnline = (status == 'online');
+      _headerDetails!['status'] = isOnline
+          ? "Online"
+          : DateHelper.formatLastSeen(lastSeen);
+      notifyListeners();
+    }
   }
 
   Future<void> fetchSelectedWallpaper(String id) async {
@@ -171,18 +519,42 @@ class PersonalChatController extends ChangeNotifier {
 
   void scrollToBottom({bool immediate = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (scrollController.hasClients) {
-        if (immediate) {
-          scrollController.jumpTo(scrollController.position.maxScrollExtent);
-        } else {
-          scrollController.animateTo(
-            scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeOut,
-          );
-        }
-      }
+      _performScroll(immediate, 0);
     });
+  }
+
+  void _performScroll(bool immediate, int retryCount) {
+    if (_isDisposed) return;
+    if (!scrollController.hasClients) {
+      if (retryCount < 10) {
+        Future.delayed(const Duration(milliseconds: 150), () {
+          _performScroll(immediate, retryCount + 1);
+        });
+      }
+      return;
+    }
+
+    try {
+      if (immediate) {
+        scrollController.jumpTo(scrollController.position.maxScrollExtent);
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (!_isDisposed && scrollController.hasClients) {
+            scrollController.jumpTo(scrollController.position.maxScrollExtent);
+          }
+        });
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (!_isDisposed && scrollController.hasClients) {
+            scrollController.jumpTo(scrollController.position.maxScrollExtent);
+          }
+        });
+      } else {
+        scrollController.animateTo(
+          scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> fetchPersonalChatDetails(String userId) async {
@@ -241,7 +613,9 @@ class PersonalChatController extends ChangeNotifier {
                 "id": g['_id']?.toString() ?? "",
                 "name": g['name']?.toString() ?? "Group",
                 "group_image": g['group_image']?.toString() ?? "",
-                "membersCount": (g['members'] is List) ? (g['members'] as List).length : 0,
+                "membersCount": (g['members'] is List)
+                    ? (g['members'] as List).length
+                    : 0,
               });
             }
           }
@@ -300,9 +674,11 @@ class PersonalChatController extends ChangeNotifier {
             _requestedBy = null;
             _blockedBy = [];
           }
+          final bool isOnline = data['is_online'] ?? false;
+          final String? lastSeen = data['last_seen']?.toString();
           _headerDetails = {
             "name": data['name'] ?? "Unknown",
-            "status": "Online",
+            "status": isOnline ? "Online" : DateHelper.formatLastSeen(lastSeen),
             "avatar": data['avatar'] ?? "",
             "isGroup": false,
           };
@@ -354,14 +730,22 @@ class PersonalChatController extends ChangeNotifier {
                   : msg['parent_message_id']?.toString();
               String? replyTo;
               String? replyToSender;
+              String? replyToType;
+              String? replyToUrl;
 
               if (msg['parent_message_id'] is Map) {
                 replyTo = msg['parent_message_id']['content']?.toString();
+                replyToType = msg['parent_message_id']['message_type']?.toString();
+                replyToUrl = msg['parent_message_id']['file_url'] != null
+                    ? ApiService.getImageUrl(msg['parent_message_id']['file_url'].toString())
+                    : null;
                 final dynamic pSender = msg['parent_message_id']['sender_id'];
                 if (pSender is Map) {
                   replyToSender = pSender['name']?.toString();
                 } else if (pSender?.toString() == _userId) {
                   replyToSender = "You";
+                } else if (pSender != null) {
+                  replyToSender = _headerDetails?['name']?.toString() ?? "Sender";
                 }
               }
 
@@ -375,36 +759,49 @@ class PersonalChatController extends ChangeNotifier {
                 );
                 if (parentMsg != null) {
                   replyTo = parentMsg['content']?.toString();
+                  replyToType = parentMsg['message_type']?.toString() ?? parentMsg['type']?.toString();
+                  replyToUrl = parentMsg['file_url'] != null
+                      ? ApiService.getImageUrl(parentMsg['file_url'].toString())
+                      : (parentMsg['url'] != null ? parentMsg['url']?.toString() : null);
                   final pSender = parentMsg['sender_id'];
                   if (pSender is Map) {
                     replyToSender = pSender['name']?.toString();
                   } else if (pSender?.toString() == _userId) {
                     replyToSender = "You";
+                  } else if (pSender != null) {
+                    replyToSender = _headerDetails?['name']?.toString() ?? "Sender";
                   }
                 }
               }
 
+              final bool isDeleted = msg['is_deleted_for_everyone'] as bool? ?? false;
               return {
                 "id": msg['_id'],
                 "sender": isOutgoing ? "You" : senderName,
-                "text": msg['content'] ?? '',
+                "text": isDeleted ? "This message was deleted" : (msg['content'] ?? ''),
                 "time": msg['created_at'] != null
                     ? DateHelper.formatTime(msg['created_at'])
                     : '',
                 "createdAt":
                     msg['created_at'] ?? DateTime.now().toIso8601String(),
                 "isOutgoing": isOutgoing,
-                "type": msg['message_type'] ?? 'text',
-                "file_name": msg['file_name']?.toString(),
-                "url": msg['file_url'] != null
-                    ? ApiService.getImageUrl(msg['file_url'])
-                    : null,
+                "type": isDeleted ? "text" : (msg['message_type'] ?? 'text'),
+                "file_name": isDeleted ? null : msg['file_name']?.toString(),
+                "url": (isDeleted || msg['file_url'] == null)
+                    ? null
+                    : ApiService.getImageUrl(msg['file_url']),
                 "avatar": senderAvatar ?? "",
                 "moderation_status": msg['moderation_status'] ?? 'Approved',
+                "moderated_by": msg['moderated_by'],
                 "parent_message_id": parentMessageId,
                 "replyTo": replyTo,
                 "replyToSender": replyToSender,
+                "replyToType": replyToType,
+                "replyToUrl": replyToUrl,
                 "is_forwarded": msg['is_forwarded'] as bool? ?? false,
+                "status": msg['status'] ?? 'sent',
+                "isDeleted": isDeleted,
+                "isEdited": msg['is_edited'] as bool? ?? false,
               };
             })
             .toList()
@@ -427,8 +824,6 @@ class PersonalChatController extends ChangeNotifier {
     if (_userId == null || _recipientId == null) return;
 
     final String? parentMsgId = _selectedReplyMessage?["id"]?.toString();
-    final String? replyText = _selectedReplyMessage?["text"]?.toString();
-    final String? replySender = _selectedReplyMessage?["sender"]?.toString();
 
     _selectedReplyMessage = null;
     messageController.clear();
@@ -461,27 +856,23 @@ class PersonalChatController extends ChangeNotifier {
           "Sent message model: ${jsonEncode(messageModel.toJson())}",
         );
 
-        final bool isOutgoing = true;
-
-        final newMsgMap = {
-          "id": messageModel.id,
-          "sender": "You",
-          "text": messageModel.content ?? content,
-          "time": messageModel.createdAt != null
-              ? DateHelper.formatTime(messageModel.createdAt!.toIso8601String())
-              : 'Now',
-          "createdAt": messageModel.createdAt != null
-              ? messageModel.createdAt!.toIso8601String()
-              : DateTime.now().toIso8601String(),
-          "isOutgoing": isOutgoing,
-          "type": messageModel.messageType ?? 'text',
-          "moderation_status": messageModel.moderationStatus ?? 'Pending',
-          "parent_message_id": parentMsgId,
-          "replyTo": replyText,
-          "replyToSender": replySender,
+        // Emit through socket for real-time messaging
+        final socketPayload = {
+          "senderId": _userId,
+          "recipientId": _recipientId,
+          "content": content,
+          "message_type": messageModel.messageType ?? "text",
+          "parentMessageId": parentMsgId,
+          "_id": messageModel.id,
+          "createdAt": messageModel.createdAt?.toIso8601String(),
         };
+        developer.log(
+          "🔌 SOCKET: Emitting new-message via socket: $socketPayload",
+        );
+        SocketService().emit('send-message', socketPayload);
 
-        _messages.add(newMsgMap);
+        // Fetch latest history to display the message with correct DB schema and IDs
+        await fetchChatHistory(_recipientId!);
 
         // If it was a brand-new chat screen, it is now no longer a blank/new chat!
         if (_isNewChat) {
@@ -502,6 +893,11 @@ class PersonalChatController extends ChangeNotifier {
     String? content,
   }) async {
     if (_userId == null || _recipientId == null) return;
+    final String? parentMsgId = _selectedReplyMessage?["id"]?.toString();
+
+    _selectedReplyMessage = null;
+    notifyListeners();
+
     try {
       final formData = FormData.fromMap({
         "senderId": _userId,
@@ -509,6 +905,7 @@ class PersonalChatController extends ChangeNotifier {
         "content": content ?? "Shared a $messageType",
         "message_type": messageType,
         "file": await MultipartFile.fromFile(filePath, filename: fileName),
+        if (parentMsgId != null) "parentMessageId": parentMsgId,
       });
 
       final response = await ApiService().post('/chat/send', data: formData);
@@ -525,32 +922,30 @@ class PersonalChatController extends ChangeNotifier {
         final msgData = json['data']?['message'] ?? json['data'] ?? {};
         final messageModel = MessageModel.fromJson(msgData);
 
-        final newMsgMap = {
-          "id": messageModel.id,
-          "sender": "You",
-          "text": messageModel.content ?? (content ?? "Shared a $messageType"),
-          "time": messageModel.createdAt != null
-              ? DateHelper.formatTime(messageModel.createdAt!.toIso8601String())
-              : 'Now',
-          "createdAt": messageModel.createdAt != null
-              ? messageModel.createdAt!.toIso8601String()
-              : DateTime.now().toIso8601String(),
-          "isOutgoing": true,
-          "type": messageModel.messageType ?? messageType,
+        // Emit through socket for real-time messaging
+        final socketPayload = {
+          "senderId": _userId,
+          "recipientId": _recipientId,
+          "content":
+              messageModel.content ?? (content ?? "Shared a $messageType"),
           "message_type": messageModel.messageType ?? messageType,
+          "file_url": messageModel.fileUrl,
           "file_name": messageModel.fileName ?? fileName,
-          "url": messageModel.fileUrl != null
-              ? ApiService.getImageUrl(messageModel.fileUrl!)
-              : null,
-          "moderation_status": messageModel.moderationStatus ?? 'Pending',
+          "_id": messageModel.id,
+          "parentMessageId": parentMsgId,
+          "createdAt": messageModel.createdAt?.toIso8601String(),
         };
+        developer.log(
+          "🔌 SOCKET: Emitting media new-message via socket: $socketPayload",
+        );
+        SocketService().emit('send-message', socketPayload);
 
-        _messages.add(newMsgMap);
+        // Fetch latest history to display the message with correct DB schema and IDs
+        await fetchChatHistory(_recipientId!);
+
         if (_isNewChat) {
           _isNewChat = false;
         }
-        notifyListeners();
-        scrollToBottom();
       } else {
         debugPrint(
           "sendMediaMessage failed with status code ${response.statusCode}: $json",
@@ -594,20 +989,140 @@ class PersonalChatController extends ChangeNotifier {
     return file;
   }
 
-  Future<void> pickMedia() async {
+  Future<String?> _showCaptionScreen(
+    BuildContext context,
+    String filePath,
+    String messageType, {
+    String? fileName,
+  }) async {
+    return Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MediaCaptionScreen(
+          filePath: filePath,
+          messageType: messageType,
+          fileName: fileName,
+        ),
+      ),
+    );
+  }
+
+  Future<void> pickMedia(BuildContext context) async {
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? media = await picker.pickMedia();
+
+      final String? choice = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => Container(
+          decoration: BoxDecoration(
+            color: appColor(context).white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: appColor(context).grey300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Select Gallery Media",
+                style: fontStyle.clashDisplayBold18.textColor(
+                  appColor(context).black,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, 'photo'),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: appColor(context)
+                                .secondary
+                                .withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.photo_library_rounded,
+                            color: appColor(context).secondary,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Choose Photo",
+                          style: fontStyle.clashDisplayMedium14.textColor(
+                            appColor(context).black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, 'video'),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: appColor(context)
+                                .secondary
+                                .withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.video_library_rounded,
+                            color: appColor(context).secondary,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Choose Video",
+                          style: fontStyle.clashDisplayMedium14.textColor(
+                            appColor(context).black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
+
+      if (choice == null) return;
+
+      final XFile? media = choice == 'photo'
+          ? await picker.pickImage(source: ImageSource.gallery, imageQuality: 85)
+          : await picker.pickVideo(source: ImageSource.gallery);
+
       if (media != null) {
         String path = media.path;
         final String name = media.name;
         final String extension = path.split('.').last.toLowerCase();
 
         String messageType = 'image';
-        String content = '';
         if (['mp4', 'mov', 'avi', 'mkv', '3gp'].contains(extension)) {
           messageType = 'video';
-          content = '';
         } else {
           final File originalFile = File(path);
           final File compressedFile = await compressFileIfNeeded(
@@ -617,7 +1132,37 @@ class PersonalChatController extends ChangeNotifier {
           path = compressedFile.path;
         }
 
-        await sendMediaMessage(path, name, messageType, content: content);
+        final settings = await SettingsModel.loadActiveSettings();
+        final int fileSize = await File(path).length();
+        if (messageType == 'video') {
+          final int limit = settings.getVideoLimitBytes();
+          if (fileSize > limit) {
+            if (!context.mounted) return;
+            ToastHelper.showWarningDialog(
+              context,
+              "Video Too Large",
+              "Videos cannot exceed ${settings.videoLimit ?? '100MB'}. Your selected video is ${SettingsModel.formatBytes(fileSize)}."
+            );
+            return;
+          }
+        } else {
+          final int limit = settings.getImageLimitBytes();
+          if (fileSize > limit) {
+            if (!context.mounted) return;
+            ToastHelper.showWarningDialog(
+              context,
+              "Image Too Large",
+              "Images cannot exceed ${settings.imageLimit ?? '10MB'}. Your selected image is ${SettingsModel.formatBytes(fileSize)}."
+            );
+            return;
+          }
+        }
+
+        if (!context.mounted) return;
+        final String? caption = await _showCaptionScreen(context, path, messageType);
+        if (caption == null) return;
+
+        await sendMediaMessage(path, name, messageType, content: caption);
       }
     } catch (e) {
       debugPrint("Error picking media: $e");
@@ -744,7 +1289,6 @@ class PersonalChatController extends ChangeNotifier {
         final String extension = path.split('.').last.toLowerCase();
 
         String messageType = 'image';
-        String content = '';
         if (choice == 'video') {
           messageType = 'video';
         } else {
@@ -756,7 +1300,37 @@ class PersonalChatController extends ChangeNotifier {
           path = compressedFile.path;
         }
 
-        await sendMediaMessage(path, name, messageType, content: content);
+        final settings = await SettingsModel.loadActiveSettings();
+        final int fileSize = await File(path).length();
+        if (messageType == 'video') {
+          final int limit = settings.getVideoLimitBytes();
+          if (fileSize > limit) {
+            if (!context.mounted) return;
+            ToastHelper.showWarningDialog(
+              context,
+              "Video Too Large",
+              "Videos cannot exceed ${settings.videoLimit ?? '100MB'}. Your captured video is ${SettingsModel.formatBytes(fileSize)}."
+            );
+            return;
+          }
+        } else {
+          final int limit = settings.getImageLimitBytes();
+          if (fileSize > limit) {
+            if (!context.mounted) return;
+            ToastHelper.showWarningDialog(
+              context,
+              "Image Too Large",
+              "Images cannot exceed ${settings.imageLimit ?? '10MB'}. Your captured image is ${SettingsModel.formatBytes(fileSize)}."
+            );
+            return;
+          }
+        }
+
+        if (!context.mounted) return;
+        final String? caption = await _showCaptionScreen(context, path, messageType);
+        if (caption == null) return;
+
+        await sendMediaMessage(path, name, messageType, content: caption);
       }
     } catch (e) {
       debugPrint("Error capturing camera media: $e");
@@ -780,12 +1354,37 @@ class PersonalChatController extends ChangeNotifier {
         );
         path = compressedFile.path;
 
-        await sendMediaMessage(
-          path,
-          name,
-          "file",
-          content: "Shared a document: $name",
-        );
+        final settings = await SettingsModel.loadActiveSettings();
+        final int fileSize = await File(path).length();
+        final int limit = settings.getDocLimitBytes();
+        if (fileSize > limit) {
+          if (context != null && context.mounted) {
+            ToastHelper.showWarningDialog(
+              context,
+              "Document Too Large",
+              "Documents cannot exceed ${settings.docLimit ?? '20MB'}. Your selected document is ${SettingsModel.formatBytes(fileSize)}."
+            );
+          }
+          return;
+        }
+
+        if (context != null && context.mounted) {
+          final String? caption = await _showCaptionScreen(context, path, "file", fileName: name);
+          if (caption == null) return;
+          await sendMediaMessage(
+            path,
+            name,
+            "file",
+            content: caption.isNotEmpty ? caption : "Shared a document: $name",
+          );
+        } else {
+          await sendMediaMessage(
+            path,
+            name,
+            "file",
+            content: "Shared a document: $name",
+          );
+        }
       }
     } catch (e) {
       debugPrint("Error picking document: $e");
@@ -838,22 +1437,23 @@ class PersonalChatController extends ChangeNotifier {
         final msgData = json['data']?['message'] ?? json['data'] ?? {};
         final messageModel = MessageModel.fromJson(msgData);
 
-        final newMsgMap = {
-          "id": messageModel.id,
-          "sender": "You",
-          "text": messageModel.content ?? content,
-          "time": messageModel.createdAt != null
-              ? DateHelper.formatTime(messageModel.createdAt!.toIso8601String())
-              : 'Now',
-          "createdAt": messageModel.createdAt != null
-              ? messageModel.createdAt!.toIso8601String()
-              : DateTime.now().toIso8601String(),
-          "isOutgoing": true,
-          "type": "text",
-          "moderation_status": messageModel.moderationStatus ?? 'Pending',
+        // Emit through socket for real-time messaging
+        final socketPayload = {
+          "senderId": _userId,
+          "recipientId": _recipientId,
+          "content": content,
+          "message_type": "text",
+          "_id": messageModel.id,
+          "createdAt": messageModel.createdAt?.toIso8601String(),
         };
+        developer.log(
+          "🔌 SOCKET: Emitting location new-message via socket: $socketPayload",
+        );
+        SocketService().emit('send-message', socketPayload);
 
-        _messages.add(newMsgMap);
+        // Fetch latest history to display the message with correct DB schema and IDs
+        await fetchChatHistory(_recipientId!);
+
         if (_isNewChat) {
           _isNewChat = false;
         }
@@ -1008,6 +1608,49 @@ class PersonalChatController extends ChangeNotifier {
     }
   }
 
+  Future<void> appealMessageApi(BuildContext context, String messageId) async {
+    if (_userId == null) return;
+    
+    // Set appealing state
+    int msgIndex = _messages.indexWhere((msg) => msg['id'] == messageId);
+    if (msgIndex != -1) {
+      _messages[msgIndex]["isAppealing"] = true;
+      _messages[msgIndex]["appealFailed"] = false;
+      notifyListeners();
+    }
+
+    try {
+      final response = await ApiService().put(
+        '/chat/message/$messageId/appeal',
+        data: {"userId": _userId},
+      );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      msgIndex = _messages.indexWhere((msg) => msg['id'] == messageId);
+      if (msgIndex != -1) {
+        _messages[msgIndex]["isAppealing"] = false;
+        if (json['success'] == true) {
+          _messages[msgIndex]["moderation_status"] = "Moderation";
+          _messages[msgIndex]["appealFailed"] = false;
+        } else {
+          _messages[msgIndex]["appealFailed"] = true;
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error appealing message: $e");
+      msgIndex = _messages.indexWhere((msg) => msg['id'] == messageId);
+      if (msgIndex != -1) {
+        _messages[msgIndex]["isAppealing"] = false;
+        _messages[msgIndex]["appealFailed"] = true;
+        notifyListeners();
+      }
+    }
+  }
+
   void replyToMessage(int index, String replyText) {
     if (index >= 0 && index < _messages.length) {
       final replyMessage = {
@@ -1018,6 +1661,8 @@ class PersonalChatController extends ChangeNotifier {
         "type": "text",
         "replyTo": _messages[index]["text"],
         "replyToSender": _messages[index]["sender"],
+        "replyToType": _messages[index]["type"],
+        "replyToUrl": _messages[index]["fileUrl"],
       };
       _messages.add(replyMessage);
       notifyListeners();
@@ -1060,10 +1705,7 @@ class PersonalChatController extends ChangeNotifier {
     try {
       final response = await ApiService().put(
         '/chat/delete',
-        data: {
-          "userId": _userId,
-          "recipientId": _recipientId,
-        },
+        data: {"userId": _userId, "recipientId": _recipientId},
       );
       final dynamic responseData = response.data;
       final Map<String, dynamic> json = responseData is String
@@ -1084,7 +1726,7 @@ class PersonalChatController extends ChangeNotifier {
     }
   }
 
-  Future<void> respondToConnectionRequest(String action) async {
+  Future<void> respondToConnectionRequest(String action, {BuildContext? context}) async {
     if (_userId == null || _recipientId == null) return;
     _isResponding = true;
     _respondingAction = action;
@@ -1128,6 +1770,11 @@ class PersonalChatController extends ChangeNotifier {
         } else if (action == 'blocked') {
           _isRequest = false;
         }
+
+        if (context != null && context.mounted) {
+          context.read<NotificationController>().init();
+          context.read<HomeScreenController>().fetchRecentChats(updateLoadingState: false);
+        }
       }
     } catch (e) {
       debugPrint("Error responding to connection request: $e");
@@ -1148,10 +1795,7 @@ class PersonalChatController extends ChangeNotifier {
     try {
       final response = await ApiService().post(
         '/connections/unblock',
-        data: {
-          "userId": _userId,
-          "otherUserId": _recipientId,
-        },
+        data: {"userId": _userId, "otherUserId": _recipientId},
       );
 
       final dynamic responseData = response.data;
@@ -1186,10 +1830,7 @@ class PersonalChatController extends ChangeNotifier {
     try {
       final response = await ApiService().post(
         '/connections/block',
-        data: {
-          "userId": _userId,
-          "otherUserId": _recipientId,
-        },
+        data: {"userId": _userId, "otherUserId": _recipientId},
       );
 
       final dynamic responseData = response.data;
@@ -1278,6 +1919,8 @@ class PersonalChatController extends ChangeNotifier {
     final String? parentMsgId = _selectedReplyMessage?["id"]?.toString();
     final String? replyText = _selectedReplyMessage?["text"]?.toString();
     final String? replySender = _selectedReplyMessage?["sender"]?.toString();
+    final String? replyToType = _selectedReplyMessage?["type"]?.toString();
+    final String? replyToUrl = _selectedReplyMessage?["url"]?.toString();
 
     _selectedReplyMessage = null;
     notifyListeners();
@@ -1305,28 +1948,25 @@ class PersonalChatController extends ChangeNotifier {
         final msgData = json['data']?['message'] ?? json['data'] ?? {};
         final messageModel = MessageModel.fromJson(msgData);
 
-        final newMsgMap = {
-          "id": messageModel.id,
-          "sender": "You",
-          "text": messageModel.content ?? "Sticker",
-          "time": messageModel.createdAt != null
-              ? DateHelper.formatTime(messageModel.createdAt!.toIso8601String())
-              : 'Now',
-          "createdAt": messageModel.createdAt != null
-              ? messageModel.createdAt!.toIso8601String()
-              : DateTime.now().toIso8601String(),
-          "isOutgoing": true,
-          "type": messageModel.messageType ?? 'sticker',
-          "url": messageModel.fileUrl != null
-              ? ApiService.getImageUrl(messageModel.fileUrl!)
-              : ApiService.getImageUrl(stickerPath),
-          "moderation_status": messageModel.moderationStatus ?? 'Approved',
-          "parent_message_id": parentMsgId,
-          "replyTo": replyText,
-          "replyToSender": replySender,
+        // Emit through socket for real-time messaging
+        final socketPayload = {
+          "senderId": _userId,
+          "recipientId": _recipientId,
+          "content": messageModel.content ?? "Sticker",
+          "message_type": messageModel.messageType ?? "sticker",
+          "file_url": messageModel.fileUrl,
+          "parentMessageId": parentMsgId,
+          "_id": messageModel.id,
+          "createdAt": messageModel.createdAt?.toIso8601String(),
         };
+        developer.log(
+          "🔌 SOCKET: Emitting sticker new-message via socket: $socketPayload",
+        );
+        SocketService().emit('send-message', socketPayload);
 
-        _messages.add(newMsgMap);
+        // Fetch latest history to display the message with correct DB schema and IDs
+        await fetchChatHistory(_recipientId!);
+
         if (_isNewChat) {
           _isNewChat = false;
         }
@@ -1417,9 +2057,155 @@ class PersonalChatController extends ChangeNotifier {
     }
   }
 
+  void _onMessagesRead() {
+    if (_isDisposed || _recipientId == null) return;
+    final data = SocketService().messagesReadNotifier.value;
+    if (data == null) return;
+
+    final String? eventChatId = data['chatId']?.toString();
+    final String? readerId = data['readerId']?.toString() ?? data['userId']?.toString();
+    if (eventChatId == null) return;
+
+    final bool isMyChat = (eventChatId == _recipientId ||
+        eventChatId == _userId ||
+        readerId == _recipientId ||
+        readerId == _userId);
+
+    if (isMyChat) {
+      if (readerId == _recipientId) {
+        developer.log(
+          "PersonalChatController: messages-read real-time event for chatId=$eventChatId, readerId=$readerId. Recipient read our messages. Updating all outgoing messages to 'read' status.",
+        );
+
+        bool updated = false;
+        for (int i = 0; i < _messages.length; i++) {
+          if (_messages[i]['isOutgoing'] == true &&
+              _messages[i]['status'] != 'read') {
+            _messages[i]['status'] = 'read';
+            updated = true;
+          }
+        }
+        if (updated) {
+          notifyListeners();
+        }
+      }
+    }
+  }
+
+  void _onMessagesDelivered() {
+    if (_isDisposed || _recipientId == null) return;
+    final data = SocketService().messagesDeliveredNotifier.value;
+    if (data == null) return;
+
+    final String? eventRecipientId = data['recipientId']?.toString();
+    if (eventRecipientId == null) return;
+
+    if (eventRecipientId == _recipientId) {
+      developer.log(
+        "PersonalChatController: messages-delivered real-time event for recipientId=$eventRecipientId. Updating sent outgoing messages to 'delivered' status.",
+      );
+
+      bool updated = false;
+      for (int i = 0; i < _messages.length; i++) {
+        final currentStatus = _messages[i]['status'];
+        if (_messages[i]['isOutgoing'] == true &&
+            (currentStatus == null || currentStatus == 'sent')) {
+          _messages[i]['status'] = 'delivered';
+          updated = true;
+        }
+      }
+      if (updated) {
+        notifyListeners();
+      }
+    }
+  }
+
+  void handleTyping() {
+    if (_userId == null || _recipientId == null) return;
+
+    final String myId = _userId!;
+    final String myName = _userName ?? "User";
+
+    final now = DateTime.now();
+    if (_lastTypingEmit == null ||
+        now.difference(_lastTypingEmit!) > const Duration(seconds: 1)) {
+      _lastTypingEmit = now;
+      SocketService().emitTypingStatus(
+        chatId: _recipientId!,
+        userId: myId,
+        userName: myName,
+        isGroup: false,
+        isTyping: true,
+      );
+    }
+
+    _stopTypingTimer?.cancel();
+    _stopTypingTimer = Timer(const Duration(seconds: 3), () {
+      if (_isDisposed) return;
+      SocketService().emitTypingStatus(
+        chatId: _recipientId!,
+        userId: myId,
+        userName: myName,
+        isGroup: false,
+        isTyping: false,
+      );
+      _lastTypingEmit = null;
+    });
+  }
+
+  void _onTypingIndicatorChanged() async {
+    if (_isDisposed || _recipientId == null) return;
+
+    final data = SocketService().typingIndicatorNotifier.value;
+    if (data == null) return;
+
+    // Enforce reciprocal privacy: if local user disabled typing indicators, ignore incoming typing statuses
+    final bool showTyping = await SocketService()
+        .getShowTypingIndicatorSetting();
+    if (!showTyping) {
+      if (_isRecipientTyping) {
+        _isRecipientTyping = false;
+        notifyListeners();
+      }
+      return;
+    }
+
+    final String? chatId = data['chatId']?.toString();
+    final String? userId = data['userId']?.toString();
+    final bool? isTyping = data['isTyping'] as bool?;
+
+    if (chatId == null || userId == null || isTyping == null) return;
+
+    // In 1:1 chat, chatId from server could be our userId or recipientId.
+    if (chatId == _userId || chatId == _recipientId) {
+      if (userId == _recipientId) {
+        if (_isRecipientTyping != isTyping) {
+          _isRecipientTyping = isTyping;
+          notifyListeners();
+          if (isTyping) {
+            scrollToBottom();
+          }
+        }
+      }
+    }
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
+    _stopTypingTimer?.cancel();
+    SocketService().messageQueueNotifier.removeListener(_onMessageQueueChanged);
+    SocketService().userStatusChangeNotifier.removeListener(
+      _onUserStatusChange,
+    );
+    SocketService().messagesReadNotifier.removeListener(_onMessagesRead);
+    SocketService().messagesDeliveredNotifier.removeListener(_onMessagesDelivered);
+    SocketService().typingIndicatorNotifier.removeListener(
+      _onTypingIndicatorChanged,
+    );
+    if (SocketService().activeChatId == _recipientId) {
+      SocketService().activeChatId = null;
+    }
     messageController.dispose();
     scrollController.dispose();
     super.dispose();
