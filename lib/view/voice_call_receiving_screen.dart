@@ -13,6 +13,7 @@ import 'package:shieldconnect_app/view/video_calling_screen.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/main.dart';
 
 class VoiceCallReceivingScreen extends StatelessWidget {
   final String userName;
@@ -72,6 +73,10 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         : (callManager.callerId ?? '');
 
     if (otherId.isNotEmpty) {
+      String resolvedName = userName;
+      if (resolvedName.contains(" and ")) {
+        resolvedName = resolvedName.split(" and ").first;
+      }
       bool hasLeft = false;
       try {
         final matchingParticipant = callController.participants.firstWhere((p) {
@@ -86,6 +91,8 @@ class VoiceCallReceivingScreen extends StatelessWidget {
             status == 'missed' ||
             status == 'rejected') {
           hasLeft = true;
+        } else {
+          resolvedName = matchingParticipant['name'] ?? matchingParticipant['username'] ?? resolvedName;
         }
       } catch (_) {
         // If otherId is not found in participants list and we have successfully fetched participants, then they have left.
@@ -105,7 +112,7 @@ class VoiceCallReceivingScreen extends StatelessWidget {
 
         gridMembers.add({
           'user_id': otherId,
-          'name': userName,
+          'name': resolvedName,
           'avatar': avatarUrl,
           'isMe': false,
           'is_muted': isOtherMuted,
@@ -155,7 +162,10 @@ class VoiceCallReceivingScreen extends StatelessWidget {
     return Consumer2<CallManager, CallController>(
       builder: (context, callManager, callController, child) {
         final roomManager = callManager.roomManager;
-        final isVideoActive = callManager.isVideo || roomManager.isCameraOn || roomManager.remoteVideoTrack != null;
+        final isVideoActive =
+            callManager.isVideo ||
+            roomManager.isCameraOn ||
+            roomManager.remoteVideoTrack != null;
         if (isVideoActive) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             callManager.setVideoCallMode(true);
@@ -208,432 +218,504 @@ class VoiceCallReceivingScreen extends StatelessWidget {
           name: 'VoiceCallReceivingScreen',
         );
 
-        return Scaffold(
-          backgroundColor: const Color(0xFF121212), // Deep luxurious immersive black background
-          body: SafeArea(
-            child: Stack(
-              children: [
-                // 1. Main Background Content: Grid view or standard layout
-                hasAddedMembers
-                    ? Positioned.fill(
-                        child: CallGridView(
-                          members: gridMembers,
-                          callDuration: callManager.callDuration,
-                        ),
-                      )
-                    : isCallEnding
-                    ? const SizedBox.shrink()
-                    : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Builder(
-                              builder: (context) {
-                                final String otherId = activeOther.isNotEmpty
-                                    ? (activeOther['user_id']?.toString() ?? '')
-                                    : ((callManager.myUserId ==
-                                              callManager.callerId)
-                                          ? (callManager.receiverId ?? '')
-                                          : (callManager.callerId ?? ''));
-                                final bool isOtherMuted = activeOther.isNotEmpty
-                                    ? (activeOther['is_muted'] == true)
-                                    : (callManager.mutedParticipants[otherId] ==
-                                              true ||
-                                          callController.participants.any((p) {
-                                            final pId =
-                                                p['user_id'] ??
-                                                p['id'] ??
-                                                p['_id'];
-                                            return pId?.toString() == otherId &&
-                                                (p['is_muted'] == true ||
-                                                    p['isMuted'] == true);
-                                          }));
-                                final isConnected =
-                                    callManager.state == CallState.connected;
+        return PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) {
+              callManager.setMinimized(true);
+            }
+          },
+          child: Scaffold(
+            backgroundColor: const Color(
+              0xFF121212,
+            ), // Deep luxurious immersive black background
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  // 1. Main Background Content: Grid view or standard layout
+                  hasAddedMembers
+                      ? Positioned.fill(
+                          child: CallGridView(
+                            members: gridMembers,
+                            callDuration: callManager.callDuration,
+                          ),
+                        )
+                      : isCallEnding
+                      ? const SizedBox.shrink()
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Builder(
+                                builder: (context) {
+                                  final String otherId = activeOther.isNotEmpty
+                                      ? (activeOther['user_id']?.toString() ??
+                                            '')
+                                      : ((callManager.myUserId ==
+                                                callManager.callerId)
+                                            ? (callManager.receiverId ?? '')
+                                            : (callManager.callerId ?? ''));
+                                  final bool isOtherMuted =
+                                      activeOther.isNotEmpty
+                                      ? (activeOther['is_muted'] == true)
+                                      : (callManager.mutedParticipants[otherId] ==
+                                                true ||
+                                            callController.participants.any((
+                                              p,
+                                            ) {
+                                              final pId =
+                                                  p['user_id'] ??
+                                                  p['id'] ??
+                                                  p['_id'];
+                                              return pId?.toString() ==
+                                                      otherId &&
+                                                  (p['is_muted'] == true ||
+                                                      p['isMuted'] == true);
+                                            }));
+                                  final isConnected =
+                                      callManager.state == CallState.connected;
 
-                                return Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    // Animated pulsing outer avatar glow container
-                                    Container(
-                                      width: 160,
-                                      height: 160,
-                                      decoration: BoxDecoration(
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      // Animated pulsing outer avatar glow container
+                                      Container(
+                                        width: 160,
+                                        height: 160,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: appColor(
+                                                context,
+                                              ).white.withValues(alpha: 0.04),
+                                              blurRadius: 30,
+                                              spreadRadius: 20,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Center(
+                                          child: Container(
+                                            width: 140,
+                                            height: 140,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: appColor(
+                                                  context,
+                                                ).white.withValues(alpha: 0.1),
+                                                width: 2,
+                                              ),
+                                              color: appColor(
+                                                context,
+                                              ).white.withValues(alpha: 0.06),
+                                            ),
+                                            child:
+                                                (activeAvatar != null &&
+                                                    activeAvatar.isNotEmpty)
+                                                ? ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          70,
+                                                        ),
+                                                    child: CachedNetworkImage(
+                                                      imageUrl:
+                                                          ApiService.getImageUrl(
+                                                            activeAvatar,
+                                                          ),
+                                                      cacheKey:
+                                                          _normalizeAvatarUrl(
+                                                            activeAvatar,
+                                                          ),
+                                                      fit: BoxFit.cover,
+                                                      placeholder:
+                                                          (
+                                                            context,
+                                                            url,
+                                                          ) => const Center(
+                                                            child: SizedBox(
+                                                              width: 32,
+                                                              height: 32,
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2,
+                                                                    color: Colors
+                                                                        .white30,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                      errorWidget:
+                                                          (
+                                                            context,
+                                                            url,
+                                                            error,
+                                                          ) => Icon(
+                                                            Icons.person,
+                                                            color: appColor(
+                                                              context,
+                                                            ).white,
+                                                            size: 64,
+                                                          ),
+                                                    ),
+                                                  )
+                                                : Icon(
+                                                    Icons.person,
+                                                    color: appColor(
+                                                      context,
+                                                    ).white,
+                                                    size: 64,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isConnected && isOtherMuted)
+                                        Positioned(
+                                          bottom: 4,
+                                          right: 4,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFD32F2F)
+                                                  .withValues(
+                                                    alpha: 0.95,
+                                                  ), // Premium crimson mute badge
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Colors.white,
+                                                width: 2.5,
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.3),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 4),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.mic_off,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 28),
+
+                              // Bold styled user identity text
+                              Text(
+                                activeName,
+                                style: fontStyle.clashDisplayBold24.textColor(
+                                  appColor(context).white,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Incoming Call Status / Call Duration
+                              Text(
+                                isConnected
+                                    ? callManager.callDuration
+                                    : callManager.incomingParticipantsCount > 1
+                                    ? "Incoming voice call... (${callManager.incomingParticipantsCount} members in this call)"
+                                    : "Incoming voice call...",
+                                style: fontStyle.clashDisplayMedium14.textColor(
+                                  appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                  // 2. Actions (Incoming Call Actions OR Active Call Toolbar)
+                  if (!isConnected)
+                    Positioned(
+                      bottom: 64,
+                      left: 48,
+                      right: 48,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Answer Button (Left End)
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  context.read<CallManager>().acceptCall();
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: const BoxDecoration(
+                                    color: Color(
+                                      0xFF23C123,
+                                    ), // Vibrant active call green
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Color(0xFF1B5E20),
+                                        offset: Offset(0, 4),
+                                        blurRadius: 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Image.asset(
+                                      ImageAssets.answerCall,
+                                      color: Colors.white,
+                                      width: 26,
+                                      height: 26,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "Answer",
+                                style: fontStyle.clashDisplayMedium14.textColor(
+                                  appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Decline Button (Right End)
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  context.read<CallManager>().declineCall();
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: const BoxDecoration(
+                                    color: Color(
+                                      0xFFD32F2F,
+                                    ), // Vibrant material red hangup color
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Color(0xFFB71C1C),
+                                        offset: Offset(0, 4),
+                                        blurRadius: 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Image.asset(
+                                      ImageAssets.endCall,
+                                      color: Colors.white,
+                                      width: 26,
+                                      height: 26,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "Decline",
+                                style: fontStyle.clashDisplayMedium14.textColor(
+                                  appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    // Connected Floating Translucent Bottom Toolbar
+                    Positioned(
+                      bottom: 32,
+                      left: 20,
+                      right: 20,
+                      child: Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(40),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(
+                              sigmaX: 12.0,
+                              sigmaY: 12.0,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF262626,
+                                ).withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(40),
+                                border: Border.all(
+                                  color: appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.08),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: appColor(
+                                      context,
+                                    ).black.withValues(alpha: 0.2),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // A. Standard Toolbar Actions
+                                  GestureDetector(
+                                    onTap: () {
+                                      callManager.setCameraEnabled(
+                                        !roomManager.isCameraOn,
+                                      );
+                                    },
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.videoOn,
+                                      isActive: roomManager.isCameraOn,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      callManager.setMicrophoneEnabled(isMuted);
+                                    },
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: isMuted
+                                          ? ImageAssets.micOff
+                                          : ImageAssets.recorder,
+                                      isActive: !isMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      roomManager.setSpeakerphoneOn(
+                                        !isSpeakerOn,
+                                      );
+                                    },
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.volume,
+                                      isActive: isSpeakerOn,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      showAddUserDialog(
+                                        context,
+                                        callManager.myUserId,
+                                      );
+                                    },
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.addUser,
+                                      isActive: true,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+
+                                  // B. Solid Red Immediate Termination Hangup Trigger
+                                  GestureDetector(
+                                    onTap: () {
+                                      callManager.endCall();
+                                    },
+                                    child: Container(
+                                      width: 52,
+                                      height: 52,
+                                      decoration: const BoxDecoration(
+                                        color: Color(
+                                          0xFFD32F2F,
+                                        ), // Vibrant material red hangup color
                                         shape: BoxShape.circle,
                                         boxShadow: [
                                           BoxShadow(
-                                            color: appColor(
-                                              context,
-                                            ).white.withValues(alpha: 0.04),
-                                            blurRadius: 30,
-                                            spreadRadius: 20,
+                                            color: Color(0xFFB71C1C),
+                                            offset: Offset(0, 3),
+                                            blurRadius: 0,
                                           ),
                                         ],
                                       ),
                                       child: Center(
-                                        child: Container(
-                                          width: 140,
-                                          height: 140,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: appColor(
-                                                context,
-                                              ).white.withValues(alpha: 0.1),
-                                              width: 2,
-                                            ),
-                                            color: appColor(
-                                              context,
-                                            ).white.withValues(alpha: 0.06),
-                                          ),
-                                          child:
-                                              (activeAvatar != null &&
-                                                  activeAvatar.isNotEmpty)
-                                              ? ClipRRect(
-                                                  borderRadius:
-                                                      BorderRadius.circular(70),
-                                                  child: CachedNetworkImage(
-                                                    imageUrl:
-                                                        ApiService.getImageUrl(
-                                                          activeAvatar,
-                                                        ),
-                                                    cacheKey:
-                                                        _normalizeAvatarUrl(
-                                                          activeAvatar,
-                                                        ),
-                                                    fit: BoxFit.cover,
-                                                    placeholder:
-                                                        (
-                                                          context,
-                                                          url,
-                                                        ) => const Center(
-                                                          child: SizedBox(
-                                                            width: 32,
-                                                            height: 32,
-                                                            child:
-                                                                CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2,
-                                                                  color: Colors
-                                                                      .white30,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                    errorWidget:
-                                                        (context, url, error) =>
-                                                            Icon(
-                                                              Icons.person,
-                                                              color: appColor(
-                                                                context,
-                                                              ).white,
-                                                              size: 64,
-                                                            ),
-                                                  ),
-                                                )
-                                              : Icon(
-                                                  Icons.person,
-                                                  color: appColor(
-                                                    context,
-                                                  ).white,
-                                                  size: 64,
-                                                ),
+                                        child: Icon(
+                                          Icons.phone_disabled_outlined,
+                                          color: appColor(context).white,
+                                          size: 22,
                                         ),
                                       ),
                                     ),
-                                    if (isConnected && isOtherMuted)
-                                      Positioned(
-                                        bottom: 4,
-                                        right: 4,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFD32F2F)
-                                                .withValues(
-                                                  alpha: 0.95,
-                                                ), // Premium crimson mute badge
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 2.5,
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.3,
-                                                ),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 4),
-                                              ),
-                                            ],
-                                          ),
-                                          child: const Icon(
-                                            Icons.mic_off,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 28),
-
-                            // Bold styled user identity text
-                            Text(
-                              activeName,
-                              style: fontStyle.clashDisplayBold24.textColor(
-                                appColor(context).white,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Incoming Call Status / Call Duration
-                            Text(
-                              isConnected
-                                  ? callManager.callDuration
-                                  : callManager.incomingParticipantsCount > 1
-                                  ? "Incoming voice call... (${callManager.incomingParticipantsCount} members in this call)"
-                                  : "Incoming voice call...",
-                              style: fontStyle.clashDisplayMedium14.textColor(
-                                appColor(context).white.withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                // 2. Actions (Incoming Call Actions OR Active Call Toolbar)
-                if (!isConnected)
-                  Positioned(
-                    bottom: 64,
-                    left: 48,
-                    right: 48,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Answer Button (Left End)
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                context.read<CallManager>().acceptCall();
-                              },
-                              child: Container(
-                                width: 64,
-                                height: 64,
-                                decoration: const BoxDecoration(
-                                  color: Color(
-                                    0xFF23C123,
-                                  ), // Vibrant active call green
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Color(0xFF1B5E20),
-                                      offset: Offset(0, 4),
-                                      blurRadius: 0,
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Image.asset(
-                                    ImageAssets.answerCall,
-                                    color: Colors.white,
-                                    width: 26,
-                                    height: 26,
                                   ),
-                                ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              "Answer",
-                              style: fontStyle.clashDisplayMedium14.textColor(
-                                appColor(context).white.withValues(alpha: 0.9),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Decline Button (Right End)
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: () {
-                                context.read<CallManager>().declineCall();
-                              },
-                              child: Container(
-                                width: 64,
-                                height: 64,
-                                decoration: const BoxDecoration(
-                                  color: Color(
-                                    0xFFD32F2F,
-                                  ), // Vibrant material red hangup color
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Color(0xFFB71C1C),
-                                      offset: Offset(0, 4),
-                                      blurRadius: 0,
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Image.asset(
-                                    ImageAssets.endCall,
-                                    color: Colors.white,
-                                    width: 26,
-                                    height: 26,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              "Decline",
-                              style: fontStyle.clashDisplayMedium14.textColor(
-                                appColor(context).white.withValues(alpha: 0.9),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  // Connected Floating Translucent Bottom Toolbar
-                  Positioned(
-                    bottom: 32,
-                    left: 20,
-                    right: 20,
-                    child: Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(40),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 14,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF262626,
-                              ).withValues(alpha: 0.85),
-                              borderRadius: BorderRadius.circular(40),
-                              border: Border.all(
-                                color: appColor(
-                                  context,
-                                ).white.withValues(alpha: 0.08),
-                                width: 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: appColor(
-                                    context,
-                                  ).black.withValues(alpha: 0.2),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // A. Standard Toolbar Actions
-                                GestureDetector(
-                                  onTap: () {
-                                    callManager.setCameraEnabled(
-                                      !roomManager.isCameraOn,
-                                    );
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.videoOn,
-                                    isActive: roomManager.isCameraOn,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                GestureDetector(
-                                  onTap: () {
-                                    callManager.setMicrophoneEnabled(isMuted);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: isMuted
-                                        ? ImageAssets.micOff
-                                        : ImageAssets.recorder,
-                                    isActive: !isMuted,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                GestureDetector(
-                                  onTap: () {
-                                    roomManager.setSpeakerphoneOn(!isSpeakerOn);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.volume,
-                                    isActive: isSpeakerOn,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                GestureDetector(
-                                  onTap: () {
-                                    showAddUserDialog(
-                                      context,
-                                      callManager.myUserId,
-                                    );
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.addUser,
-                                    isActive: true,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-
-                                // B. Solid Red Immediate Termination Hangup Trigger
-                                GestureDetector(
-                                  onTap: () {
-                                    callManager.endCall();
-                                  },
-                                  child: Container(
-                                    width: 52,
-                                    height: 52,
-                                    decoration: const BoxDecoration(
-                                      color: Color(
-                                        0xFFD32F2F,
-                                      ), // Vibrant material red hangup color
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Color(0xFFB71C1C),
-                                          offset: Offset(0, 3),
-                                          blurRadius: 0,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Icon(
-                                        Icons.phone_disabled_outlined,
-                                        color: appColor(context).white,
-                                        size: 22,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                  if (isConnected)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: GestureDetector(
+                        onTap: () {
+                          navigatorKey.currentState?.pop();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: Colors.white.withValues(alpha: 0.08),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                              // const SizedBox(width: 6),
+                              // Text(
+                              //   "Back",
+                              //   style: fontStyle.clashDisplayMedium12.textColor(
+                              //     Colors.white,
+                              //   ),
+                              // ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );

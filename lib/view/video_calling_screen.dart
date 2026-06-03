@@ -44,6 +44,10 @@ class VideoCallingScreen extends StatelessWidget {
         : (callManager.callerId ?? '');
     
     if (otherId.isNotEmpty) {
+      String resolvedName = userName;
+      if (resolvedName.contains(" and ")) {
+        resolvedName = resolvedName.split(" and ").first;
+      }
       bool hasLeft = false;
       try {
         final matchingParticipant = callController.participants.firstWhere(
@@ -55,6 +59,8 @@ class VideoCallingScreen extends StatelessWidget {
         final String? status = matchingParticipant['status']?.toString().toLowerCase();
         if (status == 'left' || status == 'declined' || status == 'missed' || status == 'rejected') {
           hasLeft = true;
+        } else {
+          resolvedName = matchingParticipant['name'] ?? matchingParticipant['username'] ?? resolvedName;
         }
       } catch (_) {
         if (callController.hasFetchedParticipants) {
@@ -71,7 +77,7 @@ class VideoCallingScreen extends StatelessWidget {
 
         gridMembers.add({
           'user_id': otherId,
-          'name': userName,
+          'name': resolvedName,
           'avatar': callManager.receiverAvatar,
           'isMe': false,
           'is_muted': isOtherMuted,
@@ -105,78 +111,96 @@ class VideoCallingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: appColor(context).black,
-      body: Consumer2<CallManager, CallController>(
-        builder: (context, callManager, callController, child) {
-          final roomManager = callManager.roomManager;
-          final isMuted = roomManager.isMuted;
-          final isSpeakerOn = roomManager.isSpeakerOn;
-          final isCameraOn = roomManager.isCameraOn;
-          final localVideoTrack = roomManager.localVideoTrack;
+    return Consumer2<CallManager, CallController>(
+      builder: (context, callManager, callController, child) {
+        final roomManager = callManager.roomManager;
+        final isMuted = roomManager.isMuted;
+        final isSpeakerOn = roomManager.isSpeakerOn;
+        final isCameraOn = roomManager.isCameraOn;
+        final localVideoTrack = roomManager.localVideoTrack;
 
-          final gridMembers = _buildGridMembers(callManager, callController, context);
-          final bool hasMultipleParticipants = gridMembers.length > 2;
+        final gridMembers = _buildGridMembers(callManager, callController, context);
+        final bool hasMultipleParticipants = gridMembers.length > 2;
 
-          final activeOther = gridMembers.firstWhere(
-            (m) => m['isMe'] != true,
-            orElse: () => <String, dynamic>{},
-          );
+        final activeOther = gridMembers.firstWhere(
+          (m) => m['isMe'] != true,
+          orElse: () => <String, dynamic>{},
+        );
 
-          // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
-          if (callManager.state == CallState.connected && activeOther.isEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              callManager.endCall();
+        // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
+        if (callManager.state == CallState.connected && activeOther.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            callManager.endCall();
+          });
+        }
+
+        final String activeName = activeOther.isNotEmpty 
+            ? (activeOther['name'] ?? userName) 
+            : userName;
+        final String activeAvatar = activeOther.isNotEmpty 
+            ? (activeOther['avatar']?.toString() ?? '') 
+            : (callManager.receiverAvatar ?? '');
+
+        final String activeOtherId = activeOther.isNotEmpty
+            ? (activeOther['user_id']?.toString() ?? '')
+            : ((callManager.myUserId == callManager.callerId)
+                ? (callManager.receiverId ?? '')
+                : (callManager.callerId ?? ''));
+
+        final bool isOtherMuted = callManager.mutedParticipants[activeOtherId] == true ||
+            callController.participants.any((p) {
+              final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+              return pId?.toString() == activeOtherId && (p['is_muted'] == true || p['isMuted'] == true);
             });
-          }
 
-          final String activeName = activeOther.isNotEmpty 
-              ? (activeOther['name'] ?? userName) 
-              : userName;
-          final String activeAvatar = activeOther.isNotEmpty 
-              ? (activeOther['avatar']?.toString() ?? '') 
-              : (callManager.receiverAvatar ?? '');
+        // Dynamic lookup of the active remaining participant's video track in 1-to-1 mode
+        final remoteVideoTrack = roomManager.getRemoteVideoTrackFor(activeOtherId) ?? roomManager.remoteVideoTrack;
+        final isRemoteVideoActive = remoteVideoTrack != null && !remoteVideoTrack.muted;
 
-          final String activeOtherId = activeOther.isNotEmpty
-              ? (activeOther['user_id']?.toString() ?? '')
-              : ((callManager.myUserId == callManager.callerId)
-                  ? (callManager.receiverId ?? '')
-                  : (callManager.callerId ?? ''));
-
-          final bool isOtherMuted = callManager.mutedParticipants[activeOtherId] == true ||
-              callController.participants.any((p) {
-                final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                return pId?.toString() == activeOtherId && (p['is_muted'] == true || p['isMuted'] == true);
-              });
-
-          // Dynamic lookup of the active remaining participant's video track in 1-to-1 mode
-          final remoteVideoTrack = roomManager.getRemoteVideoTrackFor(activeOtherId) ?? roomManager.remoteVideoTrack;
-          final isRemoteVideoActive = remoteVideoTrack != null && !remoteVideoTrack.muted;
-
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // 1. Background Content: Live Grid view or Immersive Full-Screen 1-to-1 Video/Avatar
-              hasMultipleParticipants
-                  ? Positioned.fill(
-                      child: VideoCallGridView(
-                        members: gridMembers,
-                        callManager: callManager,
-                        callController: callController,
-                      ),
-                    )
-                  : (isRemoteVideoActive
-                      ? lk.VideoTrackRenderer(
-                          remoteVideoTrack,
-                        )
-                      : (activeAvatar.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: ApiService.getImageUrl(activeAvatar),
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: appColor(context).grey900,
-                              ),
-                              errorWidget: (context, url, error) => Container(
+        return PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) {
+              callManager.setMinimized(true);
+            }
+          },
+          child: Scaffold(
+            backgroundColor: appColor(context).black,
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 1. Background Content: Live Grid view or Immersive Full-Screen 1-to-1 Video/Avatar
+                hasMultipleParticipants
+                    ? Positioned.fill(
+                        child: VideoCallGridView(
+                          members: gridMembers,
+                          callManager: callManager,
+                          callController: callController,
+                        ),
+                      )
+                    : (isRemoteVideoActive
+                        ? lk.VideoTrackRenderer(
+                            remoteVideoTrack,
+                          )
+                        : (activeAvatar.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: ApiService.getImageUrl(activeAvatar),
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: appColor(context).grey900,
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: appColor(context).grey900,
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.person,
+                                      color: appColor(context).white.withValues(alpha: 0.15),
+                                      size: 100,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Container(
                                 color: appColor(context).grey900,
                                 child: Center(
                                   child: Icon(
@@ -185,91 +209,91 @@ class VideoCallingScreen extends StatelessWidget {
                                     size: 100,
                                   ),
                                 ),
-                              ),
-                            )
-                          : Container(
-                              color: appColor(context).grey900,
-                              child: Center(
-                                child: Icon(
-                                  Icons.person,
-                                  color: appColor(context).white.withValues(alpha: 0.15),
-                                  size: 100,
-                                ),
-                              ),
-                            ))),
+                              ))),
 
-              // Apply heavy premium blur to the background when remote video is not yet active (only in 1-to-1)
-              if (!hasMultipleParticipants && !isRemoteVideoActive)
-                Positioned.fill(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-                    child: Container(
-                      color: appColor(context).black.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ),
-
-              // Subtle top gradient layer to maintain text contrast on bright video feeds
-              if (!hasMultipleParticipants)
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          appColor(context).black.withValues(alpha: 0.4),
-                          appColor(context).transparent,
-                          appColor(context).transparent,
-                          appColor(context).black.withValues(alpha: 0.3),
-                        ],
-                        stops: const [0.0, 0.2, 0.8, 1.0],
+                // Apply heavy premium blur to the background when remote video is not yet active (only in 1-to-1)
+                if (!hasMultipleParticipants && !isRemoteVideoActive)
+                  Positioned.fill(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                      child: Container(
+                        color: appColor(context).black.withValues(alpha: 0.6),
                       ),
                     ),
                   ),
-                ),
 
-              // Callee circle avatar and status when calling / camera off (only in 1-to-1)
-              if (!hasMultipleParticipants && !isRemoteVideoActive)
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: appColor(context).white.withValues(alpha: 0.3),
-                                width: 4,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: appColor(context).black.withValues(alpha: 0.3),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
+                // Subtle top gradient layer to maintain text contrast on bright video feeds
+                if (!hasMultipleParticipants)
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            appColor(context).black.withValues(alpha: 0.4),
+                            appColor(context).transparent,
+                            appColor(context).transparent,
+                            appColor(context).black.withValues(alpha: 0.3),
+                          ],
+                          stops: const [0.0, 0.2, 0.8, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Callee circle avatar and status when calling / camera off (only in 1-to-1)
+                if (!hasMultipleParticipants && !isRemoteVideoActive)
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: appColor(context).white.withValues(alpha: 0.3),
+                                  width: 4,
                                 ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(60),
-                              child: activeAvatar.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: ApiService.getImageUrl(activeAvatar),
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
-                                        color: appColor(context).grey800,
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            color: appColor(context).white.withValues(alpha: 0.2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: appColor(context).black.withValues(alpha: 0.3),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(60),
+                                child: activeAvatar.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: ApiService.getImageUrl(activeAvatar),
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) => Container(
+                                          color: appColor(context).grey800,
+                                          child: Center(
+                                            child: CircularProgressIndicator(
+                                              color: appColor(context).white.withValues(alpha: 0.2),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      errorWidget: (context, url, error) => Container(
+                                        errorWidget: (context, url, error) => Container(
+                                          color: appColor(context).grey800,
+                                          child: Center(
+                                            child: Icon(
+                                              Icons.person,
+                                              color: appColor(context).white.withValues(alpha: 0.5),
+                                              size: 60,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
                                         color: appColor(context).grey800,
                                         child: Center(
                                           child: Icon(
@@ -279,384 +303,401 @@ class VideoCallingScreen extends StatelessWidget {
                                           ),
                                         ),
                                       ),
-                                    )
-                                  : Container(
-                                      color: appColor(context).grey800,
-                                      child: Center(
-                                        child: Icon(
-                                          Icons.person,
-                                          color: appColor(context).white.withValues(alpha: 0.5),
-                                          size: 60,
-                                        ),
-                                      ),
-                                    ),
+                              ),
                             ),
-                          ),
-                          if (isOtherMuted)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFD32F2F),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: appColor(context).white,
-                                    width: 2,
+                            if (isOtherMuted)
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFD32F2F),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: appColor(context).white,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
+                                  child: const Icon(
+                                    Icons.mic_off,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (callManager.state != CallState.connected) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            callManager.state == CallState.dialing ? "Calling..." : "Ringing...",
+                            style: fontStyle.clashDisplaySemiBold16.textColor(appColor(context).white),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                // 2. Top Styled Identity Information (only in 1-to-1)
+                if (!hasMultipleParticipants)
+                  Positioned(
+                    top: 64,
+                    left: 20,
+                    right: 20,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                activeName,
+                                style: fontStyle.clashDisplayBold24.textColor(appColor(context).white).copyWith(
+                                  shadows: [
+                                    Shadow(
+                                      color: appColor(context).black45,
+                                      offset: const Offset(0, 2),
+                                      blurRadius: 4,
                                     ),
                                   ],
                                 ),
-                                child: const Icon(
-                                  Icons.mic_off,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
                               ),
-                            ),
+                              if (isOtherMuted) ...[
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.mic_off,
+                                  color: const Color(0xFFD32F2F),
+                                  size: 22,
+                                  shadows: [
+                                    Shadow(
+                                      color: appColor(context).black45,
+                                      offset: const Offset(0, 2),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            callManager.callDuration,
+                            style: fontStyle.clashDisplayMedium14.textColor(appColor(context).white.withValues(alpha: 0.9)),
+                          ),
                         ],
                       ),
-                      if (callManager.state != CallState.connected) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          callManager.state == CallState.dialing ? "Calling..." : "Ringing...",
-                          style: fontStyle.clashDisplaySemiBold16.textColor(appColor(context).white),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-              // 2. Top Styled Identity Information (only in 1-to-1)
-              if (!hasMultipleParticipants)
-                Positioned(
-                  top: 64,
-                  left: 20,
-                  right: 20,
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              activeName,
-                              style: fontStyle.clashDisplayBold24.textColor(appColor(context).white).copyWith(
-                                shadows: [
-                                  Shadow(
-                                    color: appColor(context).black45,
-                                    offset: const Offset(0, 2),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (isOtherMuted) ...[
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.mic_off,
-                                color: const Color(0xFFD32F2F),
-                                size: 22,
-                                shadows: [
-                                  Shadow(
-                                    color: appColor(context).black45,
-                                    offset: const Offset(0, 2),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          callManager.callDuration,
-                          style: fontStyle.clashDisplayMedium14.textColor(appColor(context).white.withValues(alpha: 0.9)),
-                        ),
-                      ],
                     ),
                   ),
-                ),
 
-              // 3. Floating High-Fidelity Local PiP Video Feed Container (only in 1-to-1)
-              if (!hasMultipleParticipants)
-                Positioned(
-                  bottom: 120,
-                  right: 24,
-                  child: Container(
-                    width: 108,
-                    height: 160,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: appColor(context).white.withValues(alpha: 0.3),
-                        width: 1.5,
+                // 3. Floating High-Fidelity Local PiP Video Feed Container (only in 1-to-1)
+                if (!hasMultipleParticipants)
+                  Positioned(
+                    bottom: 120,
+                    right: 24,
+                    child: Container(
+                      width: 108,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: appColor(context).white.withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: appColor(context).black.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: appColor(context).black.withValues(alpha: 0.25),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: isCameraOn && localVideoTrack != null
-                                ? Transform(
-                                    alignment: Alignment.center,
-                                    transform: Matrix4.identity()..rotateY(3.14159), // Mirror horizontally
-                                    child: lk.VideoTrackRenderer(
-                                      localVideoTrack,
-                                      fit: lk.VideoViewFit.cover,
-                                    ),
-                                  )
-                                : Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      // Background shadow/avatar
-                                      (callManager.myUserAvatar != null && callManager.myUserAvatar!.isNotEmpty)
-                                          ? CachedNetworkImage(
-                                              imageUrl: ApiService.getImageUrl(callManager.myUserAvatar!),
-                                              fit: BoxFit.cover,
-                                              placeholder: (context, url) => Container(color: appColor(context).grey900),
-                                              errorWidget: (context, url, error) => Container(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: isCameraOn && localVideoTrack != null
+                                  ? Transform(
+                                      alignment: Alignment.center,
+                                      transform: Matrix4.identity()..rotateY(3.14159), // Mirror horizontally
+                                      child: lk.VideoTrackRenderer(
+                                        localVideoTrack,
+                                        fit: lk.VideoViewFit.cover,
+                                      ),
+                                    )
+                                  : Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        // Background shadow/avatar
+                                        (callManager.myUserAvatar != null && callManager.myUserAvatar!.isNotEmpty)
+                                            ? CachedNetworkImage(
+                                                imageUrl: ApiService.getImageUrl(callManager.myUserAvatar!),
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) => Container(color: appColor(context).grey900),
+                                                errorWidget: (context, url, error) => Container(
+                                                  color: appColor(context).grey900,
+                                                  child: Center(
+                                                    child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 40),
+                                                  ),
+                                                ),
+                                              )
+                                            : Container(
                                                 color: appColor(context).grey900,
                                                 child: Center(
                                                   child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 40),
                                                 ),
                                               ),
-                                            )
-                                          : Container(
-                                              color: appColor(context).grey900,
-                                              child: Center(
-                                                child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 40),
-                                              ),
+                                        // Backdrop blur
+                                        Positioned.fill(
+                                          child: BackdropFilter(
+                                            filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                                            child: Container(
+                                              color: appColor(context).black.withValues(alpha: 0.5),
                                             ),
-                                      // Backdrop blur
-                                      Positioned.fill(
-                                        child: BackdropFilter(
-                                          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                                          child: Container(
-                                            color: appColor(context).black.withValues(alpha: 0.5),
                                           ),
                                         ),
-                                      ),
-                                      // Small circle avatar in center
-                                      Center(
-                                        child: Container(
-                                          width: 52,
-                                          height: 52,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: appColor(context).white.withValues(alpha: 0.3),
-                                              width: 2,
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: appColor(context).black.withValues(alpha: 0.3),
-                                                blurRadius: 8,
-                                                spreadRadius: 1,
+                                        // Small circle avatar in center
+                                        Center(
+                                          child: Container(
+                                            width: 52,
+                                            height: 52,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: appColor(context).white.withValues(alpha: 0.3),
+                                                width: 2,
                                               ),
-                                            ],
-                                          ),
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(26),
-                                            child: (callManager.myUserAvatar != null && callManager.myUserAvatar!.isNotEmpty)
-                                                ? CachedNetworkImage(
-                                                    imageUrl: ApiService.getImageUrl(callManager.myUserAvatar!),
-                                                    fit: BoxFit.cover,
-                                                    placeholder: (context, url) => Container(
-                                                      color: appColor(context).grey800,
-                                                      child: const Center(
-                                                        child: SizedBox(
-                                                          width: 16,
-                                                          height: 16,
-                                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: appColor(context).black.withValues(alpha: 0.3),
+                                                  blurRadius: 8,
+                                                  spreadRadius: 1,
+                                                ),
+                                              ],
+                                            ),
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(26),
+                                              child: (callManager.myUserAvatar != null && callManager.myUserAvatar!.isNotEmpty)
+                                                  ? CachedNetworkImage(
+                                                      imageUrl: ApiService.getImageUrl(callManager.myUserAvatar!),
+                                                      fit: BoxFit.cover,
+                                                      placeholder: (context, url) => Container(
+                                                        color: appColor(context).grey800,
+                                                        child: const Center(
+                                                          child: SizedBox(
+                                                            width: 16,
+                                                            height: 16,
+                                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                    errorWidget: (context, url, error) => Container(
+                                                      errorWidget: (context, url, error) => Container(
+                                                        color: appColor(context).grey800,
+                                                        child: Center(
+                                                          child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 24),
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : Container(
                                                       color: appColor(context).grey800,
                                                       child: Center(
                                                         child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 24),
                                                       ),
                                                     ),
-                                                  )
-                                                : Container(
-                                                    color: appColor(context).grey800,
-                                                    child: Center(
-                                                      child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 24),
-                                                    ),
-                                                  ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                        if (isMuted)
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFD32F2F),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.mic_off,
-                                color: Colors.white,
-                                size: 12,
-                              ),
+                                      ],
+                                    ),
                             ),
                           ),
-                      ],
+                          if (isMuted)
+                            Positioned(
+                              bottom: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFD32F2F),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.mic_off,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
 
-              // 4. Bottom Blurry Glassmorphic Actions Toolbar
-              Positioned(
-                bottom: 32,
-                left: 20,
-                right: 20,
-                child: Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(40),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: appColor(context).white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(40),
-                          border: Border.all(
-                            color: appColor(context).white.withValues(alpha: 0.15),
-                            width: 1,
+                // 4. Bottom Blurry Glassmorphic Actions Toolbar
+                Positioned(
+                  bottom: 32,
+                  left: 20,
+                  right: 20,
+                  child: Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(40),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: appColor(context).black.withValues(alpha: 0.1),
-                              blurRadius: 10,
+                          decoration: BoxDecoration(
+                            color: appColor(context).white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(40),
+                            border: Border.all(
+                              color: appColor(context).white.withValues(alpha: 0.15),
+                              width: 1,
                             ),
-                          ],
-                        ),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Standard circle utility tools
-                              GestureDetector(
-                                onTap: () {
-                                  callManager.setCameraEnabled(!isCameraOn);
-                                },
-                                child: _buildRoundTool(
-                                  context,
-                                  asset: ImageAssets.videoOn,
-                                  isActive: isCameraOn,
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: appColor(context).black.withValues(alpha: 0.1),
+                                blurRadius: 10,
                               ),
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () {
-                                  callManager.setMicrophoneEnabled(isMuted);
-                                },
-                                child: _buildRoundTool(
-                                  context,
-                                  asset: isMuted ? ImageAssets.micOff : ImageAssets.recorder,
-                                  isActive: !isMuted,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () {
-                                  roomManager.setSpeakerphoneOn(!isSpeakerOn);
-                                },
-                                child: _buildRoundTool(
-                                  context,
-                                  asset: ImageAssets.volume,
-                                  isActive: isSpeakerOn,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: callManager.state == CallState.connected
-                                    ? () {
-                                        showAddUserDialog(context, callManager.myUserId);
-                                      }
-                                    : null,
-                                child: Opacity(
-                                  opacity: callManager.state == CallState.connected ? 1.0 : 0.4,
+                            ],
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Standard circle utility tools
+                                GestureDetector(
+                                  onTap: () {
+                                    callManager.setCameraEnabled(!isCameraOn);
+                                  },
                                   child: _buildRoundTool(
                                     context,
-                                    asset: ImageAssets.addUser,
-                                    isActive: callManager.state == CallState.connected,
+                                    asset: ImageAssets.videoOn,
+                                    isActive: isCameraOn,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-
-                              // Elongated solid RED hangup button seen on video calls mockup
-                              GestureDetector(
-                                onTap: () {
-                                  callManager.endCall();
-                                },
-                                child: Container(
-                                  height: 44,
-                                  width: 88,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFD32F2F), // Vibrant crimson hangup tone
-                                    borderRadius: BorderRadius.circular(22),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0xFFB71C1C),
-                                        offset: Offset(0, 3),
-                                        blurRadius: 0,
-                                      ),
-                                    ],
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () {
+                                    callManager.setMicrophoneEnabled(isMuted);
+                                  },
+                                  child: _buildRoundTool(
+                                    context,
+                                    asset: isMuted ? ImageAssets.micOff : ImageAssets.recorder,
+                                    isActive: !isMuted,
                                   ),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.phone_disabled_outlined,
-                                      color: appColor(context).white,
-                                      size: 22,
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () {
+                                    roomManager.setSpeakerphoneOn(!isSpeakerOn);
+                                  },
+                                  child: _buildRoundTool(
+                                    context,
+                                    asset: ImageAssets.volume,
+                                    isActive: isSpeakerOn,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: callManager.state == CallState.connected
+                                      ? () {
+                                          showAddUserDialog(context, callManager.myUserId);
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: callManager.state == CallState.connected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.addUser,
+                                      isActive: callManager.state == CallState.connected,
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 10),
+
+                                // Elongated solid RED hangup button seen on video calls mockup
+                                GestureDetector(
+                                  onTap: () {
+                                    callManager.endCall();
+                                  },
+                                  child: Container(
+                                    height: 44,
+                                    width: 88,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFD32F2F), // Vibrant crimson hangup tone
+                                      borderRadius: BorderRadius.circular(22),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0xFFB71C1C),
+                                          offset: Offset(0, 3),
+                                          blurRadius: 0,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.phone_disabled_outlined,
+                                        color: appColor(context).white,
+                                        size: 22,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-            );
-          },
-        ),
-      );
-    }
+
+                // 5. Minimization Back Button
+                Positioned(
+                  top: 64,
+                  left: 20,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.black.withValues(alpha: 0.5),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   /// Render standard circular toolbar modifiers
   Widget _buildRoundTool(

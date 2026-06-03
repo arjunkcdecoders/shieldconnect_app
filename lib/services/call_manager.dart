@@ -82,6 +82,21 @@ class CallManager extends ChangeNotifier {
   bool _isCallScreenPushed = false;
   bool _isReceivingScreenPushed = false;
   bool _isHandlingCallAction = false;
+  bool _isMinimized = false;
+  bool get isMinimized => _isMinimized;
+
+  void setMinimized(bool val) {
+    if (_isMinimized != val) {
+      _isMinimized = val;
+      if (val) {
+        _isCallScreenPushed = false;
+        _isReceivingScreenPushed = false;
+      } else {
+        _isCallScreenPushed = true;
+      }
+      notifyListeners();
+    }
+  }
 
   List<Map<String, dynamic>> _callHistory = [];
   List<Map<String, dynamic>> get callHistory => _callHistory;
@@ -249,8 +264,10 @@ class CallManager extends ChangeNotifier {
     bool isVideo = false,
     String? recipientAvatar,
     bool isGroup = false,
+    List<String>? groupMemberIds,
   }) async {
     if (_myUserId == null) return;
+    _isMinimized = false;
 
     // Request microphone permission at runtime before initiating a call
     final hasMicPermission = await _requestMicrophonePermission();
@@ -284,7 +301,9 @@ class CallManager extends ChangeNotifier {
       final Map<String, dynamic> postData = {
         'initiator_id': _myUserId,
         'receiver_id': recipientId,
-        'receiver_ids': [recipientId],
+        'receiver_ids': (isGroup && groupMemberIds != null && groupMemberIds.isNotEmpty)
+            ? groupMemberIds
+            : [recipientId],
         'call_type': isVideo ? 'video' : 'audio',
       };
 
@@ -349,6 +368,12 @@ class CallManager extends ChangeNotifier {
         if (!pNames.contains(recipientName)) {
           pNames.add(recipientName);
         }
+      } else if (groupMemberIds != null) {
+        for (var id in groupMemberIds) {
+          if (!pIds.contains(id)) {
+            pIds.add(id);
+          }
+        }
       }
 
       dev.log(
@@ -363,7 +388,9 @@ class CallManager extends ChangeNotifier {
         'callerName': _myUserName,
         'callerAvatar': _myUserAvatar,
         'receiverId': recipientId,
-        'receiverIds': [recipientId],
+        'receiverIds': (isGroup && groupMemberIds != null && groupMemberIds.isNotEmpty)
+            ? groupMemberIds
+            : [recipientId],
         'isVideo': isVideo,
         'isGroup': isGroup,
         'groupName': isGroup ? recipientName : "",
@@ -607,6 +634,7 @@ class CallManager extends ChangeNotifier {
 
     try {
       _isHandlingCallAction = true;
+      _isMinimized = false;
       dev.log(
         '📞 CallManager: Accepting call ID: $_currentCallId',
         name: 'CallManager',
@@ -948,22 +976,20 @@ class CallManager extends ChangeNotifier {
     FlutterCallkitIncoming.endAllCalls();
 
     // Globally pop call screen or receiving screen if active
-    if (_isCallScreenPushed || _isReceivingScreenPushed) {
-      final context = navigatorKey.currentContext;
-      if (context != null) {
-        try {
-          Navigator.of(context).pop();
-        } catch (e) {
-          dev.log(
-            '📞 CallManager: Error popping calling screen: $e',
-            name: 'CallManager',
-            error: e,
-          );
-        }
+    if ((_isCallScreenPushed || _isReceivingScreenPushed) && !_isMinimized) {
+      try {
+        navigatorKey.currentState?.pop();
+      } catch (e) {
+        dev.log(
+          '📞 CallManager: Error popping calling screen: $e',
+          name: 'CallManager',
+          error: e,
+        );
       }
-      _isCallScreenPushed = false;
-      _isReceivingScreenPushed = false;
     }
+    _isCallScreenPushed = false;
+    _isReceivingScreenPushed = false;
+    _isMinimized = false;
 
     _state = CallState.idle;
     _incomingParticipantsCount = 0;
@@ -1030,6 +1056,7 @@ class CallManager extends ChangeNotifier {
       return;
     }
 
+    _isMinimized = false;
     _currentRoomId = roomId;
     _isVideo = isVideo;
     _receiverId = groupId;

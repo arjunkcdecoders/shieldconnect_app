@@ -799,12 +799,37 @@ class GroupChatScreen extends StatelessWidget {
           if (controller.isUserMemberOfGroup) ...[
             GestureDetector(
               onTap: () {
+                final List<String> memberIds = [];
+                final gDetails = controller.groupDetails;
+                if (gDetails != null && gDetails['members'] != null) {
+                  final membersList = gDetails['members'];
+                  if (membersList is List) {
+                    final myId = context.read<CallManager>().myUserId;
+                    for (var m in membersList) {
+                      if (m is Map) {
+                        final userIdData = m['user_id'];
+                        String? mId;
+                        if (userIdData is Map) {
+                          mId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                        } else if (userIdData != null) {
+                          mId = userIdData.toString();
+                        } else {
+                          mId = (m['_id'] ?? m['id'])?.toString();
+                        }
+                        if (mId != null && mId.isNotEmpty && mId != myId) {
+                          memberIds.add(mId);
+                        }
+                      }
+                    }
+                  }
+                }
                 context.read<CallManager>().startCall(
                   groupId ?? '',
                   groupName,
                   isVideo: false,
                   recipientAvatar: groupImage,
                   isGroup: true,
+                  groupMemberIds: memberIds,
                 );
                 Navigator.push(
                   context,
@@ -828,12 +853,37 @@ class GroupChatScreen extends StatelessWidget {
             ),
             GestureDetector(
               onTap: () {
+                final List<String> memberIds = [];
+                final gDetails = controller.groupDetails;
+                if (gDetails != null && gDetails['members'] != null) {
+                  final membersList = gDetails['members'];
+                  if (membersList is List) {
+                    final myId = context.read<CallManager>().myUserId;
+                    for (var m in membersList) {
+                      if (m is Map) {
+                        final userIdData = m['user_id'];
+                        String? mId;
+                        if (userIdData is Map) {
+                          mId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                        } else if (userIdData != null) {
+                          mId = userIdData.toString();
+                        } else {
+                          mId = (m['_id'] ?? m['id'])?.toString();
+                        }
+                        if (mId != null && mId.isNotEmpty && mId != myId) {
+                          memberIds.add(mId);
+                        }
+                      }
+                    }
+                  }
+                }
                 context.read<CallManager>().startCall(
                   groupId ?? '',
                   groupName,
                   isVideo: true,
                   recipientAvatar: groupImage,
                   isGroup: true,
+                  groupMemberIds: memberIds,
                 );
                 Navigator.push(
                   context,

@@ -26,6 +26,7 @@ import 'package:shieldconnect_app/controller/call_controller.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shieldconnect_app/services/fcm_service.dart';
 import 'package:shieldconnect_app/services/call_manager.dart';
+import 'package:shieldconnect_app/view/global_ongoing_call_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +67,8 @@ Future<void> main() async {
   );
 }
 
+
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class MyApp extends StatelessWidget {
@@ -77,6 +80,14 @@ class MyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       home: const SplashScreen(),
+      builder: (context, child) {
+        return Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const GlobalOngoingCallBanner(),
+          ],
+        );
+      },
     );
   }
 }
