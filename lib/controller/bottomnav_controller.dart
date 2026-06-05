@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/view/call_list_screen.dart';
 import 'package:shieldconnect_app/view/chatlist_screen.dart';
+import 'package:shieldconnect_app/view/dhsi_screen.dart';
 import 'package:shieldconnect_app/view/status_screen.dart';
 import 'package:shieldconnect_app/view/profile_screen.dart';
 
@@ -11,6 +12,7 @@ class BottomnavController extends ChangeNotifier {
   final List<Widget> _screens = const [
     ChatlistScreen(),
     CallListScreen(),
+    DhsiScreen(),
     StatusScreen(),
     ProfileScreen(),
   ];

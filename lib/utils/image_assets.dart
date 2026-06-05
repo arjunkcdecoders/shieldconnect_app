@@ -70,4 +70,19 @@ class ImageAssets {
   static const String appeal = "$_path/appeal.png";
   static const String answerCall = "$_path/answerCall.png";
   static const String endCall = "$_path/endCall.png";
+  //dhsi
+  static const String blueBubble = "$_path/blueBubble.png";
+  static const String changes = "$_path/changes.png";
+  static const String choices = "$_path/choices.png";
+  static const String dhsi = "$_path/dhsi.png";
+  static const String dhsiInactive = "$_path/dhsiInactive.png";
+  static const String harm = "$_path/harm.png";
+  static const String help = "$_path/help.png";
+  static const String level3 = "$_path/level3.png";
+  static const String level4 = "$_path/level4.png";
+  static const String level82 = "$_path/level82.png";
+  static const String locked = "$_path/locked.png";
+  static const String opinion = "$_path/opinion.png";
+  static const String repeat = "$_path/repeat.png";
+  static const String reported = "$_path/reported.png";
 }

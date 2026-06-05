@@ -156,6 +156,27 @@ class CallListController extends ChangeNotifier {
                   userStatus == 'rejected' ||
                   userStatus == 'invited');
 
+          final String resolvedGroupId = (call['group_id'] is Map<String, dynamic>
+              ? (call['group_id']['_id'] ?? call['group_id']['id'])?.toString()
+              : call['group_id']?.toString()) ?? callId;
+
+          final List<String> groupMemberIds = [];
+          final Map<String, dynamic> participantsMap =
+              call['participants'] is Map<String, dynamic>
+                  ? call['participants'] as Map<String, dynamic>
+                  : {};
+          participantsMap.keys.forEach((key) {
+            if (key != _userId) {
+              groupMemberIds.add(key);
+            }
+          });
+
+          final String recipientIdVal = initiatorId == _userId
+              ? (receiver != null
+                  ? (receiver['_id'] ?? receiver['id'] ?? '')?.toString() ?? ''
+                  : '')
+              : initiatorId;
+
           parsedCalls.add({
             'id': callId,
             'name': name,
@@ -166,6 +187,10 @@ class CallListController extends ChangeNotifier {
             'isOutgoing': isOutgoing,
             'isVideoButton': callType == 'video',
             'isGroup': isGroup,
+            'groupId': resolvedGroupId,
+            'recipientId': recipientIdVal,
+            'groupMemberIds': groupMemberIds,
+            'rawGroupName': call['group_name']?.toString() ?? '',
           });
         }
 

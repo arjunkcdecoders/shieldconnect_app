@@ -78,6 +78,8 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         resolvedName = resolvedName.split(" and ").first;
       }
       bool hasLeft = false;
+      String? otherStatus;
+      String? resolvedAvatar = avatarUrl;
       try {
         final matchingParticipant = callController.participants.firstWhere((p) {
           final pId = p['user_id'] ?? p['id'] ?? p['_id'];
@@ -86,19 +88,31 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         final String? status = matchingParticipant['status']
             ?.toString()
             .toLowerCase();
+        otherStatus = status;
         if (status == 'left' ||
             status == 'declined' ||
             status == 'missed' ||
             status == 'rejected') {
           hasLeft = true;
         } else {
-          resolvedName = matchingParticipant['name'] ?? matchingParticipant['username'] ?? resolvedName;
+          resolvedName =
+              matchingParticipant['name'] ??
+              matchingParticipant['username'] ??
+              resolvedName;
+          resolvedAvatar =
+              matchingParticipant['avatar'] ??
+              matchingParticipant['profile_pic'] ??
+              resolvedAvatar;
         }
       } catch (_) {
         // If otherId is not found in participants list and we have successfully fetched participants, then they have left.
         if (callController.hasFetchedParticipants) {
           hasLeft = true;
         }
+      }
+
+      if (callManager.roomManager.hasParticipantLeft(otherId)) {
+        hasLeft = true;
       }
 
       if (!hasLeft) {
@@ -113,9 +127,14 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         gridMembers.add({
           'user_id': otherId,
           'name': resolvedName,
-          'avatar': avatarUrl,
+          'avatar': resolvedAvatar,
           'isMe': false,
           'is_muted': isOtherMuted,
+          'status':
+              otherStatus ??
+              (callManager.state == CallState.connected
+                  ? 'connected'
+                  : 'ringing'),
         });
       } else {
         dev.log(
@@ -131,8 +150,13 @@ class VoiceCallReceivingScreen extends StatelessWidget {
       final pName = p['name'] ?? p['username'] ?? 'User';
       final pAvatar = p['avatar'] ?? p['profile_pic'];
       final bool pMute = p['is_muted'] == true || p['isMuted'] == true;
+      final String? pStatus = p['status']?.toString();
 
       if (pId != null) {
+        final String pIdStr = pId.toString();
+        if (callManager.roomManager.hasParticipantLeft(pIdStr)) {
+          continue;
+        }
         final isDup = gridMembers.any(
           (m) => m['user_id'].toString() == pId.toString(),
         );
@@ -143,6 +167,7 @@ class VoiceCallReceivingScreen extends StatelessWidget {
             'avatar': pAvatar,
             'isMe': pId.toString() == callManager.myUserId.toString(),
             'is_muted': pMute,
+            'status': pStatus,
           });
         }
       }
@@ -192,7 +217,11 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         );
 
         // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
-        if (isConnected && activeOther.isEmpty) {
+        if (!callManager.isGroup &&
+            isConnected &&
+            callManager.secondsElapsed > 2 &&
+            callController.hasFetchedParticipants &&
+            activeOther.isEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             dev.log(
               '👥 VoiceCallReceivingScreen: Rebuilt grid has only Me left. Automatically ending call.',
@@ -202,16 +231,60 @@ class VoiceCallReceivingScreen extends StatelessWidget {
           });
         }
 
-        final String activeName = activeOther.isNotEmpty
-            ? (activeOther['name'] ?? userName)
-            : userName;
-        final String? activeAvatar = activeOther.isNotEmpty
-            ? activeOther['avatar']
-            : avatarUrl;
+        final String activeOtherId = activeOther.isNotEmpty
+            ? (activeOther['user_id']?.toString() ?? '')
+            : ((callManager.myUserId == callManager.callerId)
+                  ? (callManager.receiverId ?? '')
+                  : (callManager.callerId ?? ''));
+
+        bool otherHasLeft = false;
+        if (!callManager.isGroup &&
+            activeOther.isEmpty &&
+            activeOtherId.isNotEmpty) {
+          if (roomManager.hasParticipantLeft(activeOtherId)) {
+            otherHasLeft = true;
+          } else {
+            try {
+              final matchingParticipant = callController.participants
+                  .firstWhere((p) {
+                    final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+                    return pId?.toString() == activeOtherId;
+                  });
+              final String? status = matchingParticipant['status']
+                  ?.toString()
+                  .toLowerCase();
+              if (status == 'left' ||
+                  status == 'declined' ||
+                  status == 'missed' ||
+                  status == 'rejected') {
+                otherHasLeft = true;
+              }
+            } catch (_) {
+              if (callController.hasFetchedParticipants) {
+                otherHasLeft = true;
+              }
+            }
+          }
+        }
+
+        final String activeName =
+            (callManager.isGroup && activeOther.isNotEmpty)
+            ? "$userName - ${activeOther['name']}"
+            : (callManager.isGroup || activeOther.isEmpty)
+            ? (otherHasLeft ? 'Call ending...' : userName)
+            : (activeOther['name'] ?? userName);
+        final String? activeAvatar =
+            (callManager.isGroup || activeOther.isEmpty)
+            ? (otherHasLeft ? null : avatarUrl)
+            : activeOther['avatar'];
 
         final bool isCallEnding =
             callManager.state == CallState.idle ||
-            (isConnected && activeOther.isEmpty);
+            (!callManager.isGroup &&
+                isConnected &&
+                callManager.secondsElapsed > 4 &&
+                callController.hasFetchedParticipants &&
+                activeOther.isEmpty);
 
         dev.log(
           '📞 VoiceCallReceivingScreen build: callState=${callManager.state}, activeOther.isEmpty=${activeOther.isEmpty}, isCallEnding=$isCallEnding',
@@ -351,7 +424,9 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                                                             url,
                                                             error,
                                                           ) => Icon(
-                                                            Icons.person,
+                                                            callManager.isGroup
+                                                                ? Icons.group
+                                                                : Icons.person,
                                                             color: appColor(
                                                               context,
                                                             ).white,
@@ -360,7 +435,9 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                                                     ),
                                                   )
                                                 : Icon(
-                                                    Icons.person,
+                                                    callManager.isGroup
+                                                        ? Icons.group
+                                                        : Icons.person,
                                                     color: appColor(
                                                       context,
                                                     ).white,
@@ -410,7 +487,7 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                               // Bold styled user identity text
                               Text(
                                 activeName,
-                                style: fontStyle.clashDisplayBold24.textColor(
+                                style: fontStyle.clashDisplayBold20.textColor(
                                   appColor(context).white,
                                 ),
                               ),

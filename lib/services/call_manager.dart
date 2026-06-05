@@ -21,6 +21,7 @@ import 'package:shieldconnect_app/view/video_call_receiving_screen.dart';
 import 'package:record/record.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 enum CallState { idle, dialing, ringing, connected }
 
@@ -68,6 +69,7 @@ class CallManager extends ChangeNotifier {
   int _secondsElapsed = 0;
   String _callDuration = "00:00";
   String get callDuration => _callDuration;
+  int get secondsElapsed => _secondsElapsed;
 
   String? _myUserId;
   String? get myUserId => _myUserId;
@@ -84,6 +86,88 @@ class CallManager extends ChangeNotifier {
   bool _isHandlingCallAction = false;
   bool _isMinimized = false;
   bool get isMinimized => _isMinimized;
+
+  AudioPlayer? _dialTonePlayer;
+  AudioPlayer? _ringTonePlayer;
+
+  void _startDialTone() async {
+    try {
+      if (_dialTonePlayer == null) {
+        _dialTonePlayer = AudioPlayer();
+        await _dialTonePlayer!.setReleaseMode(ReleaseMode.loop);
+        await _dialTonePlayer!.play(AssetSource('audio/calling_tone.mp3'));
+        dev.log(
+          '📞 CallManager: Started playing dialing/calling tone loop.',
+          name: 'CallManager',
+        );
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error starting dial tone: $e',
+        name: 'CallManager',
+        error: e,
+      );
+    }
+  }
+
+  void _stopDialTone() async {
+    try {
+      if (_dialTonePlayer != null) {
+        final player = _dialTonePlayer;
+        _dialTonePlayer = null;
+        await player!.stop();
+        await player.dispose();
+        dev.log(
+          '📞 CallManager: Stopped dialing/calling tone.',
+          name: 'CallManager',
+        );
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error stopping dial tone: $e',
+        name: 'CallManager',
+        error: e,
+      );
+    }
+  }
+
+  void _startRingTone() async {
+    try {
+      if (_ringTonePlayer == null) {
+        _ringTonePlayer = AudioPlayer();
+        await _ringTonePlayer!.setReleaseMode(ReleaseMode.loop);
+        await _ringTonePlayer!.play(AssetSource('audio/ringing_tone.mp3'));
+        dev.log(
+          '📞 CallManager: Started playing ringing tone loop.',
+          name: 'CallManager',
+        );
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error starting ring tone: $e',
+        name: 'CallManager',
+        error: e,
+      );
+    }
+  }
+
+  void _stopRingTone() async {
+    try {
+      if (_ringTonePlayer != null) {
+        final player = _ringTonePlayer;
+        _ringTonePlayer = null;
+        await player!.stop();
+        await player.dispose();
+        dev.log('📞 CallManager: Stopped ringing tone.', name: 'CallManager');
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error stopping ring tone: $e',
+        name: 'CallManager',
+        error: e,
+      );
+    }
+  }
 
   void setMinimized(bool val) {
     if (_isMinimized != val) {
@@ -172,6 +256,9 @@ class CallManager extends ChangeNotifier {
           var callerId = _callerId;
           var isVideoCall = _isVideo;
           var callerName = _receiverName;
+          var isGroupCall = _isGroup;
+          var groupNameVal = _receiverName;
+          var groupAvatarVal = _receiverAvatar;
 
           try {
             final activeCalls = await FlutterCallkitIncoming.activeCalls();
@@ -183,6 +270,14 @@ class CallManager extends ChangeNotifier {
                     call.extra?['isVideo'] == true ||
                     call.extra?['isVideo'] == 'true' ||
                     isVideoCall;
+                isGroupCall =
+                    call.extra?['isGroup'] == true ||
+                    call.extra?['isGroup'] == 'true' ||
+                    isGroupCall;
+                groupNameVal =
+                    call.extra?['groupName']?.toString() ?? groupNameVal;
+                groupAvatarVal =
+                    call.extra?['groupAvatar']?.toString() ?? groupAvatarVal;
                 callerName = call.nameCaller ?? callerName;
                 break;
               }
@@ -204,7 +299,11 @@ class CallManager extends ChangeNotifier {
             _currentRoomId = roomId;
             _callerId = callerId;
             _receiverId = _myUserId;
-            _receiverName = callerName;
+            _isGroup = isGroupCall;
+            _receiverName = isGroupCall
+                ? (groupNameVal ?? callerName)
+                : callerName;
+            _receiverAvatar = groupAvatarVal;
             _isVideo = isVideoCall;
             await acceptCall();
           }
@@ -269,6 +368,22 @@ class CallManager extends ChangeNotifier {
     if (_myUserId == null) return;
     _isMinimized = false;
 
+    // Load latest avatar/profile info from local storage cache
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? userSession = prefs.getString('user_session');
+      if (userSession != null) {
+        final Map<String, dynamic> userMap = jsonDecode(userSession);
+        _myUserAvatar = userMap['avatar']?.toString() ?? _myUserAvatar;
+        _myUserName = userMap['name']?.toString() ?? _myUserName;
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error fetching session for startCall: $e',
+        name: 'CallManager',
+      );
+    }
+
     // Request microphone permission at runtime before initiating a call
     final hasMicPermission = await _requestMicrophonePermission();
     if (!hasMicPermission) {
@@ -291,6 +406,7 @@ class CallManager extends ChangeNotifier {
     _currentCallId =
         "call_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1000)}";
     notifyListeners();
+    _startDialTone();
 
     try {
       dev.log(
@@ -301,7 +417,8 @@ class CallManager extends ChangeNotifier {
       final Map<String, dynamic> postData = {
         'initiator_id': _myUserId,
         'receiver_id': recipientId,
-        'receiver_ids': (isGroup && groupMemberIds != null && groupMemberIds.isNotEmpty)
+        'receiver_ids':
+            (isGroup && groupMemberIds != null && groupMemberIds.isNotEmpty)
             ? groupMemberIds
             : [recipientId],
         'call_type': isVideo ? 'video' : 'audio',
@@ -348,12 +465,15 @@ class CallManager extends ChangeNotifier {
         if (participantsList != null) {
           for (var p in participantsList) {
             if (p is Map) {
-              final String? pId = (p['user_id'] ?? p['id'] ?? p['_id'])?.toString();
+              final String? pId = (p['user_id'] ?? p['id'] ?? p['_id'])
+                  ?.toString();
               final String? pName = (p['name'] ?? p['username'])?.toString();
               if (pId != null && pId.isNotEmpty && !pIds.contains(pId)) {
                 pIds.add(pId);
               }
-              if (pName != null && pName.isNotEmpty && !pNames.contains(pName)) {
+              if (pName != null &&
+                  pName.isNotEmpty &&
+                  !pNames.contains(pName)) {
                 pNames.add(pName);
               }
             }
@@ -388,13 +508,16 @@ class CallManager extends ChangeNotifier {
         'callerName': _myUserName,
         'callerAvatar': _myUserAvatar,
         'receiverId': recipientId,
-        'receiverIds': (isGroup && groupMemberIds != null && groupMemberIds.isNotEmpty)
+        'receiverIds':
+            (isGroup && groupMemberIds != null && groupMemberIds.isNotEmpty)
             ? groupMemberIds
             : [recipientId],
         'isVideo': isVideo,
         'isGroup': isGroup,
         'groupName': isGroup ? recipientName : "",
+        'group_name': isGroup ? recipientName : "",
         'groupAvatar': isGroup ? recipientAvatar : "",
+        'group_avatar': isGroup ? recipientAvatar : "",
         'participantIds': pIds,
         'participantNames': pNames,
         'participantsCount': pIds.length,
@@ -459,13 +582,35 @@ class CallManager extends ChangeNotifier {
     }
 
     _callerId = map['callerId']?.toString();
-    _receiverName = map['callerName']?.toString();
-    _receiverAvatar =
-        map['callerAvatar']?.toString() ?? map['receiverAvatar']?.toString();
+    _isVideo = map['isVideo'] == true || map['isVideo'] == 'true';
+    _isGroup =
+        map['isGroup'] == true ||
+        map['isGroup'] == 'true' ||
+        map['is_group'] == true ||
+        map['is_group'] == 'true' ||
+        (map['groupName'] != null && map['groupName'].toString().isNotEmpty) ||
+        (map['group_name'] != null &&
+            map['group_name'].toString().isNotEmpty) ||
+        (map['groupId'] != null && map['groupId'].toString().isNotEmpty) ||
+        (map['group_id'] != null && map['group_id'].toString().isNotEmpty);
+    _receiverName = _isGroup
+        ? (map['groupName']?.toString() ??
+              map['group_name']?.toString() ??
+              map['callerName']?.toString())
+        : map['callerName']?.toString();
+    final String? callerAv = map['callerAvatar']?.toString();
+    final String? groupAv =
+        map['groupAvatar']?.toString() ?? map['group_avatar']?.toString();
+    _receiverAvatar = _isGroup
+        ? (groupAv == null ||
+                  groupAv == 'null' ||
+                  groupAv.isEmpty ||
+                  groupAv == callerAv
+              ? null
+              : groupAv)
+        : (callerAv ?? map['receiverAvatar']?.toString());
     _currentRoomId = map['roomId']?.toString();
     _currentCallId = map['callId']?.toString();
-    _isVideo = map['isVideo'] == true || map['isVideo'] == 'true';
-    _isGroup = map['isGroup'] == true || map['isGroup'] == 'true';
     _receiverId = _myUserId;
     int derivedCount = 0;
     List<String> participantIds = [];
@@ -533,6 +678,7 @@ class CallManager extends ChangeNotifier {
 
     _state = CallState.ringing;
     notifyListeners();
+    // _startRingTone();
 
     // Trigger System-level overlay CallKit if foreground
     _showCallKitNotification();
@@ -572,17 +718,22 @@ class CallManager extends ChangeNotifier {
         'callerId': _callerId,
         'roomId': _currentRoomId,
         'isVideo': _isVideo,
+        'isGroup': _isGroup,
+        'groupName': _isGroup ? _receiverName : null,
+        'groupAvatar': _isGroup ? _receiverAvatar : null,
       },
       android: const AndroidParams(
         isCustomNotification: true,
-        ringtonePath: 'system_ringtone_default',
+        ringtonePath: 'ringing_tone',
         backgroundColor: '#121212',
         actionColor: '#25D366',
+        incomingCallNotificationChannelName: 'Incoming Call v2',
       ),
       ios: const IOSParams(
         iconName: 'AppIcon',
         handleType: 'generic',
         supportsVideo: true,
+        ringtonePath: 'ringing_tone.mp3',
       ),
     );
     await FlutterCallkitIncoming.showCallkitIncoming(params);
@@ -592,26 +743,24 @@ class CallManager extends ChangeNotifier {
 
   /// Accept/Answer incoming call.
   Future<void> acceptCall() async {
-    // If _myUserId is null (e.g. background wake-up), try to restore it from session cache.
-    if (_myUserId == null) {
-      try {
-        final SharedPreferences prefs = await SharedPreferences.getInstance();
-        final String? userSession = prefs.getString('user_session');
-        if (userSession != null) {
-          final Map<String, dynamic> userMap = jsonDecode(userSession);
-          _myUserId = userMap['_id'] ?? userMap['id'];
-          _myUserName = userMap['name']?.toString() ?? 'User';
-          _myUserAvatar = userMap['avatar']?.toString();
-          if (_receiverId == null) {
-            _receiverId = _myUserId;
-          }
+    // Load latest avatar/profile info from local storage cache
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? userSession = prefs.getString('user_session');
+      if (userSession != null) {
+        final Map<String, dynamic> userMap = jsonDecode(userSession);
+        _myUserId = userMap['_id'] ?? userMap['id'] ?? _myUserId;
+        _myUserName = userMap['name']?.toString() ?? _myUserName ?? 'User';
+        _myUserAvatar = userMap['avatar']?.toString() ?? _myUserAvatar;
+        if (_receiverId == null) {
+          _receiverId = _myUserId;
         }
-      } catch (e) {
-        dev.log(
-          '🚨 CallManager: Error restoring myUserId in acceptCall: $e',
-          name: 'CallManager',
-        );
       }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error restoring/updating user session in acceptCall: $e',
+        name: 'CallManager',
+      );
     }
 
     if (_currentCallId == null || _myUserId == null || _isHandlingCallAction) {
@@ -640,6 +789,8 @@ class CallManager extends ChangeNotifier {
         name: 'CallManager',
       );
       _state = CallState.connected;
+      // _stopRingTone();
+      _stopDialTone();
       _startCallDurationTimer(); // Start call duration timer immediately
       notifyListeners();
 
@@ -786,32 +937,41 @@ class CallManager extends ChangeNotifier {
       } catch (_) {}
     }
 
+    final String callId = _currentCallId!;
+    final String? roomId = _currentRoomId;
+    final String? callerId = _callerId;
+    final String? receiverId = _receiverId;
+    final int duration = _secondsElapsed;
+    final bool isGroupCall = _isGroup;
+
     try {
       _isHandlingCallAction = true;
       dev.log(
-        '📞 CallManager: Gracefully ending call session ID: $_currentCallId',
+        '📞 CallManager: Gracefully ending call session ID: $callId',
         name: 'CallManager',
       );
-      await FlutterCallkitIncoming.endAllCalls();
+      
+      // Clean up local call state and pop screens immediately
+      _cleanupCall();
 
       // REST /call/end endpoint
       await _apiService.post(
         '/call/end',
         data: {
-          'call_id': _currentCallId,
+          'call_id': callId,
           'user_id': _myUserId,
-          'duration': _secondsElapsed,
+          'duration': duration,
         },
       );
 
-      if (!_isGroup && !hasMoreThanTwo) {
-        final targetId = (_callerId == _myUserId) ? _receiverId : _callerId;
+      if (!isGroupCall && !hasMoreThanTwo) {
+        final targetId = (callerId == _myUserId) ? receiverId : callerId;
         SocketService().emit('call_ended', {
           'to': targetId,
-          'callId': _currentCallId,
-          'roomId': _currentRoomId,
-          'callerId': _callerId,
-          'receiverId': _receiverId,
+          'callId': callId,
+          'roomId': roomId,
+          'callerId': callerId,
+          'receiverId': receiverId,
         });
       } else {
         dev.log(
@@ -827,7 +987,6 @@ class CallManager extends ChangeNotifier {
       );
     } finally {
       _isHandlingCallAction = false;
-      _cleanupCall();
     }
   }
 
@@ -910,6 +1069,7 @@ class CallManager extends ChangeNotifier {
     if (_state != CallState.dialing) return;
 
     _state = CallState.connected;
+    _stopDialTone();
     _startCallDurationTimer(); // Start call duration timer immediately
     notifyListeners();
 
@@ -924,6 +1084,13 @@ class CallManager extends ChangeNotifier {
       '📞 CallManager: Received call_rejected Socket event: $data',
       name: 'CallManager',
     );
+    if (_isGroup) {
+      dev.log(
+        '📞 CallManager: Ignoring call_rejected because it is a group call.',
+        name: 'CallManager',
+      );
+      return;
+    }
     if (_state == CallState.connected) {
       dev.log(
         '📞 CallManager: Ignoring call_rejected because the call is already connected with existing participant(s).',
@@ -971,6 +1138,8 @@ class CallManager extends ChangeNotifier {
   }
 
   void _cleanupCall() {
+    _stopDialTone();
+    // _stopRingTone();
     _durationTimer?.cancel();
     roomManager.disconnectRoom();
     FlutterCallkitIncoming.endAllCalls();
@@ -1176,7 +1345,10 @@ class CallManager extends ChangeNotifier {
       final context = navigatorKey.currentContext;
       if (context != null) {
         try {
-          final controller = Provider.of<CallController>(context, listen: false);
+          final controller = Provider.of<CallController>(
+            context,
+            listen: false,
+          );
           controller.fetchParticipants(_currentCallId!);
         } catch (_) {}
       }

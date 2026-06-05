@@ -24,25 +24,67 @@ class RoomManager extends ChangeNotifier {
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
+  bool _isConnecting = false;
+  bool get isConnecting => _isConnecting;
+
+  final Set<String> _connectedParticipants = {};
+  Set<String> get connectedParticipants => _connectedParticipants;
+
+  bool hasParticipantLeft(String identity) {
+    final room = _room;
+    if (room == null) return false;
+    // Dynamically ensure all currently active remote participants are registered as connected
+    for (final rp in room.remoteParticipants.values) {
+      if (rp.identity.isNotEmpty) {
+        _connectedParticipants.add(rp.identity);
+      }
+    }
+    return _connectedParticipants.contains(identity) &&
+        !room.remoteParticipants.values.any((rp) => rp.identity == identity);
+  }
+
   /// Open local camera immediately for preview before room connection
   Future<void> startLocalCamera() async {
     try {
       if (_localVideoTrack != null) return;
-      dev.log('🎙️ LiveKit: Starting local camera preview immediately', name: 'RoomManager');
+      dev.log(
+        '🎙️ LiveKit: Starting local camera preview immediately',
+        name: 'RoomManager',
+      );
       final track = await lk.LocalVideoTrack.createCameraTrack();
       _localVideoTrack = track;
       _isCameraOn = true;
       notifyListeners();
     } catch (e) {
-      dev.log('🚨 LiveKit: Failed to start local camera preview: $e', name: 'RoomManager');
+      dev.log(
+        '🚨 LiveKit: Failed to start local camera preview: $e',
+        name: 'RoomManager',
+      );
     }
   }
 
   /// Connect to the LiveKit SFU media room.
-  Future<void> connectRoom(String wsUrl, String token, {bool isVideo = false}) async {
+  Future<void> connectRoom(
+    String wsUrl,
+    String token, {
+    bool isVideo = false,
+  }) async {
+    if (_isConnecting || _isConnected) {
+      dev.log(
+        '🎙️ LiveKit: Already connecting or connected. Ignoring duplicate connect request.',
+        name: 'RoomManager',
+      );
+      return;
+    }
+    _isConnecting = true;
+    notifyListeners();
+
     try {
-      dev.log('🎙️ LiveKit: Connecting to room $wsUrl with token $token', name: 'RoomManager');
-      
+      dev.log(
+        '🎙️ LiveKit: Connecting to room $wsUrl with token $token',
+        name: 'RoomManager',
+      );
+
       // Cleanup previous session if any (except the local preview track which we want to reuse/publish)
       if (_room != null) {
         await disconnectRoom();
@@ -54,10 +96,11 @@ class RoomManager extends ChangeNotifier {
         ),
       );
 
-      _room = lk.Room(roomOptions: roomOptions);
-      
+      final room = lk.Room(roomOptions: roomOptions);
+      _room = room;
+
       // Setup connection state and participant listener hooks
-      final listener = _room!.createListener();
+      final listener = room.createListener();
 
       listener.on<lk.RoomDisconnectedEvent>((event) {
         dev.log('🎙️ LiveKit: Room disconnected', name: 'RoomManager');
@@ -65,8 +108,33 @@ class RoomManager extends ChangeNotifier {
         notifyListeners();
       });
 
+      listener.on<lk.ParticipantConnectedEvent>((event) {
+        dev.log(
+          '🎙️ LiveKit: Participant connected: ${event.participant.identity}',
+          name: 'RoomManager',
+        );
+        _connectedParticipants.add(event.participant.identity);
+        notifyListeners();
+      });
+
+      listener.on<lk.ParticipantDisconnectedEvent>((event) {
+        dev.log(
+          '🎙️ LiveKit: Participant disconnected: ${event.participant.identity}',
+          name: 'RoomManager',
+        );
+        notifyListeners();
+      });
+
+      listener.on<lk.ActiveSpeakersChangedEvent>((event) {
+        dev.log('🎙️ LiveKit: Active speakers changed', name: 'RoomManager');
+        notifyListeners();
+      });
+
       listener.on<lk.TrackSubscribedEvent>((event) {
-        dev.log('🎙️ LiveKit: Track subscribed of type ${event.track.kind}', name: 'RoomManager');
+        dev.log(
+          '🎙️ LiveKit: Track subscribed of type ${event.track.kind}',
+          name: 'RoomManager',
+        );
         if (event.track.kind.toString().toLowerCase().contains('video')) {
           _remoteVideoTrack = event.track as lk.VideoTrack;
           notifyListeners();
@@ -82,36 +150,52 @@ class RoomManager extends ChangeNotifier {
       });
 
       listener.on<lk.TrackMutedEvent>((event) {
-        dev.log('🎙️ LiveKit: Track muted: ${event.publication.sid}', name: 'RoomManager');
+        dev.log(
+          '🎙️ LiveKit: Track muted: ${event.publication.sid}',
+          name: 'RoomManager',
+        );
         if (event.publication.kind.toString().toLowerCase().contains('video')) {
           notifyListeners();
         }
       });
 
       listener.on<lk.TrackUnmutedEvent>((event) {
-        dev.log('🎙️ LiveKit: Track unmuted: ${event.publication.sid}', name: 'RoomManager');
+        dev.log(
+          '🎙️ LiveKit: Track unmuted: ${event.publication.sid}',
+          name: 'RoomManager',
+        );
         if (event.publication.kind.toString().toLowerCase().contains('video')) {
           notifyListeners();
         }
       });
 
-      await _room!.connect(wsUrl, token);
+      await room.connect(wsUrl, token);
       _isConnected = true;
       _isCameraOn = isVideo;
       _isSpeakerOn = isVideo;
 
+      _connectedParticipants.clear();
+      _connectedParticipants.addAll(
+        room.remoteParticipants.values.map((p) => p.identity),
+      );
+
       // Enable local audio and camera based on preferences
-      await _room!.localParticipant?.setMicrophoneEnabled(true);
+      await room.localParticipant?.setMicrophoneEnabled(true);
       _isMuted = false;
 
       if (isVideo) {
         if (_localVideoTrack is lk.LocalVideoTrack) {
-          dev.log('🎙️ LiveKit: Publishing pre-initialized local video track', name: 'RoomManager');
-          await _room!.localParticipant?.publishVideoTrack(_localVideoTrack as lk.LocalVideoTrack);
+          dev.log(
+            '🎙️ LiveKit: Publishing pre-initialized local video track',
+            name: 'RoomManager',
+          );
+          await room.localParticipant?.publishVideoTrack(
+            _localVideoTrack as lk.LocalVideoTrack,
+          );
         } else {
-          await _room!.localParticipant?.setCameraEnabled(true);
+          await room.localParticipant?.setCameraEnabled(true);
           // Extract local video track for preview rendering if available
-          final publications = _room!.localParticipant?.videoTrackPublications;
+          final publications = room.localParticipant?.videoTrackPublications;
           if (publications != null && publications.isNotEmpty) {
             _localVideoTrack = publications.first.track as lk.VideoTrack?;
           }
@@ -121,10 +205,18 @@ class RoomManager extends ChangeNotifier {
       // Set Speakerphone state
       await lk.Hardware.instance.setSpeakerphoneOn(_isSpeakerOn);
 
-      dev.log('🎙️ LiveKit: Connected successfully. Local Participant Identity: ${_room!.localParticipant?.identity}', name: 'RoomManager');
+      dev.log(
+        '🎙️ LiveKit: Connected successfully. Local Participant Identity: ${room.localParticipant?.identity}',
+        name: 'RoomManager',
+      );
+      _isConnecting = false;
       notifyListeners();
     } catch (e) {
-      dev.log('🚨 LiveKit: Connection failed: $e', name: 'RoomManager', error: e);
+      dev.log(
+        '🚨 LiveKit: Connection failed: $e',
+        name: 'RoomManager',
+        error: e,
+      );
       _cleanupRoomState();
       rethrow;
     }
@@ -132,19 +224,25 @@ class RoomManager extends ChangeNotifier {
 
   /// Toggle microphone muting state.
   Future<void> setMicrophoneEnabled(bool enabled) async {
-    if (_room == null) return;
+    final room = _room;
+    if (room == null) return;
     try {
-      await _room!.localParticipant?.setMicrophoneEnabled(enabled);
+      await room.localParticipant?.setMicrophoneEnabled(enabled);
       _isMuted = !enabled;
       notifyListeners();
     } catch (e) {
-      dev.log('🚨 LiveKit: Failed to toggle microphone: $e', name: 'RoomManager', error: e);
+      dev.log(
+        '🚨 LiveKit: Failed to toggle microphone: $e',
+        name: 'RoomManager',
+        error: e,
+      );
     }
   }
 
   /// Toggle local camera publication state.
   Future<void> setCameraEnabled(bool enabled) async {
-    if (_room == null) {
+    final room = _room;
+    if (room == null) {
       if (!enabled) {
         if (_localVideoTrack is lk.LocalVideoTrack) {
           await (_localVideoTrack as lk.LocalVideoTrack).stop();
@@ -158,10 +256,10 @@ class RoomManager extends ChangeNotifier {
       return;
     }
     try {
-      await _room!.localParticipant?.setCameraEnabled(enabled);
+      await room.localParticipant?.setCameraEnabled(enabled);
       _isCameraOn = enabled;
       if (enabled) {
-        final publications = _room!.localParticipant?.videoTrackPublications;
+        final publications = room.localParticipant?.videoTrackPublications;
         if (publications != null && publications.isNotEmpty) {
           _localVideoTrack = publications.first.track as lk.VideoTrack?;
         }
@@ -170,7 +268,11 @@ class RoomManager extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      dev.log('🚨 LiveKit: Failed to toggle camera: $e', name: 'RoomManager', error: e);
+      dev.log(
+        '🚨 LiveKit: Failed to toggle camera: $e',
+        name: 'RoomManager',
+        error: e,
+      );
     }
   }
 
@@ -181,7 +283,11 @@ class RoomManager extends ChangeNotifier {
       _isSpeakerOn = speakerOn;
       notifyListeners();
     } catch (e) {
-      dev.log('🚨 LiveKit: Failed to toggle speakerphone hardware: $e', name: 'RoomManager', error: e);
+      dev.log(
+        '🚨 LiveKit: Failed to toggle speakerphone hardware: $e',
+        name: 'RoomManager',
+        error: e,
+      );
     }
   }
 
@@ -196,17 +302,22 @@ class RoomManager extends ChangeNotifier {
       }
     }
 
-    if (_room == null) {
+    final room = _room;
+    if (room == null) {
       _cleanupRoomState();
       notifyListeners();
       return;
     }
     try {
       dev.log('🎙️ LiveKit: Disconnecting from room', name: 'RoomManager');
-      await _room!.disconnect();
-      await _room!.dispose();
+      await room.disconnect();
+      await room.dispose();
     } catch (e) {
-      dev.log('🚨 LiveKit: Error during disconnect: $e', name: 'RoomManager', error: e);
+      dev.log(
+        '🚨 LiveKit: Error during disconnect: $e',
+        name: 'RoomManager',
+        error: e,
+      );
     } finally {
       _cleanupRoomState();
       notifyListeners();
@@ -216,16 +327,19 @@ class RoomManager extends ChangeNotifier {
   void _cleanupRoomState() {
     _room = null;
     _isConnected = false;
+    _isConnecting = false;
     _isMuted = false;
     _isSpeakerOn = false;
     _isCameraOn = false;
     _localVideoTrack = null;
     _remoteVideoTrack = null;
+    _connectedParticipants.clear();
   }
 
   lk.VideoTrack? getRemoteVideoTrackFor(String userId) {
-    if (_room == null) return null;
-    for (final participant in _room!.remoteParticipants.values) {
+    final room = _room;
+    if (room == null) return null;
+    for (final participant in room.remoteParticipants.values) {
       if (participant.identity == userId) {
         final publications = participant.videoTrackPublications;
         if (publications.isNotEmpty) {

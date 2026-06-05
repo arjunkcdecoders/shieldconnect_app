@@ -57,10 +57,12 @@ class CallController extends ChangeNotifier {
 
   void _handleCallManagerStateChange() {
     final callManager = CallManager();
-    if (callManager.state == CallState.connected && callManager.currentCallId != null) {
+    if (callManager.state == CallState.connected &&
+        callManager.currentCallId != null) {
       _currentPage = 0;
       _pageController?.dispose();
       _pageController = PageController(initialPage: 0);
+      _hasFetchedParticipants = false;
       startParticipantsPolling(callManager.currentCallId!);
     } else if (callManager.state == CallState.idle) {
       _currentPage = 0;
@@ -101,7 +103,9 @@ class CallController extends ChangeNotifier {
         return;
       }
 
-      final response = await _apiService.get("/connections/friends/$resolvedUserId");
+      final response = await _apiService.get(
+        "/connections/friends/$resolvedUserId",
+      );
       if (response.data != null && response.data['success'] == true) {
         final List rawData = response.data['data'] ?? [];
         _friends = List<Map<String, dynamic>>.from(rawData);
@@ -127,10 +131,14 @@ class CallController extends ChangeNotifier {
       final response = await _apiService.get("/call/participants/$callId");
       if (response.data != null) {
         _hasFetchedParticipants = true;
-        final dynamic rawData = response.data is Map ? (response.data['data'] ?? response.data['participants'] ?? []) : response.data;
+        final dynamic rawData = response.data is Map
+            ? (response.data['data'] ?? response.data['participants'] ?? [])
+            : response.data;
         List<Map<String, dynamic>> newParticipants = [];
         if (rawData is List) {
-          newParticipants = List<Map<String, dynamic>>.from(rawData.map((e) => Map<String, dynamic>.from(e)));
+          newParticipants = List<Map<String, dynamic>>.from(
+            rawData.map((e) => Map<String, dynamic>.from(e)),
+          );
         } else if (response.data['success'] == true) {
           final List rawList = response.data['data'] ?? [];
           newParticipants = List<Map<String, dynamic>>.from(rawList);
@@ -140,9 +148,9 @@ class CallController extends ChangeNotifier {
         newParticipants = newParticipants.where((p) {
           final String? status = p['status']?.toString().toLowerCase();
           return status != 'left' &&
-                 status != 'declined' &&
-                 status != 'missed' &&
-                 status != 'rejected';
+              status != 'declined' &&
+              status != 'missed' &&
+              status != 'rejected';
         }).toList();
 
         // Check if there is any active participant other than Me
@@ -153,8 +161,13 @@ class CallController extends ChangeNotifier {
         });
 
         // Automatically end the call if connected and no other participant is left
-        if (CallManager().state == CallState.connected && !hasOtherActiveParticipant) {
-          dev.log('👥 CallController: No other active participant left in the call besides Me. Automatically ending call.', name: 'CallController');
+        if (CallManager().state == CallState.connected &&
+            CallManager().secondsElapsed > 2 &&
+            !hasOtherActiveParticipant) {
+          dev.log(
+            '👥 CallController: No other active participant left in the call besides Me. Automatically ending call.',
+            name: 'CallController',
+          );
           CallManager().endCall();
           _participants = [];
           _isLoadingParticipants = false;
@@ -172,7 +185,10 @@ class CallController extends ChangeNotifier {
             });
             if (!stillActive) {
               final String name = oldP['name'] ?? 'User';
-              dev.log('👥 CallController: Participant left call: $name ($oldId). Removing from grid UI.', name: 'CallController');
+              dev.log(
+                '👥 CallController: Participant left call: $name ($oldId). Removing from grid UI.',
+                name: 'CallController',
+              );
             }
           }
         }
@@ -187,14 +203,21 @@ class CallController extends ChangeNotifier {
             final idOld = pOld['user_id'] ?? pOld['id'] ?? pOld['_id'];
             final String? avatarNew = pNew['avatar'] ?? pNew['profile_pic'];
             final String? avatarOld = pOld['avatar'] ?? pOld['profile_pic'];
-            
-            final bool muteNew = pNew['is_muted'] == true || pNew['isMuted'] == true;
-            final bool muteOld = pOld['is_muted'] == true || pOld['isMuted'] == true;
+
+            final bool muteNew =
+                pNew['is_muted'] == true || pNew['isMuted'] == true;
+            final bool muteOld =
+                pOld['is_muted'] == true || pOld['isMuted'] == true;
+
+            final String? statusNew = pNew['status']?.toString();
+            final String? statusOld = pOld['status']?.toString();
 
             if (idNew != idOld ||
                 pNew['name'] != pOld['name'] ||
                 muteNew != muteOld ||
-                _normalizeAvatarUrl(avatarNew) != _normalizeAvatarUrl(avatarOld)) {
+                statusNew != statusOld ||
+                _normalizeAvatarUrl(avatarNew) !=
+                    _normalizeAvatarUrl(avatarOld)) {
               isIdentical = false;
               break;
             }
@@ -203,10 +226,10 @@ class CallController extends ChangeNotifier {
 
         if (!isIdentical || _isLoadingParticipants) {
           _participants = newParticipants;
-          
+
           // Clamp _currentPage based on new participant list length
           final int total = _participants.length;
-          final int numPages = total <= 6 ? 1 : 1 + ((total - 6) / 5.0).ceil();
+          final int numPages = total <= 4 ? 1 : 1 + ((total - 4) / 3.0).ceil();
           if (_currentPage >= numPages) {
             _currentPage = numPages - 1;
             if (_pageController != null && _pageController!.hasClients) {
@@ -230,7 +253,8 @@ class CallController extends ChangeNotifier {
         }
       }
     } catch (e) {
-      _participantsErrorMessage = "An error occurred while loading participants.";
+      _participantsErrorMessage =
+          "An error occurred while loading participants.";
     } finally {
       if (_isLoadingParticipants || wasLoading) {
         _isLoadingParticipants = false;
@@ -253,10 +277,7 @@ class CallController extends ChangeNotifier {
     try {
       final response = await _apiService.post(
         "/call/add-participant",
-        data: {
-          "call_id": callId,
-          "user_id": userId,
-        },
+        data: {"call_id": callId, "user_id": userId},
       );
       if (response.data != null && response.data['success'] == true) {
         await fetchParticipants(callId);

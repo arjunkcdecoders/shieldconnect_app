@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shieldconnect_app/services/call_manager.dart';
+import 'package:shieldconnect_app/view/voice_calling_screen.dart';
+import 'package:shieldconnect_app/view/video_calling_screen.dart';
 
 class CallListScreen extends StatelessWidget {
   const CallListScreen({super.key});
@@ -227,8 +230,27 @@ class CallListScreen extends StatelessWidget {
     final String? avatar = item["avatar"];
     final bool isGroup = item["isGroup"] == true;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22.0),
+    final String typeText = isMissed
+        ? 'Missed'
+        : (isOutgoing ? 'Outgoing' : 'Incoming');
+    final Color typeColor = isMissed
+        ? appColor(context).red
+        : (isOutgoing ? appColor(context).primary : appColor(context).green);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: appColor(context).white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: appColor(context).black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -250,22 +272,47 @@ class CallListScreen extends StatelessWidget {
                     isMissed ? appColor(context).red : appColor(context).black,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 4,
                   children: [
-                    // Custom arrow direction indicator (North-East for Outgoing, South-West for Missed/Incoming)
-                    Icon(
-                      isOutgoing ? Icons.north_east : Icons.south_west,
-                      color: isMissed
-                          ? appColor(context).red
-                          : appColor(context).green,
-                      size: 16,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Custom arrow direction indicator (North-East for Outgoing, South-West for Missed/Incoming)
+                        Icon(
+                          isOutgoing ? Icons.north_east : Icons.south_west,
+                          color: isMissed
+                              ? appColor(context).red
+                              : appColor(context).green,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          item["time"] ?? "",
+                          style: fontStyle.clashDisplayRegular12.textColor(
+                            appColor(context).textMediumGrey,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      item["time"] ?? "",
-                      style: fontStyle.clashDisplayRegular12.textColor(
-                        appColor(context).textMediumGrey,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: typeColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: typeColor.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        typeText,
+                        style: fontStyle.clashDisplayBold10.textColor(typeColor),
                       ),
                     ),
                   ],
@@ -276,10 +323,66 @@ class CallListScreen extends StatelessWidget {
           const SizedBox(width: 8),
 
           // Right Side Trigger Button
-          Icon(
-            isVideoButton ? Icons.videocam_outlined : Icons.phone_outlined,
-            color: appColor(context).secondary,
-            size: 22,
+          GestureDetector(
+            onTap: () {
+              final callManager = Provider.of<CallManager>(context, listen: false);
+              if (isGroup) {
+                final String rawName = item['rawGroupName']?.toString() ?? '';
+                final String displayName = item['name']?.toString() ?? '';
+                final String groupName = (rawName.isEmpty ||
+                        rawName == 'Group Call' ||
+                        rawName.contains('+') ||
+                        displayName.contains('+'))
+                    ? 'Group Call'
+                    : rawName;
+
+                callManager.startCall(
+                  item['groupId'] ?? '',
+                  groupName,
+                  isVideo: isVideoButton,
+                  recipientAvatar: item['avatar'],
+                  isGroup: true,
+                  groupMemberIds: List<String>.from(item['groupMemberIds'] ?? []),
+                );
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => isVideoButton
+                        ? VideoCallingScreen(userName: groupName)
+                        : VoiceCallingScreen(
+                            userName: groupName,
+                            avatarUrl: item['avatar'],
+                          ),
+                  ),
+                );
+              } else {
+                callManager.startCall(
+                  item['recipientId'] ?? '',
+                  item['name'] ?? 'User',
+                  isVideo: isVideoButton,
+                  recipientAvatar: item['avatar'],
+                  isGroup: false,
+                );
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => isVideoButton
+                        ? VideoCallingScreen(userName: item['name'] ?? 'User')
+                        : VoiceCallingScreen(
+                            userName: item['name'] ?? 'User',
+                            avatarUrl: item['avatar'],
+                          ),
+                  ),
+                );
+              }
+            },
+            child: Icon(
+              isVideoButton ? Icons.videocam_outlined : Icons.phone_outlined,
+              color: appColor(context).secondary,
+              size: 22,
+            ),
           ),
         ],
       ),

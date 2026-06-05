@@ -21,10 +21,27 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (event == 'incoming_call') {
     final String callId = data['callId']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString();
     final String callerId = data['callerId']?.toString() ?? '';
-    final String callerName = data['callerName']?.toString() ?? 'Incoming Call';
-    final String callerAvatar = data['callerAvatar']?.toString() ?? '';
     final String roomId = data['roomId']?.toString() ?? '';
     final bool isVideo = data['isVideo'] == 'true' || data['isVideo'] == true;
+
+    final bool isGroup = data['isGroup'] == 'true' ||
+        data['isGroup'] == true ||
+        data['is_group'] == 'true' ||
+        data['is_group'] == true ||
+        (data['groupName'] != null && data['groupName'].toString().isNotEmpty) ||
+        (data['group_name'] != null && data['group_name'].toString().isNotEmpty);
+
+    final String? groupName = data['groupName']?.toString() ?? data['group_name']?.toString();
+    final String? groupAvatar = data['groupAvatar']?.toString() ?? data['group_avatar']?.toString();
+
+    final String callerName = (isGroup && groupName != null && groupName.isNotEmpty)
+        ? groupName
+        : (data['callerName']?.toString() ?? 'Incoming Call');
+
+    final String? callerAv = data['callerAvatar']?.toString();
+    final String callerAvatar = isGroup
+        ? (groupAvatar == null || groupAvatar == 'null' || groupAvatar.isEmpty || groupAvatar == callerAv ? '' : groupAvatar)
+        : (callerAv ?? '');
 
     final params = CallKitParams(
       id: callId,
@@ -39,17 +56,22 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         'callerId': callerId,
         'roomId': roomId,
         'isVideo': isVideo,
+        'isGroup': isGroup,
+        'groupName': groupName,
+        'groupAvatar': groupAvatar,
       },
       android: const AndroidParams(
         isCustomNotification: true,
-        ringtonePath: 'system_ringtone_default',
+        ringtonePath: 'ringing_tone',
         backgroundColor: '#121212',
         actionColor: '#25D366',
+        incomingCallNotificationChannelName: 'Incoming Call v2',
       ),
       ios: const IOSParams(
         iconName: 'AppIcon',
         handleType: 'generic',
         supportsVideo: true,
+        ringtonePath: 'ringing_tone.mp3',
       ),
     );
     

@@ -14,16 +14,11 @@ import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
 import 'package:shieldconnect_app/view/video_calling_screen.dart';
 
-
 class VoiceCallingScreen extends StatelessWidget {
   final String userName;
   final String? avatarUrl;
 
-  const VoiceCallingScreen({
-    super.key,
-    required this.userName,
-    this.avatarUrl,
-  });
+  const VoiceCallingScreen({super.key, required this.userName, this.avatarUrl});
 
   List<Map<String, dynamic>> _buildGridMembers(
     CallManager callManager,
@@ -36,7 +31,10 @@ class VoiceCallingScreen extends StatelessWidget {
     String? myAvatar = callManager.myUserAvatar;
     if (myAvatar == null || myAvatar.isEmpty) {
       try {
-        final profileController = Provider.of<ProfileController>(context, listen: false);
+        final profileController = Provider.of<ProfileController>(
+          context,
+          listen: false,
+        );
         if (profileController.imageUrl.isNotEmpty) {
           myAvatar = profileController.imageUrl;
         }
@@ -44,8 +42,12 @@ class VoiceCallingScreen extends StatelessWidget {
     }
     if (myAvatar == null || myAvatar.isEmpty) {
       try {
-        final homeController = Provider.of<HomeScreenController>(context, listen: false);
-        if (homeController.profileImage != null && homeController.profileImage!.isNotEmpty) {
+        final homeController = Provider.of<HomeScreenController>(
+          context,
+          listen: false,
+        );
+        if (homeController.profileImage != null &&
+            homeController.profileImage!.isNotEmpty) {
           myAvatar = homeController.profileImage;
         }
       } catch (_) {}
@@ -64,25 +66,38 @@ class VoiceCallingScreen extends StatelessWidget {
     final String otherId = (callManager.myUserId == callManager.callerId)
         ? (callManager.receiverId ?? '')
         : (callManager.callerId ?? '');
-    
-    if (otherId.isNotEmpty) {
+
+    if (otherId.isNotEmpty && !callManager.isGroup) {
       String resolvedName = userName;
       if (resolvedName.contains(" and ")) {
         resolvedName = resolvedName.split(" and ").first;
       }
       bool hasLeft = false;
+      String? otherStatus;
+      String? resolvedAvatar = avatarUrl;
       try {
-        final matchingParticipant = callController.participants.firstWhere(
-          (p) {
-            final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-            return pId?.toString() == otherId;
-          },
-        );
-        final String? status = matchingParticipant['status']?.toString().toLowerCase();
-        if (status == 'left' || status == 'declined' || status == 'missed' || status == 'rejected') {
+        final matchingParticipant = callController.participants.firstWhere((p) {
+          final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+          return pId?.toString() == otherId;
+        });
+        final String? status = matchingParticipant['status']
+            ?.toString()
+            .toLowerCase();
+        otherStatus = status;
+        if (status == 'left' ||
+            status == 'declined' ||
+            status == 'missed' ||
+            status == 'rejected') {
           hasLeft = true;
         } else {
-          resolvedName = matchingParticipant['name'] ?? matchingParticipant['username'] ?? resolvedName;
+          resolvedName =
+              matchingParticipant['name'] ??
+              matchingParticipant['username'] ??
+              resolvedName;
+          resolvedAvatar =
+              matchingParticipant['avatar'] ??
+              matchingParticipant['profile_pic'] ??
+              resolvedAvatar;
         }
       } catch (_) {
         // If otherId is not found in participants list and we have successfully fetched participants, then they have left.
@@ -91,19 +106,30 @@ class VoiceCallingScreen extends StatelessWidget {
         }
       }
 
+      if (callManager.roomManager.hasParticipantLeft(otherId)) {
+        hasLeft = true;
+      }
+
       if (!hasLeft) {
-        final bool isOtherMuted = callManager.mutedParticipants[otherId] == true || 
+        final bool isOtherMuted =
+            callManager.mutedParticipants[otherId] == true ||
             callController.participants.any((p) {
               final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-              return pId?.toString() == otherId && (p['is_muted'] == true || p['isMuted'] == true);
+              return pId?.toString() == otherId &&
+                  (p['is_muted'] == true || p['isMuted'] == true);
             });
 
         gridMembers.add({
           'user_id': otherId,
           'name': resolvedName,
-          'avatar': avatarUrl,
+          'avatar': resolvedAvatar,
           'isMe': false,
           'is_muted': isOtherMuted,
+          'status':
+              otherStatus ??
+              (callManager.state == CallState.connected
+                  ? 'connected'
+                  : 'ringing'),
         });
       } else {
         dev.log(
@@ -119,9 +145,14 @@ class VoiceCallingScreen extends StatelessWidget {
       final String pName = p['name'] ?? p['username'] ?? 'User';
       final String? pAvatar = p['avatar'] ?? p['profile_pic'];
       final bool pMute = p['is_muted'] == true || p['isMuted'] == true;
+      final String? pStatus = p['status']?.toString();
 
       if (pId != null) {
-        final isDup = gridMembers.any((m) => m['user_id'].toString() == pId.toString());
+        final String pIdStr = pId.toString();
+        if (callManager.roomManager.hasParticipantLeft(pIdStr)) {
+          continue;
+        }
+        final isDup = gridMembers.any((m) => m['user_id'].toString() == pIdStr);
         if (!isDup) {
           gridMembers.add({
             'user_id': pId.toString(),
@@ -129,6 +160,7 @@ class VoiceCallingScreen extends StatelessWidget {
             'avatar': pAvatar,
             'isMe': pId.toString() == callManager.myUserId.toString(),
             'is_muted': pMute,
+            'status': pStatus,
           });
         }
       }
@@ -148,7 +180,10 @@ class VoiceCallingScreen extends StatelessWidget {
     return Consumer2<CallManager, CallController>(
       builder: (context, callManager, callController, child) {
         final roomManager = callManager.roomManager;
-        final isVideoActive = callManager.isVideo || roomManager.isCameraOn || roomManager.remoteVideoTrack != null;
+        final isVideoActive =
+            callManager.isVideo ||
+            roomManager.isCameraOn ||
+            roomManager.remoteVideoTrack != null;
         if (isVideoActive) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             callManager.setVideoCallMode(true);
@@ -160,7 +195,11 @@ class VoiceCallingScreen extends StatelessWidget {
         final isSpeakerOn = roomManager.isSpeakerOn;
 
         // Build call members list for grid view
-        final gridMembers = _buildGridMembers(callManager, callController, context);
+        final gridMembers = _buildGridMembers(
+          callManager,
+          callController,
+          context,
+        );
         final hasAddedMembers = gridMembers.length >= 3;
 
         // Resolve dynamic single member details when falling back to 1-to-1 UI
@@ -170,22 +209,74 @@ class VoiceCallingScreen extends StatelessWidget {
         );
 
         // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
-        if (callManager.state == CallState.connected && activeOther.isEmpty) {
+        if (!callManager.isGroup &&
+            callManager.state == CallState.connected &&
+            callManager.secondsElapsed > 2 &&
+            callController.hasFetchedParticipants &&
+            activeOther.isEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            dev.log('👥 VoiceCallingScreen: Rebuilt grid has only Me left. Automatically ending call.', name: 'VoiceCallingScreen');
+            dev.log(
+              '👥 VoiceCallingScreen: Rebuilt grid has only Me left. Automatically ending call.',
+              name: 'VoiceCallingScreen',
+            );
             callManager.endCall();
           });
         }
 
-        final String activeName = activeOther.isNotEmpty 
-            ? (activeOther['name'] ?? userName) 
-            : userName;
-        final String? activeAvatar = activeOther.isNotEmpty 
-            ? activeOther['avatar'] 
-            : avatarUrl;
+        final String activeOtherId = activeOther.isNotEmpty
+            ? (activeOther['user_id']?.toString() ?? '')
+            : ((callManager.myUserId == callManager.callerId)
+                  ? (callManager.receiverId ?? '')
+                  : (callManager.callerId ?? ''));
 
-        final bool isCallEnding = callManager.state == CallState.idle ||
-            (callManager.state == CallState.connected && activeOther.isEmpty);
+        bool otherHasLeft = false;
+        if (!callManager.isGroup &&
+            activeOther.isEmpty &&
+            activeOtherId.isNotEmpty) {
+          if (roomManager.hasParticipantLeft(activeOtherId)) {
+            otherHasLeft = true;
+          } else {
+            try {
+              final matchingParticipant = callController.participants
+                  .firstWhere((p) {
+                    final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+                    return pId?.toString() == activeOtherId;
+                  });
+              final String? status = matchingParticipant['status']
+                  ?.toString()
+                  .toLowerCase();
+              if (status == 'left' ||
+                  status == 'declined' ||
+                  status == 'missed' ||
+                  status == 'rejected') {
+                otherHasLeft = true;
+              }
+            } catch (_) {
+              if (callController.hasFetchedParticipants) {
+                otherHasLeft = true;
+              }
+            }
+          }
+        }
+
+        final String activeName =
+            (callManager.isGroup && activeOther.isNotEmpty)
+            ? "$userName - ${activeOther['name']}"
+            : (callManager.isGroup || activeOther.isEmpty)
+            ? (otherHasLeft ? 'Call ending...' : userName)
+            : (activeOther['name'] ?? userName);
+        final String? activeAvatar =
+            (callManager.isGroup || activeOther.isEmpty)
+            ? (otherHasLeft ? null : avatarUrl)
+            : activeOther['avatar'];
+
+        final bool isCallEnding =
+            callManager.state == CallState.idle ||
+            (!callManager.isGroup &&
+                callManager.state == CallState.connected &&
+                callManager.secondsElapsed > 4 &&
+                callController.hasFetchedParticipants &&
+                activeOther.isEmpty);
 
         dev.log(
           '📞 VoiceCallingScreen build: callState=${callManager.state}, activeOther.isEmpty=${activeOther.isEmpty}, isCallEnding=$isCallEnding',
@@ -200,7 +291,9 @@ class VoiceCallingScreen extends StatelessWidget {
             }
           },
           child: Scaffold(
-            backgroundColor: const Color(0xFF121212), // Deep luxurious immersive black background
+            backgroundColor: const Color(
+              0xFF121212,
+            ), // Deep luxurious immersive black background
             body: SafeArea(
               child: Stack(
                 children: [
@@ -209,33 +302,47 @@ class VoiceCallingScreen extends StatelessWidget {
                       ? Positioned.fill(
                           child: CallGridView(
                             members: gridMembers,
-                            callDuration: callManager.state == CallState.connected
+                            callDuration:
+                                callManager.state == CallState.connected
                                 ? callManager.callDuration
                                 : "Calling...",
                           ),
                         )
                       : isCallEnding
-                          ? const SizedBox.shrink()
-                          : Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Builder(
+                      ? const SizedBox.shrink()
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Builder(
                                 builder: (context) {
                                   final String otherId = activeOther.isNotEmpty
-                                      ? (activeOther['user_id']?.toString() ?? '')
-                                      : ((callManager.myUserId == callManager.callerId)
-                                          ? (callManager.receiverId ?? '')
-                                          : (callManager.callerId ?? ''));
-                                  final bool isOtherMuted = activeOther.isNotEmpty
+                                      ? (activeOther['user_id']?.toString() ??
+                                            '')
+                                      : ((callManager.myUserId ==
+                                                callManager.callerId)
+                                            ? (callManager.receiverId ?? '')
+                                            : (callManager.callerId ?? ''));
+                                  final bool isOtherMuted =
+                                      activeOther.isNotEmpty
                                       ? (activeOther['is_muted'] == true)
-                                      : (callManager.mutedParticipants[otherId] == true || 
-                                          callController.participants.any((p) {
-                                            final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                                            return pId?.toString() == otherId && (p['is_muted'] == true || p['isMuted'] == true);
-                                          }));
-                                  final isConnected = callManager.state == CallState.connected;
-        
+                                      : (callManager.mutedParticipants[otherId] ==
+                                                true ||
+                                            callController.participants.any((
+                                              p,
+                                            ) {
+                                              final pId =
+                                                  p['user_id'] ??
+                                                  p['id'] ??
+                                                  p['_id'];
+                                              return pId?.toString() ==
+                                                      otherId &&
+                                                  (p['is_muted'] == true ||
+                                                      p['isMuted'] == true);
+                                            }));
+                                  final isConnected =
+                                      callManager.state == CallState.connected;
+
                                   return Stack(
                                     clipBehavior: Clip.none,
                                     children: [
@@ -247,7 +354,9 @@ class VoiceCallingScreen extends StatelessWidget {
                                           shape: BoxShape.circle,
                                           boxShadow: [
                                             BoxShadow(
-                                              color: appColor(context).white.withValues(alpha: 0.04),
+                                              color: appColor(
+                                                context,
+                                              ).white.withValues(alpha: 0.04),
                                               blurRadius: 30,
                                               spreadRadius: 20,
                                             ),
@@ -260,38 +369,73 @@ class VoiceCallingScreen extends StatelessWidget {
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
                                               border: Border.all(
-                                                color: appColor(context).white.withValues(alpha: 0.1),
+                                                color: appColor(
+                                                  context,
+                                                ).white.withValues(alpha: 0.1),
                                                 width: 2,
                                               ),
-                                              color: appColor(context).white.withValues(alpha: 0.06),
+                                              color: appColor(
+                                                context,
+                                              ).white.withValues(alpha: 0.06),
                                             ),
-                                            child: (activeAvatar != null && activeAvatar.isNotEmpty)
+                                            child:
+                                                (activeAvatar != null &&
+                                                    activeAvatar.isNotEmpty)
                                                 ? ClipRRect(
-                                                    borderRadius: BorderRadius.circular(70),
-                                                    child: CachedNetworkImage(
-                                                      imageUrl: ApiService.getImageUrl(activeAvatar),
-                                                      cacheKey: _normalizeAvatarUrl(activeAvatar),
-                                                      fit: BoxFit.cover,
-                                                      placeholder: (context, url) => const Center(
-                                                        child: SizedBox(
-                                                          width: 32,
-                                                          height: 32,
-                                                          child: CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                            color: Colors.white30,
-                                                          ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          70,
                                                         ),
-                                                      ),
-                                                      errorWidget: (context, url, error) => Icon(
-                                                        Icons.person,
-                                                        color: appColor(context).white,
-                                                        size: 64,
-                                                      ),
+                                                    child: CachedNetworkImage(
+                                                      imageUrl:
+                                                          ApiService.getImageUrl(
+                                                            activeAvatar,
+                                                          ),
+                                                      cacheKey:
+                                                          _normalizeAvatarUrl(
+                                                            activeAvatar,
+                                                          ),
+                                                      fit: BoxFit.cover,
+                                                      placeholder:
+                                                          (
+                                                            context,
+                                                            url,
+                                                          ) => const Center(
+                                                            child: SizedBox(
+                                                              width: 32,
+                                                              height: 32,
+                                                              child:
+                                                                  CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2,
+                                                                    color: Colors
+                                                                        .white30,
+                                                                  ),
+                                                            ),
+                                                          ),
+                                                      errorWidget:
+                                                          (
+                                                            context,
+                                                            url,
+                                                            error,
+                                                          ) => Icon(
+                                                            callManager.isGroup
+                                                                ? Icons.group
+                                                                : Icons.person,
+                                                            color: appColor(
+                                                              context,
+                                                            ).white,
+                                                            size: 64,
+                                                          ),
                                                     ),
                                                   )
                                                 : Icon(
-                                                    Icons.person,
-                                                    color: appColor(context).white,
+                                                    callManager.isGroup
+                                                        ? Icons.group
+                                                        : Icons.person,
+                                                    color: appColor(
+                                                      context,
+                                                    ).white,
                                                     size: 64,
                                                   ),
                                           ),
@@ -304,7 +448,10 @@ class VoiceCallingScreen extends StatelessWidget {
                                           child: Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: const Color(0xFFD32F2F).withValues(alpha: 0.95), // Premium crimson mute badge
+                                              color: const Color(0xFFD32F2F)
+                                                  .withValues(
+                                                    alpha: 0.95,
+                                                  ), // Premium crimson mute badge
                                               shape: BoxShape.circle,
                                               border: Border.all(
                                                 color: Colors.white,
@@ -312,7 +459,8 @@ class VoiceCallingScreen extends StatelessWidget {
                                               ),
                                               boxShadow: [
                                                 BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.3),
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.3),
                                                   blurRadius: 8,
                                                   offset: const Offset(0, 4),
                                                 ),
@@ -330,27 +478,31 @@ class VoiceCallingScreen extends StatelessWidget {
                                 },
                               ),
                               const SizedBox(height: 28),
-        
+
                               // Bold styled user identity text
                               Text(
                                 activeName,
-                                style: fontStyle.clashDisplayBold24.textColor(appColor(context).white),
+                                style: fontStyle.clashDisplayBold20.textColor(
+                                  appColor(context).white,
+                                ),
                               ),
                               const SizedBox(height: 12),
-        
+
                               // Dedicated dynamic timer badge
                               Text(
                                 callManager.state == CallState.connected
                                     ? callManager.callDuration
                                     : "Calling...",
                                 style: fontStyle.clashDisplayMedium14.textColor(
-                                  appColor(context).white.withValues(alpha: 0.7),
+                                  appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.7),
                                 ),
                               ),
                             ],
                           ),
                         ),
-        
+
                   // 2. Immersive Floating Translucent Bottom Toolbar
                   Positioned(
                     bottom: 32,
@@ -367,15 +519,21 @@ class VoiceCallingScreen extends StatelessWidget {
                               vertical: 14,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF262626).withValues(alpha: 0.85),
+                              color: const Color(
+                                0xFF262626,
+                              ).withValues(alpha: 0.85),
                               borderRadius: BorderRadius.circular(40),
                               border: Border.all(
-                                color: appColor(context).white.withValues(alpha: 0.08),
+                                color: appColor(
+                                  context,
+                                ).white.withValues(alpha: 0.08),
                                 width: 1,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: appColor(context).black.withValues(alpha: 0.2),
+                                  color: appColor(
+                                    context,
+                                  ).black.withValues(alpha: 0.2),
                                   blurRadius: 20,
                                   offset: const Offset(0, 10),
                                 ),
@@ -388,7 +546,9 @@ class VoiceCallingScreen extends StatelessWidget {
                                 // A. Standard Toolbar Actions
                                 GestureDetector(
                                   onTap: () {
-                                    callManager.setCameraEnabled(!roomManager.isCameraOn);
+                                    callManager.setCameraEnabled(
+                                      !roomManager.isCameraOn,
+                                    );
                                   },
                                   child: _buildRoundTool(
                                     context,
@@ -403,7 +563,9 @@ class VoiceCallingScreen extends StatelessWidget {
                                   },
                                   child: _buildRoundTool(
                                     context,
-                                    asset: isMuted ? ImageAssets.micOff : ImageAssets.recorder,
+                                    asset: isMuted
+                                        ? ImageAssets.micOff
+                                        : ImageAssets.recorder,
                                     isActive: !isMuted,
                                   ),
                                 ),
@@ -420,22 +582,31 @@ class VoiceCallingScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap: callManager.state == CallState.connected
+                                  onTap:
+                                      callManager.state == CallState.connected
                                       ? () {
-                                          showAddUserDialog(context, callManager.myUserId);
+                                          showAddUserDialog(
+                                            context,
+                                            callManager.myUserId,
+                                          );
                                         }
                                       : null,
                                   child: Opacity(
-                                    opacity: callManager.state == CallState.connected ? 1.0 : 0.4,
+                                    opacity:
+                                        callManager.state == CallState.connected
+                                        ? 1.0
+                                        : 0.4,
                                     child: _buildRoundTool(
                                       context,
                                       asset: ImageAssets.addUser,
-                                      isActive: callManager.state == CallState.connected,
+                                      isActive:
+                                          callManager.state ==
+                                          CallState.connected,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-        
+
                                 // B. Solid Red Immediate Termination Hangup Trigger
                                 GestureDetector(
                                   onTap: () {
@@ -445,7 +616,9 @@ class VoiceCallingScreen extends StatelessWidget {
                                     width: 52,
                                     height: 52,
                                     decoration: const BoxDecoration(
-                                      color: Color(0xFFD32F2F), // Vibrant material red hangup color
+                                      color: Color(
+                                        0xFFD32F2F,
+                                      ), // Vibrant material red hangup color
                                       shape: BoxShape.circle,
                                       boxShadow: [
                                         BoxShadow(
@@ -471,7 +644,7 @@ class VoiceCallingScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-        
+
                   // 3. Minimization Back Button
                   Positioned(
                     top: 16,
@@ -481,7 +654,10 @@ class VoiceCallingScreen extends StatelessWidget {
                         Navigator.of(context).pop();
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),
                           color: Colors.white.withValues(alpha: 0.08),
@@ -574,7 +750,9 @@ class AddUserDialog extends StatelessWidget {
                   children: [
                     Text(
                       "Add Members",
-                      style: fontStyle.clashDisplayBold18.textColor(Colors.white),
+                      style: fontStyle.clashDisplayBold18.textColor(
+                        Colors.white,
+                      ),
                     ),
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
@@ -614,52 +792,63 @@ class AddUserDialog extends StatelessWidget {
                         return Center(
                           child: Text(
                             controller.friendsErrorMessage!,
-                            style: fontStyle.clashDisplayMedium12.textColor(Colors.white70),
+                            style: fontStyle.clashDisplayMedium12.textColor(
+                              Colors.white70,
+                            ),
                           ),
                         );
                       }
 
-                       final callManager = Provider.of<CallManager>(context, listen: false);
-                       final String myId = callManager.myUserId ?? '';
-                       final String otherId = (callManager.myUserId == callManager.callerId)
-                           ? (callManager.receiverId ?? '')
-                           : (callManager.callerId ?? '');
+                      final callManager = Provider.of<CallManager>(
+                        context,
+                        listen: false,
+                      );
+                      final String myId = callManager.myUserId ?? '';
+                      final String otherId =
+                          (callManager.myUserId == callManager.callerId)
+                          ? (callManager.receiverId ?? '')
+                          : (callManager.callerId ?? '');
 
-                       final Set<String> existingUserIds = {myId, otherId};
-                       for (final p in controller.participants) {
-                         final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                         if (pId != null) {
-                           existingUserIds.add(pId.toString());
-                         }
-                       }
+                      final Set<String> existingUserIds = {myId, otherId};
+                      for (final p in controller.participants) {
+                        final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+                        if (pId != null) {
+                          existingUserIds.add(pId.toString());
+                        }
+                      }
 
-                        final filteredFriends = controller.friends.where((friend) {
-                          // Only allow online users
-                          if (friend['is_online'] != true) return false;
+                      final filteredFriends = controller.friends.where((
+                        friend,
+                      ) {
+                        // Only allow online users
+                        if (friend['is_online'] != true) return false;
 
-                          final friendId = friend['user_id'] ?? friend['id'] ?? friend['_id'];
-                          if (friendId == null) return true;
-                          return !existingUserIds.contains(friendId.toString());
-                        }).toList();
+                        final friendId =
+                            friend['user_id'] ?? friend['id'] ?? friend['_id'];
+                        if (friendId == null) return true;
+                        return !existingUserIds.contains(friendId.toString());
+                      }).toList();
 
-                       if (filteredFriends.isEmpty) {
-                         return Center(
-                           child: Padding(
-                             padding: const EdgeInsets.symmetric(vertical: 40),
-                             child: Text(
-                               controller.friends.isEmpty
-                                   ? "No connected friends found."
-                                   : "All friends are already in the call.",
-                               style: fontStyle.clashDisplayMedium12.textColor(Colors.white54),
-                             ),
-                           ),
-                         );
-                       }
+                      if (filteredFriends.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Text(
+                              controller.friends.isEmpty
+                                  ? "No connected friends found."
+                                  : "All friends are already in the call.",
+                              style: fontStyle.clashDisplayMedium12.textColor(
+                                Colors.white54,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
 
-                       return ListView.separated(
-                         shrinkWrap: true,
-                         physics: const BouncingScrollPhysics(),
-                         itemCount: filteredFriends.length,
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: filteredFriends.length,
                         separatorBuilder: (context, index) => Container(
                           height: 1,
                           color: Colors.white.withValues(alpha: 0.05),
@@ -680,18 +869,28 @@ class AddUserDialog extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.08),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.08,
+                                      ),
                                       width: 1.5,
                                     ),
-                                    image: (friendAvatar != null && friendAvatar.isNotEmpty)
+                                    image:
+                                        (friendAvatar != null &&
+                                            friendAvatar.isNotEmpty)
                                         ? DecorationImage(
-                                            image: NetworkImage(ApiService.getImageUrl(friendAvatar)),
+                                            image: NetworkImage(
+                                              ApiService.getImageUrl(
+                                                friendAvatar,
+                                              ),
+                                            ),
                                             fit: BoxFit.cover,
                                           )
                                         : null,
                                     color: Colors.white.withValues(alpha: 0.05),
                                   ),
-                                  child: (friendAvatar != null && friendAvatar.isNotEmpty)
+                                  child:
+                                      (friendAvatar != null &&
+                                          friendAvatar.isNotEmpty)
                                       ? null
                                       : const Icon(
                                           Icons.person,
@@ -704,20 +903,25 @@ class AddUserDialog extends StatelessWidget {
                                 // Details
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         friendName,
-                                        style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                        style: fontStyle.clashDisplaySemiBold14
+                                            .textColor(Colors.white),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        friend['is_online'] == true ? "Online" : "Offline",
-                                        style: fontStyle.clashDisplayMedium10.textColor(
-                                          friend['is_online'] == true
-                                              ? const Color(0xFF23C123)
-                                              : Colors.white54,
-                                        ),
+                                        friend['is_online'] == true
+                                            ? "Online"
+                                            : "Offline",
+                                        style: fontStyle.clashDisplayMedium10
+                                            .textColor(
+                                              friend['is_online'] == true
+                                                  ? const Color(0xFF23C123)
+                                                  : Colors.white54,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -726,37 +930,71 @@ class AddUserDialog extends StatelessWidget {
                                 // Invite/Add Button
                                 GestureDetector(
                                   onTap: () async {
-                                    final callManager = Provider.of<CallManager>(context, listen: false);
+                                    final callManager =
+                                        Provider.of<CallManager>(
+                                          context,
+                                          listen: false,
+                                        );
                                     final callId = callManager.currentCallId;
-                                    final friendId = friend['user_id'] ?? friend['id'] ?? friend['_id'];
+                                    final friendId =
+                                        friend['user_id'] ??
+                                        friend['id'] ??
+                                        friend['_id'];
                                     if (context.mounted) {
-                                      Navigator.pop(context); // Close the sheet/dialog immediately
+                                      Navigator.pop(
+                                        context,
+                                      ); // Close the sheet/dialog immediately
                                     }
                                     if (callId != null && friendId != null) {
-                                      final controller = Provider.of<CallController>(context, listen: false);
-                                      final success = await controller.addParticipant(callId, friendId.toString());
+                                      final controller =
+                                          Provider.of<CallController>(
+                                            context,
+                                            listen: false,
+                                          );
+                                      final success = await controller
+                                          .addParticipant(
+                                            callId,
+                                            friendId.toString(),
+                                          );
                                       if (success) {
                                         // Gather all unique active participant IDs and names
                                         final List<String> pIds = [];
                                         final List<String> pNames = [];
-                                        
+
                                         // 1. Add "Me" / Caller
                                         String? myName = callManager.myUserName;
-                                        if (myName == null || myName.isEmpty || myName == 'User') {
+                                        if (myName == null ||
+                                            myName.isEmpty ||
+                                            myName == 'User') {
                                           try {
-                                            final profileController = Provider.of<ProfileController>(context, listen: false);
-                                            if (profileController.name.isNotEmpty) {
+                                            final profileController =
+                                                Provider.of<ProfileController>(
+                                                  context,
+                                                  listen: false,
+                                                );
+                                            if (profileController
+                                                .name
+                                                .isNotEmpty) {
                                               myName = profileController.name;
                                             }
                                           } catch (_) {}
                                         }
 
-                                        String? myAvatar = callManager.myUserAvatar;
-                                        if (myAvatar == null || myAvatar.isEmpty) {
+                                        String? myAvatar =
+                                            callManager.myUserAvatar;
+                                        if (myAvatar == null ||
+                                            myAvatar.isEmpty) {
                                           try {
-                                            final profileController = Provider.of<ProfileController>(context, listen: false);
-                                            if (profileController.imageUrl.isNotEmpty) {
-                                              myAvatar = profileController.imageUrl;
+                                            final profileController =
+                                                Provider.of<ProfileController>(
+                                                  context,
+                                                  listen: false,
+                                                );
+                                            if (profileController
+                                                .imageUrl
+                                                .isNotEmpty) {
+                                              myAvatar =
+                                                  profileController.imageUrl;
                                             }
                                           } catch (_) {}
                                         }
@@ -767,23 +1005,36 @@ class AddUserDialog extends StatelessWidget {
                                         }
 
                                         // 2. Add other participants from controller.participants
-                                        for (final p in controller.participants) {
-                                          final pId = (p['user_id'] ?? p['id'] ?? p['_id'])?.toString();
-                                          final pName = (p['name'] ?? p['username'] ?? 'User').toString();
-                                          if (pId != null && pId.isNotEmpty && !pIds.contains(pId)) {
+                                        for (final p
+                                            in controller.participants) {
+                                          final pId =
+                                              (p['user_id'] ??
+                                                      p['id'] ??
+                                                      p['_id'])
+                                                  ?.toString();
+                                          final pName =
+                                              (p['name'] ??
+                                                      p['username'] ??
+                                                      'User')
+                                                  .toString();
+                                          if (pId != null &&
+                                              pId.isNotEmpty &&
+                                              !pIds.contains(pId)) {
                                             pIds.add(pId);
                                             pNames.add(pName);
                                           }
                                         }
 
                                         // 3. Make sure the newly added friend is included
-                                        final String friendIdStr = friendId.toString();
+                                        final String friendIdStr = friendId
+                                            .toString();
                                         if (!pIds.contains(friendIdStr)) {
                                           pIds.add(friendIdStr);
                                           pNames.add(friendName);
                                         }
 
-                                        final Map<String, dynamic> socketData = {
+                                        final Map<String, dynamic>
+                                        socketData = {
                                           'callId': callId,
                                           'roomId': callManager.currentRoomId,
                                           'callerId': callManager.myUserId,
@@ -794,32 +1045,53 @@ class AddUserDialog extends StatelessWidget {
                                           'isVideo': callManager.isVideo,
                                           'isGroup': true,
                                           'groupName': callManager.isGroup
-                                              ? (callManager.receiverName ?? "Group Call")
+                                              ? (callManager.receiverName ??
+                                                    "Group Call")
+                                              : (myName ?? "Group Call"),
+                                          'group_name': callManager.isGroup
+                                              ? (callManager.receiverName ??
+                                                    "Group Call")
                                               : (myName ?? "Group Call"),
                                           'groupAvatar': callManager.isGroup
-                                              ? (callManager.receiverAvatar ?? "")
+                                              ? (callManager.receiverAvatar ??
+                                                    "")
+                                              : (myAvatar ?? ""),
+                                          'group_avatar': callManager.isGroup
+                                              ? (callManager.receiverAvatar ??
+                                                    "")
                                               : (myAvatar ?? ""),
                                           'participantIds': pIds,
                                           'participantNames': pNames,
                                           'participantsCount': pIds.length,
                                         };
-                                        SocketService().emit('call_user', socketData);
+                                        SocketService().emit(
+                                          'call_user',
+                                          socketData,
+                                        );
                                       }
                                     }
                                   },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF23C123).withValues(alpha: 0.1),
+                                      color: const Color(
+                                        0xFF23C123,
+                                      ).withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
-                                        color: const Color(0xFF23C123).withValues(alpha: 0.2),
+                                        color: const Color(
+                                          0xFF23C123,
+                                        ).withValues(alpha: 0.2),
                                         width: 1,
                                       ),
                                     ),
                                     child: Text(
                                       "Add",
-                                      style: fontStyle.clashDisplayBold10.textColor(const Color(0xFF23C123)),
+                                      style: fontStyle.clashDisplayBold10
+                                          .textColor(const Color(0xFF23C123)),
                                     ),
                                   ),
                                 ),
@@ -853,8 +1125,9 @@ class CallGridView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final callController = Provider.of<CallController>(context);
+    final callManager = Provider.of<CallManager>(context);
     final total = members.length;
-    final int numPages = total <= 6 ? 1 : 1 + ((total - 6) / 5.0).ceil();
+    final int numPages = total <= 4 ? 1 : 1 + ((total - 4) / 3.0).ceil();
     final int currentPage = callController.currentPage;
 
     return Container(
@@ -874,10 +1147,19 @@ class CallGridView extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 10),
+              if (callManager.isGroup) ...[
+                Text(
+                  callManager.receiverName ?? 'Group',
+                  style: fontStyle.clashDisplayBold18.textColor(Colors.white),
+                ),
+                const SizedBox(height: 6),
+              ],
               // Top timer display
               Text(
                 callDuration,
-                style: fontStyle.clashDisplaySemiBold16.textColor(Colors.white70),
+                style: fontStyle.clashDisplaySemiBold16.textColor(
+                  Colors.white70,
+                ),
               ),
               const SizedBox(height: 24),
               // Grid Area inside PageView
@@ -890,45 +1172,54 @@ class CallGridView extends StatelessWidget {
                     // Extract items for this page index
                     List<Map<String, dynamic>> pageMembers = [];
                     bool showIndicatorCard = false;
-                    List<Map<String, dynamic>> remainingMembersForIndicator = [];
+                    List<Map<String, dynamic>> remainingMembersForIndicator =
+                        [];
 
-                    if (total <= 6) {
+                    if (total <= 4) {
                       pageMembers = members;
                     } else {
-                      final int startIndex = pageIndex * 5;
+                      final int startIndex = pageIndex * 3;
                       if (pageIndex < numPages - 1) {
-                        // Non-last page: show 5 members + 1 indicator card
-                        final int endIndex = startIndex + 5;
+                        // Non-last page: show 3 members + 1 indicator card
+                        final int endIndex = startIndex + 3;
                         pageMembers = members.sublist(startIndex, endIndex);
                         showIndicatorCard = true;
-                        remainingMembersForIndicator = members.sublist(endIndex);
+                        remainingMembersForIndicator = members.sublist(
+                          endIndex,
+                        );
                       } else {
                         // Last page: show remaining members
                         pageMembers = members.sublist(startIndex);
                       }
                     }
 
-                    final int gridItemCount = pageMembers.length + (showIndicatorCard ? 1 : 0);
+                    final int gridItemCount =
+                        pageMembers.length + (showIndicatorCard ? 1 : 0);
 
                     return GridView.builder(
-                      physics: const NeverScrollableScrollPhysics(), // Scroll managed by PageView
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.82,
-                      ),
+                      physics:
+                          const NeverScrollableScrollPhysics(), // Scroll managed by PageView
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.82,
+                          ),
                       itemCount: gridItemCount,
                       itemBuilder: (context, index) {
-                        if (showIndicatorCard && index == 5) {
+                        if (showIndicatorCard && index == 3) {
                           final remaining = remainingMembersForIndicator;
-                          final visibleCount = remaining.length > 4 ? 4 : remaining.length;
-                          
+                          final visibleCount = remaining.length > 4
+                              ? 4
+                              : remaining.length;
+
                           // Layout details for overlapping avatars
                           const double avatarSize = 44.0;
                           const double overlap = 14.0;
                           const double itemWidth = avatarSize - overlap;
-                          final double stackWidth = avatarSize + (visibleCount - 1) * itemWidth;
+                          final double stackWidth =
+                              avatarSize + (visibleCount - 1) * itemWidth;
 
                           return Container(
                             decoration: BoxDecoration(
@@ -946,7 +1237,9 @@ class CallGridView extends StatelessWidget {
                                 children: [
                                   Positioned.fill(
                                     child: Container(
-                                      color: Colors.black.withValues(alpha: 0.15),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.15,
+                                      ),
                                     ),
                                   ),
                                   Column(
@@ -957,7 +1250,9 @@ class CallGridView extends StatelessWidget {
                                         width: stackWidth,
                                         height: avatarSize,
                                         child: Stack(
-                                          children: List.generate(visibleCount, (vIndex) {
+                                          children: List.generate(visibleCount, (
+                                            vIndex,
+                                          ) {
                                             // Reverse generation so leftmost is top-most
                                             final i = visibleCount - 1 - vIndex;
                                             final m = remaining[i];
@@ -974,23 +1269,50 @@ class CallGridView extends StatelessWidget {
                                                     color: Colors.white,
                                                     width: 2,
                                                   ),
-                                                  color: Colors.white.withValues(alpha: 0.1),
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.1),
                                                 ),
                                                 child: ClipRRect(
-                                                  borderRadius: BorderRadius.circular(avatarSize / 2),
-                                                  child: (mAvatar != null && mAvatar.isNotEmpty)
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        avatarSize / 2,
+                                                      ),
+                                                  child:
+                                                      (mAvatar != null &&
+                                                          mAvatar.isNotEmpty)
                                                       ? CachedNetworkImage(
-                                                          imageUrl: ApiService.getImageUrl(mAvatar),
-                                                          cacheKey: _normalizeAvatarUrl(mAvatar),
+                                                          imageUrl:
+                                                              ApiService.getImageUrl(
+                                                                mAvatar,
+                                                              ),
+                                                          cacheKey:
+                                                              _normalizeAvatarUrl(
+                                                                mAvatar,
+                                                              ),
                                                           fit: BoxFit.cover,
-                                                          placeholder: (context, url) => Container(
-                                                            color: Colors.white.withValues(alpha: 0.05),
-                                                          ),
-                                                          errorWidget: (context, url, error) => const Icon(
-                                                            Icons.person,
-                                                            color: Colors.white70,
-                                                            size: 20,
-                                                          ),
+                                                          placeholder:
+                                                              (
+                                                                context,
+                                                                url,
+                                                              ) => Container(
+                                                                color: Colors
+                                                                    .white
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.05,
+                                                                    ),
+                                                              ),
+                                                          errorWidget:
+                                                              (
+                                                                context,
+                                                                url,
+                                                                error,
+                                                              ) => const Icon(
+                                                                Icons.person,
+                                                                color: Colors
+                                                                    .white70,
+                                                                size: 20,
+                                                              ),
                                                         )
                                                       : const Icon(
                                                           Icons.person,
@@ -1006,11 +1328,15 @@ class CallGridView extends StatelessWidget {
                                       const SizedBox(height: 14),
                                       // Count text
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
                                         child: Text(
                                           "+${remaining.length} others",
                                           textAlign: TextAlign.center,
-                                          style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                          style: fontStyle
+                                              .clashDisplaySemiBold14
+                                              .textColor(Colors.white),
                                         ),
                                       ),
                                     ],
@@ -1022,22 +1348,72 @@ class CallGridView extends StatelessWidget {
                         }
 
                         final member = pageMembers[index];
+                        final String userId =
+                            member['user_id']?.toString() ?? '';
                         final String name = member['name'] ?? 'User';
                         final String? avatar = member['avatar'];
                         final bool isMe = member['isMe'] == true;
+                        final String? status = member['status']
+                            ?.toString()
+                            .toLowerCase();
+                        final bool isRemoteConnected =
+                            callManager
+                                .roomManager
+                                .room
+                                ?.remoteParticipants
+                                .values
+                                .any((rp) => rp.identity == userId) ??
+                            false;
+                        final bool isCalling =
+                            !isMe &&
+                            !isRemoteConnected &&
+                            (status == 'ringing' ||
+                                status == 'dialing' ||
+                                status == 'invited' ||
+                                status == null);
+                        final bool isSpeaking = isMe
+                            ? (callManager
+                                      .roomManager
+                                      .room
+                                      ?.localParticipant
+                                      ?.isSpeaking ??
+                                  false)
+                            : (callManager
+                                      .roomManager
+                                      .room
+                                      ?.remoteParticipants[userId]
+                                      ?.isSpeaking ??
+                                  false);
 
                         return Container(
                           decoration: BoxDecoration(
-                            color: isMe 
-                                ? const Color(0xFF6B1D2F).withValues(alpha: 0.25)
+                            color: isMe
+                                ? const Color(
+                                    0xFF6B1D2F,
+                                  ).withValues(alpha: 0.25)
                                 : Colors.white.withValues(alpha: 0.04),
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
-                              color: isMe 
-                                  ? const Color(0xFF8B263E).withValues(alpha: 0.5)
-                                  : Colors.white.withValues(alpha: 0.08),
-                              width: 1.5,
+                              color: isSpeaking
+                                  ? const Color(0xFF23C123)
+                                  : (isMe
+                                        ? const Color(
+                                            0xFF8B263E,
+                                          ).withValues(alpha: 0.5)
+                                        : Colors.white.withValues(alpha: 0.08)),
+                              width: isSpeaking ? 3.0 : 1.5,
                             ),
+                            boxShadow: isSpeaking
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF23C123,
+                                      ).withValues(alpha: 0.3),
+                                      blurRadius: 12,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(24),
@@ -1050,27 +1426,32 @@ class CallGridView extends StatelessWidget {
                                     child: Opacity(
                                       opacity: 0.22, // Subtle and deep
                                       child: CachedNetworkImage(
-                                        imageUrl: ApiService.getImageUrl(avatar),
+                                        imageUrl: ApiService.getImageUrl(
+                                          avatar,
+                                        ),
                                         cacheKey: _normalizeAvatarUrl(avatar),
                                         fit: BoxFit.cover,
-                                        placeholder: (context, url) => const Center(
-                                          child: SizedBox(
-                                            width: 24,
-                                            height: 24,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white24,
+                                        placeholder: (context, url) =>
+                                            const Center(
+                                              child: SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: Colors.white24,
+                                                    ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                        errorWidget: (context, url, error) => const Opacity(
-                                          opacity: 0.04,
-                                          child: Icon(
-                                            Icons.person,
-                                            size: 140,
-                                            color: Colors.white,
-                                          ),
-                                        ),
+                                        errorWidget: (context, url, error) =>
+                                            const Opacity(
+                                              opacity: 0.04,
+                                              child: Icon(
+                                                Icons.person,
+                                                size: 140,
+                                                color: Colors.white,
+                                              ),
+                                            ),
                                       ),
                                     ),
                                   )
@@ -1089,8 +1470,10 @@ class CallGridView extends StatelessWidget {
                                 // Shading colored filter overlay to blend beautifully with plum/wine background
                                 Positioned.fill(
                                   child: Container(
-                                    color: isMe 
-                                        ? const Color(0xFF2D141E).withValues(alpha: 0.35)
+                                    color: isMe
+                                        ? const Color(
+                                            0xFF2D141E,
+                                          ).withValues(alpha: 0.35)
                                         : Colors.black.withValues(alpha: 0.15),
                                   ),
                                 ),
@@ -1106,33 +1489,49 @@ class CallGridView extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.12),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.12,
+                                          ),
                                           width: 2,
                                         ),
-                                        color: Colors.white.withValues(alpha: 0.06),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.06,
+                                        ),
                                       ),
-                                      child: (avatar != null && avatar.isNotEmpty)
+                                      child:
+                                          (avatar != null && avatar.isNotEmpty)
                                           ? ClipRRect(
-                                              borderRadius: BorderRadius.circular(43),
+                                              borderRadius:
+                                                  BorderRadius.circular(43),
                                               child: CachedNetworkImage(
-                                                imageUrl: ApiService.getImageUrl(avatar),
-                                                cacheKey: _normalizeAvatarUrl(avatar),
-                                                fit: BoxFit.cover,
-                                                placeholder: (context, url) => const Center(
-                                                  child: SizedBox(
-                                                    width: 24,
-                                                    height: 24,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: Colors.white30,
+                                                imageUrl:
+                                                    ApiService.getImageUrl(
+                                                      avatar,
                                                     ),
-                                                  ),
+                                                cacheKey: _normalizeAvatarUrl(
+                                                  avatar,
                                                 ),
-                                                errorWidget: (context, url, error) => const Icon(
-                                                  Icons.person,
-                                                  color: Colors.white70,
-                                                  size: 40,
-                                                ),
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) =>
+                                                    const Center(
+                                                      child: SizedBox(
+                                                        width: 24,
+                                                        height: 24,
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: Colors
+                                                                  .white30,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                errorWidget:
+                                                    (context, url, error) =>
+                                                        const Icon(
+                                                          Icons.person,
+                                                          color: Colors.white70,
+                                                          size: 40,
+                                                        ),
                                               ),
                                             )
                                           : const Icon(
@@ -1144,15 +1543,26 @@ class CallGridView extends StatelessWidget {
                                     const SizedBox(height: 14),
                                     // Name Text
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
                                       child: Text(
                                         name,
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                        style: fontStyle.clashDisplaySemiBold14
+                                            .textColor(Colors.white),
                                       ),
                                     ),
+                                    if (isCalling) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        "Calling..",
+                                        style: fontStyle.clashDisplayMedium10
+                                            .textColor(Colors.white70),
+                                      ),
+                                    ],
                                   ],
                                 ),
 
@@ -1162,18 +1572,26 @@ class CallGridView extends StatelessWidget {
                                     top: 12,
                                     right: 12,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF8B263E), // Deep wine pill color
+                                        color: const Color(
+                                          0xFF8B263E,
+                                        ), // Deep wine pill color
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.15),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.15,
+                                          ),
                                           width: 1,
                                         ),
                                       ),
                                       child: Text(
                                         "Me",
-                                        style: fontStyle.clashDisplayBold10.textColor(Colors.white),
+                                        style: fontStyle.clashDisplayBold10
+                                            .textColor(Colors.white),
                                       ),
                                     ),
                                   ),
@@ -1181,11 +1599,16 @@ class CallGridView extends StatelessWidget {
                                 // 4. Mute indicator badge at top left
                                 Builder(
                                   builder: (context) {
-                                    final callManager = context.watch<CallManager>();
-                                    final String memberId = member['user_id']?.toString() ?? '';
-                                    final bool isMuted = isMe 
-                                        ? callManager.roomManager.isMuted 
-                                        : (callManager.mutedParticipants[memberId] ?? (member['is_muted'] == true || member['isMuted'] == true));
+                                    final callManager = context
+                                        .watch<CallManager>();
+                                    final String memberId =
+                                        member['user_id']?.toString() ?? '';
+                                    final bool isMuted = isMe
+                                        ? callManager.roomManager.isMuted
+                                        : (callManager
+                                                  .mutedParticipants[memberId] ??
+                                              (member['is_muted'] == true ||
+                                                  member['isMuted'] == true));
 
                                     if (isMuted) {
                                       return Positioned(
@@ -1194,10 +1617,15 @@ class CallGridView extends StatelessWidget {
                                         child: Container(
                                           padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFD32F2F).withValues(alpha: 0.95), // Premium crimson mute badge
+                                            color: const Color(0xFFD32F2F)
+                                                .withValues(
+                                                  alpha: 0.95,
+                                                ), // Premium crimson mute badge
                                             shape: BoxShape.circle,
                                             border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.15),
+                                              color: Colors.white.withValues(
+                                                alpha: 0.15,
+                                              ),
                                               width: 1,
                                             ),
                                           ),
@@ -1233,9 +1661,11 @@ class CallGridView extends StatelessWidget {
                       width: isActive ? 24 : 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isActive 
+                        color: isActive
                             ? const Color(0xFF8B263E) // Active dot
-                            : Colors.white.withValues(alpha: 0.3), // Inactive dot
+                            : Colors.white.withValues(
+                                alpha: 0.3,
+                              ), // Inactive dot
                         borderRadius: BorderRadius.circular(4),
                       ),
                     );
@@ -1269,4 +1699,3 @@ String? _normalizeAvatarUrl(dynamic avatar) {
     return avatar;
   }
 }
-

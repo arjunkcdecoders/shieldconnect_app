@@ -54,7 +54,7 @@ class VideoCallReceivingScreen extends StatelessWidget {
                                 color: appColor(context).grey900,
                                 child: Center(
                                   child: Icon(
-                                    Icons.person,
+                                    callManager.isGroup ? Icons.group : Icons.person,
                                     color: appColor(context).white.withValues(alpha: 0.15),
                                     size: 100,
                                   ),
@@ -65,7 +65,7 @@ class VideoCallReceivingScreen extends StatelessWidget {
                               color: appColor(context).grey900,
                               child: Center(
                                 child: Icon(
-                                  Icons.person,
+                                  callManager.isGroup ? Icons.group : Icons.person,
                                   color: appColor(context).white.withValues(alpha: 0.15),
                                   size: 100,
                                 ),
@@ -153,14 +153,14 @@ class VideoCallReceivingScreen extends StatelessWidget {
                                                   ),
                                                 ),
                                                 errorWidget: (context, url, error) => Icon(
-                                                  Icons.person,
+                                                  callManager.isGroup ? Icons.group : Icons.person,
                                                   color: appColor(context).white,
                                                   size: 64,
                                                 ),
                                               ),
                                             )
                                           : Icon(
-                                              Icons.person,
+                                              callManager.isGroup ? Icons.group : Icons.person,
                                               color: appColor(context).white,
                                               size: 64,
                                             ),

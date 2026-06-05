@@ -486,7 +486,52 @@ class ChatlistScreen extends StatelessWidget {
         item['relationship']?['status'] == 'pending' &&
         item['requested_by'] != null;
     final String name = conversation['name'] ?? 'Unknown';
-    final String messageContent = lastMessage['content'] ?? 'No messages yet';
+    final String messageContentRaw = lastMessage['content'] ?? 'No messages yet';
+    String messageContent = messageContentRaw;
+    if (isGroup) {
+      final String msgLower = messageContentRaw.toLowerCase();
+      if (msgLower.contains("created") ||
+          msgLower.contains("system_group_created")) {
+        messageContent = 'Group "$name" created';
+      } else if (messageContentRaw.startsWith("system_member_added:")) {
+        final parts = messageContentRaw.split(':');
+        final memberName = parts.length >= 3
+            ? parts[2]
+            : (parts.length == 2
+                ? parts[1]
+                : "A member");
+        messageContent = "$memberName added to group";
+      } else if (messageContentRaw.startsWith("system_member_removed:")) {
+        final parts = messageContentRaw.split(':');
+        final memberName = parts.length >= 3
+            ? parts[2]
+            : (parts.length == 2
+                ? parts[1]
+                : "A member");
+        messageContent = "$memberName removed from group";
+      } else if (messageContentRaw.startsWith("system_member_joined:")) {
+        final parts = messageContentRaw.split(':');
+        final memberName = parts.length >= 3
+            ? parts[2]
+            : (parts.length == 2
+                ? parts[1]
+                : "A member");
+        messageContent = "$memberName joined the group";
+      } else if (messageContentRaw.startsWith("system_member_left:")) {
+        final parts = messageContentRaw.split(':');
+        final memberId = parts.length >= 2 ? parts[1] : '';
+        if (memberId == (homeController.userId ?? '')) {
+          messageContent = "You left the group";
+        } else {
+          final memberName = parts.length >= 3
+              ? parts[2]
+              : (parts.length == 2
+                  ? parts[1]
+                  : "A member");
+          messageContent = "$memberName left the group";
+        }
+      }
+    }
     final String time = lastMessage['created_at'] != null
         ? DateHelper.formatTime(lastMessage['created_at'])
         : '';
@@ -523,10 +568,16 @@ class ChatlistScreen extends StatelessWidget {
     final bool isOutgoing =
         senderId != null && senderId == homeController.userId;
     final String msgStatus = lastMessage['status'] ?? 'none';
+    final bool isSystemMessage = rawType == 'system' ||
+        rawType == 'status' ||
+        messageContentRaw.startsWith("system_member_") ||
+        messageContentRaw.contains("system_group_created");
     final String? imagePath = conversation['image'];
 
     bool showNewGroupBadge = false;
-    if (isGroup && messageContent == 'No messages yet' && lastMessage['created_at'] != null) {
+    if (isGroup &&
+        (messageContent == 'No messages yet' || messageContent == 'Group "$name" created') &&
+        lastMessage['created_at'] != null) {
       try {
         final DateTime createdAt = DateTime.parse(lastMessage['created_at'].toString()).toUtc();
         final DateTime now = DateTime.now().toUtc();
@@ -735,7 +786,7 @@ class ChatlistScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      if (typingIndicatorText == null && isOutgoing && msgStatus != 'none' && msgStatus.isNotEmpty) ...[
+                      if (typingIndicatorText == null && isOutgoing && !isSystemMessage && msgStatus != 'none' && msgStatus.isNotEmpty) ...[
                         _buildListReadReceipt(context, msgStatus),
                         const SizedBox(width: 4),
                       ],

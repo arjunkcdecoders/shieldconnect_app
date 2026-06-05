@@ -10,14 +10,13 @@ import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
 import 'package:shieldconnect_app/view/voice_calling_screen.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 
 class VideoCallingScreen extends StatelessWidget {
   final String userName;
 
-  const VideoCallingScreen({
-    super.key,
-    required this.userName,
-  });
+  const VideoCallingScreen({super.key, required this.userName});
 
   List<Map<String, dynamic>> _buildGridMembers(
     CallManager callManager,
@@ -26,8 +25,31 @@ class VideoCallingScreen extends StatelessWidget {
   ) {
     final List<Map<String, dynamic>> gridMembers = [];
 
-    // Resolve "Me" avatar
+    // Resolve "Me" avatar robustly from various providers
     String? myAvatar = callManager.myUserAvatar;
+    if (myAvatar == null || myAvatar.isEmpty) {
+      try {
+        final profileController = Provider.of<ProfileController>(
+          context,
+          listen: false,
+        );
+        if (profileController.imageUrl.isNotEmpty) {
+          myAvatar = profileController.imageUrl;
+        }
+      } catch (_) {}
+    }
+    if (myAvatar == null || myAvatar.isEmpty) {
+      try {
+        final homeController = Provider.of<HomeScreenController>(
+          context,
+          listen: false,
+        );
+        if (homeController.profileImage != null &&
+            homeController.profileImage!.isNotEmpty) {
+          myAvatar = homeController.profileImage;
+        }
+      } catch (_) {}
+    }
 
     // 1. Add "Me"
     gridMembers.add({
@@ -42,25 +64,38 @@ class VideoCallingScreen extends StatelessWidget {
     final String otherId = (callManager.myUserId == callManager.callerId)
         ? (callManager.receiverId ?? '')
         : (callManager.callerId ?? '');
-    
-    if (otherId.isNotEmpty) {
+
+    if (otherId.isNotEmpty && !callManager.isGroup) {
       String resolvedName = userName;
       if (resolvedName.contains(" and ")) {
         resolvedName = resolvedName.split(" and ").first;
       }
       bool hasLeft = false;
+      String? otherStatus;
+      String? resolvedAvatar = callManager.receiverAvatar;
       try {
-        final matchingParticipant = callController.participants.firstWhere(
-          (p) {
-            final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-            return pId?.toString() == otherId;
-          },
-        );
-        final String? status = matchingParticipant['status']?.toString().toLowerCase();
-        if (status == 'left' || status == 'declined' || status == 'missed' || status == 'rejected') {
+        final matchingParticipant = callController.participants.firstWhere((p) {
+          final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+          return pId?.toString() == otherId;
+        });
+        final String? status = matchingParticipant['status']
+            ?.toString()
+            .toLowerCase();
+        otherStatus = status;
+        if (status == 'left' ||
+            status == 'declined' ||
+            status == 'missed' ||
+            status == 'rejected') {
           hasLeft = true;
         } else {
-          resolvedName = matchingParticipant['name'] ?? matchingParticipant['username'] ?? resolvedName;
+          resolvedName =
+              matchingParticipant['name'] ??
+              matchingParticipant['username'] ??
+              resolvedName;
+          resolvedAvatar =
+              matchingParticipant['avatar'] ??
+              matchingParticipant['profile_pic'] ??
+              resolvedAvatar;
         }
       } catch (_) {
         if (callController.hasFetchedParticipants) {
@@ -68,19 +103,30 @@ class VideoCallingScreen extends StatelessWidget {
         }
       }
 
+      if (callManager.roomManager.hasParticipantLeft(otherId)) {
+        hasLeft = true;
+      }
+
       if (!hasLeft) {
-        final bool isOtherMuted = callManager.mutedParticipants[otherId] == true || 
+        final bool isOtherMuted =
+            callManager.mutedParticipants[otherId] == true ||
             callController.participants.any((p) {
               final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-              return pId?.toString() == otherId && (p['is_muted'] == true || p['isMuted'] == true);
+              return pId?.toString() == otherId &&
+                  (p['is_muted'] == true || p['isMuted'] == true);
             });
 
         gridMembers.add({
           'user_id': otherId,
           'name': resolvedName,
-          'avatar': callManager.receiverAvatar,
+          'avatar': resolvedAvatar,
           'isMe': false,
           'is_muted': isOtherMuted,
+          'status':
+              otherStatus ??
+              (callManager.state == CallState.connected
+                  ? 'connected'
+                  : 'ringing'),
         });
       }
     }
@@ -91,9 +137,14 @@ class VideoCallingScreen extends StatelessWidget {
       final String pName = p['name'] ?? p['username'] ?? 'User';
       final String? pAvatar = p['avatar'] ?? p['profile_pic'];
       final bool pMute = p['is_muted'] == true || p['isMuted'] == true;
+      final String? pStatus = p['status']?.toString();
 
       if (pId != null) {
-        final isDup = gridMembers.any((m) => m['user_id'].toString() == pId.toString());
+        final String pIdStr = pId.toString();
+        if (callManager.roomManager.hasParticipantLeft(pIdStr)) {
+          continue;
+        }
+        final isDup = gridMembers.any((m) => m['user_id'].toString() == pIdStr);
         if (!isDup) {
           gridMembers.add({
             'user_id': pId.toString(),
@@ -101,6 +152,7 @@ class VideoCallingScreen extends StatelessWidget {
             'avatar': pAvatar,
             'isMe': pId.toString() == callManager.myUserId.toString(),
             'is_muted': pMute,
+            'status': pStatus,
           });
         }
       }
@@ -119,7 +171,36 @@ class VideoCallingScreen extends StatelessWidget {
         final isCameraOn = roomManager.isCameraOn;
         final localVideoTrack = roomManager.localVideoTrack;
 
-        final gridMembers = _buildGridMembers(callManager, callController, context);
+        String? myAvatar = callManager.myUserAvatar;
+        if (myAvatar == null || myAvatar.isEmpty) {
+          try {
+            final profileController = Provider.of<ProfileController>(
+              context,
+              listen: false,
+            );
+            if (profileController.imageUrl.isNotEmpty) {
+              myAvatar = profileController.imageUrl;
+            }
+          } catch (_) {}
+        }
+        if (myAvatar == null || myAvatar.isEmpty) {
+          try {
+            final homeController = Provider.of<HomeScreenController>(
+              context,
+              listen: false,
+            );
+            if (homeController.profileImage != null &&
+                homeController.profileImage!.isNotEmpty) {
+              myAvatar = homeController.profileImage;
+            }
+          } catch (_) {}
+        }
+
+        final gridMembers = _buildGridMembers(
+          callManager,
+          callController,
+          context,
+        );
         final bool hasMultipleParticipants = gridMembers.length > 2;
 
         final activeOther = gridMembers.firstWhere(
@@ -127,35 +208,77 @@ class VideoCallingScreen extends StatelessWidget {
           orElse: () => <String, dynamic>{},
         );
 
-        // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
-        if (callManager.state == CallState.connected && activeOther.isEmpty) {
+        // UI-level safeguard: Auto-end call if connected and no other participant is in the call
+        if (!callManager.isGroup &&
+            callManager.state == CallState.connected &&
+            callManager.secondsElapsed > 2 &&
+            callController.hasFetchedParticipants &&
+            activeOther.isEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             callManager.endCall();
           });
         }
 
-        final String activeName = activeOther.isNotEmpty 
-            ? (activeOther['name'] ?? userName) 
-            : userName;
-        final String activeAvatar = activeOther.isNotEmpty 
-            ? (activeOther['avatar']?.toString() ?? '') 
-            : (callManager.receiverAvatar ?? '');
-
         final String activeOtherId = activeOther.isNotEmpty
             ? (activeOther['user_id']?.toString() ?? '')
             : ((callManager.myUserId == callManager.callerId)
-                ? (callManager.receiverId ?? '')
-                : (callManager.callerId ?? ''));
+                  ? (callManager.receiverId ?? '')
+                  : (callManager.callerId ?? ''));
 
-        final bool isOtherMuted = callManager.mutedParticipants[activeOtherId] == true ||
+        bool otherHasLeft = false;
+        if (!callManager.isGroup &&
+            activeOther.isEmpty &&
+            activeOtherId.isNotEmpty) {
+          if (roomManager.hasParticipantLeft(activeOtherId)) {
+            otherHasLeft = true;
+          } else {
+            try {
+              final matchingParticipant = callController.participants
+                  .firstWhere((p) {
+                    final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+                    return pId?.toString() == activeOtherId;
+                  });
+              final String? status = matchingParticipant['status']
+                  ?.toString()
+                  .toLowerCase();
+              if (status == 'left' ||
+                  status == 'declined' ||
+                  status == 'missed' ||
+                  status == 'rejected') {
+                otherHasLeft = true;
+              }
+            } catch (_) {
+              if (callController.hasFetchedParticipants) {
+                otherHasLeft = true;
+              }
+            }
+          }
+        }
+
+        final String activeName =
+            (callManager.isGroup && activeOther.isNotEmpty)
+            ? "$userName - ${activeOther['name']}"
+            : (callManager.isGroup || activeOther.isEmpty)
+            ? (otherHasLeft ? 'Call ending...' : userName)
+            : (activeOther['name'] ?? userName);
+        final String activeAvatar = (callManager.isGroup || activeOther.isEmpty)
+            ? (otherHasLeft ? '' : (callManager.receiverAvatar ?? ''))
+            : (activeOther['avatar']?.toString() ?? '');
+
+        final bool isOtherMuted =
+            callManager.mutedParticipants[activeOtherId] == true ||
             callController.participants.any((p) {
               final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-              return pId?.toString() == activeOtherId && (p['is_muted'] == true || p['isMuted'] == true);
+              return pId?.toString() == activeOtherId &&
+                  (p['is_muted'] == true || p['isMuted'] == true);
             });
 
         // Dynamic lookup of the active remaining participant's video track in 1-to-1 mode
-        final remoteVideoTrack = roomManager.getRemoteVideoTrackFor(activeOtherId) ?? roomManager.remoteVideoTrack;
-        final isRemoteVideoActive = remoteVideoTrack != null && !remoteVideoTrack.muted;
+        final remoteVideoTrack =
+            roomManager.getRemoteVideoTrackFor(activeOtherId) ??
+            roomManager.remoteVideoTrack;
+        final isRemoteVideoActive =
+            remoteVideoTrack != null && !remoteVideoTrack.muted;
 
         return PopScope(
           canPop: true,
@@ -179,37 +302,46 @@ class VideoCallingScreen extends StatelessWidget {
                         ),
                       )
                     : (isRemoteVideoActive
-                        ? lk.VideoTrackRenderer(
-                            remoteVideoTrack,
-                          )
-                        : (activeAvatar.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: ApiService.getImageUrl(activeAvatar),
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: appColor(context).grey900,
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: appColor(context).grey900,
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.person,
-                                      color: appColor(context).white.withValues(alpha: 0.15),
-                                      size: 100,
+                          ? lk.VideoTrackRenderer(remoteVideoTrack)
+                          : (activeAvatar.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: ApiService.getImageUrl(
+                                      activeAvatar,
                                     ),
-                                  ),
-                                ),
-                              )
-                            : Container(
-                                color: appColor(context).grey900,
-                                child: Center(
-                                  child: Icon(
-                                    Icons.person,
-                                    color: appColor(context).white.withValues(alpha: 0.15),
-                                    size: 100,
-                                  ),
-                                ),
-                              ))),
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      color: appColor(context).grey900,
+                                    ),
+                                    errorWidget: (context, url, error) =>
+                                        Container(
+                                          color: appColor(context).grey900,
+                                          child: Center(
+                                            child: Icon(
+                                              callManager.isGroup
+                                                  ? Icons.group
+                                                  : Icons.person,
+                                              color: appColor(
+                                                context,
+                                              ).white.withValues(alpha: 0.15),
+                                              size: 100,
+                                            ),
+                                          ),
+                                        ),
+                                  )
+                                : Container(
+                                    color: appColor(context).grey900,
+                                    child: Center(
+                                      child: Icon(
+                                        callManager.isGroup
+                                            ? Icons.group
+                                            : Icons.person,
+                                        color: appColor(
+                                          context,
+                                        ).white.withValues(alpha: 0.15),
+                                        size: 100,
+                                      ),
+                                    ),
+                                  ))),
 
                 // Apply heavy premium blur to the background when remote video is not yet active (only in 1-to-1)
                 if (!hasMultipleParticipants && !isRemoteVideoActive)
@@ -257,12 +389,16 @@ class VideoCallingScreen extends StatelessWidget {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: appColor(context).white.withValues(alpha: 0.3),
+                                  color: appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.3),
                                   width: 4,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: appColor(context).black.withValues(alpha: 0.3),
+                                    color: appColor(
+                                      context,
+                                    ).black.withValues(alpha: 0.3),
                                     blurRadius: 20,
                                     spreadRadius: 2,
                                   ),
@@ -272,33 +408,49 @@ class VideoCallingScreen extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(60),
                                 child: activeAvatar.isNotEmpty
                                     ? CachedNetworkImage(
-                                        imageUrl: ApiService.getImageUrl(activeAvatar),
+                                        imageUrl: ApiService.getImageUrl(
+                                          activeAvatar,
+                                        ),
                                         fit: BoxFit.cover,
-                                        placeholder: (context, url) => Container(
-                                          color: appColor(context).grey800,
-                                          child: Center(
-                                            child: CircularProgressIndicator(
-                                              color: appColor(context).white.withValues(alpha: 0.2),
+                                        placeholder: (context, url) =>
+                                            Container(
+                                              color: appColor(context).grey800,
+                                              child: Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      color: appColor(context)
+                                                          .white
+                                                          .withValues(
+                                                            alpha: 0.2,
+                                                          ),
+                                                    ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                        errorWidget: (context, url, error) => Container(
-                                          color: appColor(context).grey800,
-                                          child: Center(
-                                            child: Icon(
-                                              Icons.person,
-                                              color: appColor(context).white.withValues(alpha: 0.5),
-                                              size: 60,
+                                        errorWidget: (context, url, error) =>
+                                            Container(
+                                              color: appColor(context).grey800,
+                                              child: Center(
+                                                child: Icon(
+                                                  callManager.isGroup
+                                                      ? Icons.group
+                                                      : Icons.person,
+                                                  color: appColor(context).white
+                                                      .withValues(alpha: 0.5),
+                                                  size: 60,
+                                                ),
+                                              ),
                                             ),
-                                          ),
-                                        ),
                                       )
                                     : Container(
                                         color: appColor(context).grey800,
                                         child: Center(
                                           child: Icon(
-                                            Icons.person,
-                                            color: appColor(context).white.withValues(alpha: 0.5),
+                                            callManager.isGroup
+                                                ? Icons.group
+                                                : Icons.person,
+                                            color: appColor(
+                                              context,
+                                            ).white.withValues(alpha: 0.5),
                                             size: 60,
                                           ),
                                         ),
@@ -320,7 +472,9 @@ class VideoCallingScreen extends StatelessWidget {
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.3),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.3,
+                                        ),
                                         blurRadius: 8,
                                         offset: const Offset(0, 4),
                                       ),
@@ -338,8 +492,12 @@ class VideoCallingScreen extends StatelessWidget {
                         if (callManager.state != CallState.connected) ...[
                           const SizedBox(height: 16),
                           Text(
-                            callManager.state == CallState.dialing ? "Calling..." : "Ringing...",
-                            style: fontStyle.clashDisplaySemiBold16.textColor(appColor(context).white),
+                            callManager.state == CallState.dialing
+                                ? "Calling..."
+                                : "Ringing...",
+                            style: fontStyle.clashDisplaySemiBold16.textColor(
+                              appColor(context).white,
+                            ),
                           ),
                         ],
                       ],
@@ -358,17 +516,24 @@ class VideoCallingScreen extends StatelessWidget {
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                activeName,
-                                style: fontStyle.clashDisplayBold24.textColor(appColor(context).white).copyWith(
-                                  shadows: [
-                                    Shadow(
-                                      color: appColor(context).black45,
-                                      offset: const Offset(0, 2),
-                                      blurRadius: 4,
-                                    ),
-                                  ],
+                              Flexible(
+                                child: Text(
+                                  activeName,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                  style: fontStyle.clashDisplayBold20
+                                      .textColor(appColor(context).white)
+                                      .copyWith(
+                                        shadows: [
+                                          Shadow(
+                                            color: appColor(context).black45,
+                                            offset: const Offset(0, 2),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
                                 ),
                               ),
                               if (isOtherMuted) ...[
@@ -391,7 +556,9 @@ class VideoCallingScreen extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             callManager.callDuration,
-                            style: fontStyle.clashDisplayMedium14.textColor(appColor(context).white.withValues(alpha: 0.9)),
+                            style: fontStyle.clashDisplayMedium14.textColor(
+                              appColor(context).white.withValues(alpha: 0.9),
+                            ),
                           ),
                         ],
                       ),
@@ -414,7 +581,9 @@ class VideoCallingScreen extends StatelessWidget {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: appColor(context).black.withValues(alpha: 0.25),
+                            color: appColor(
+                              context,
+                            ).black.withValues(alpha: 0.25),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -428,7 +597,10 @@ class VideoCallingScreen extends StatelessWidget {
                               child: isCameraOn && localVideoTrack != null
                                   ? Transform(
                                       alignment: Alignment.center,
-                                      transform: Matrix4.identity()..rotateY(3.14159), // Mirror horizontally
+                                      transform: Matrix4.identity()
+                                        ..rotateY(
+                                          3.14159,
+                                        ), // Mirror horizontally
                                       child: lk.VideoTrackRenderer(
                                         localVideoTrack,
                                         fit: lk.VideoViewFit.cover,
@@ -438,30 +610,70 @@ class VideoCallingScreen extends StatelessWidget {
                                       fit: StackFit.expand,
                                       children: [
                                         // Background shadow/avatar
-                                        (callManager.myUserAvatar != null && callManager.myUserAvatar!.isNotEmpty)
+                                        (myAvatar != null &&
+                                                myAvatar.isNotEmpty)
                                             ? CachedNetworkImage(
-                                                imageUrl: ApiService.getImageUrl(callManager.myUserAvatar!),
+                                                imageUrl:
+                                                    ApiService.getImageUrl(
+                                                      myAvatar,
+                                                    ),
                                                 fit: BoxFit.cover,
-                                                placeholder: (context, url) => Container(color: appColor(context).grey900),
-                                                errorWidget: (context, url, error) => Container(
-                                                  color: appColor(context).grey900,
-                                                  child: Center(
-                                                    child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 40),
-                                                  ),
-                                                ),
+                                                placeholder: (context, url) =>
+                                                    Container(
+                                                      color: appColor(
+                                                        context,
+                                                      ).grey900,
+                                                    ),
+                                                errorWidget:
+                                                    (
+                                                      context,
+                                                      url,
+                                                      error,
+                                                    ) => Container(
+                                                      color: appColor(
+                                                        context,
+                                                      ).grey900,
+                                                      child: Center(
+                                                        child: Icon(
+                                                          Icons.person,
+                                                          color:
+                                                              appColor(context)
+                                                                  .white
+                                                                  .withValues(
+                                                                    alpha: 0.15,
+                                                                  ),
+                                                          size: 40,
+                                                        ),
+                                                      ),
+                                                    ),
                                               )
                                             : Container(
-                                                color: appColor(context).grey900,
+                                                color: appColor(
+                                                  context,
+                                                ).grey900,
                                                 child: Center(
-                                                  child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 40),
+                                                  child: Icon(
+                                                    Icons.person,
+                                                    color: appColor(context)
+                                                        .white
+                                                        .withValues(
+                                                          alpha: 0.15,
+                                                        ),
+                                                    size: 40,
+                                                  ),
                                                 ),
                                               ),
                                         // Backdrop blur
                                         Positioned.fill(
                                           child: BackdropFilter(
-                                            filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                                            filter: ImageFilter.blur(
+                                              sigmaX: 10.0,
+                                              sigmaY: 10.0,
+                                            ),
                                             child: Container(
-                                              color: appColor(context).black.withValues(alpha: 0.5),
+                                              color: appColor(
+                                                context,
+                                              ).black.withValues(alpha: 0.5),
                                             ),
                                           ),
                                         ),
@@ -473,44 +685,92 @@ class VideoCallingScreen extends StatelessWidget {
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
                                               border: Border.all(
-                                                color: appColor(context).white.withValues(alpha: 0.3),
+                                                color: appColor(
+                                                  context,
+                                                ).white.withValues(alpha: 0.3),
                                                 width: 2,
                                               ),
                                               boxShadow: [
                                                 BoxShadow(
-                                                  color: appColor(context).black.withValues(alpha: 0.3),
+                                                  color: appColor(context).black
+                                                      .withValues(alpha: 0.3),
                                                   blurRadius: 8,
                                                   spreadRadius: 1,
                                                 ),
                                               ],
                                             ),
                                             child: ClipRRect(
-                                              borderRadius: BorderRadius.circular(26),
-                                              child: (callManager.myUserAvatar != null && callManager.myUserAvatar!.isNotEmpty)
+                                              borderRadius:
+                                                  BorderRadius.circular(26),
+                                              child:
+                                                  (myAvatar != null &&
+                                                      myAvatar.isNotEmpty)
                                                   ? CachedNetworkImage(
-                                                      imageUrl: ApiService.getImageUrl(callManager.myUserAvatar!),
-                                                      fit: BoxFit.cover,
-                                                      placeholder: (context, url) => Container(
-                                                        color: appColor(context).grey800,
-                                                        child: const Center(
-                                                          child: SizedBox(
-                                                            width: 16,
-                                                            height: 16,
-                                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
+                                                      imageUrl:
+                                                          ApiService.getImageUrl(
+                                                            myAvatar,
                                                           ),
-                                                        ),
-                                                      ),
-                                                      errorWidget: (context, url, error) => Container(
-                                                        color: appColor(context).grey800,
-                                                        child: Center(
-                                                          child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 24),
-                                                        ),
-                                                      ),
+                                                      fit: BoxFit.cover,
+                                                      placeholder:
+                                                          (
+                                                            context,
+                                                            url,
+                                                          ) => Container(
+                                                            color: appColor(
+                                                              context,
+                                                            ).grey800,
+                                                            child: const Center(
+                                                              child: SizedBox(
+                                                                width: 16,
+                                                                height: 16,
+                                                                child: CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                  color: Colors
+                                                                      .white24,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      errorWidget:
+                                                          (
+                                                            context,
+                                                            url,
+                                                            error,
+                                                          ) => Container(
+                                                            color: appColor(
+                                                              context,
+                                                            ).grey800,
+                                                            child: Center(
+                                                              child: Icon(
+                                                                Icons.person,
+                                                                color:
+                                                                    appColor(
+                                                                      context,
+                                                                    ).white.withValues(
+                                                                      alpha:
+                                                                          0.5,
+                                                                    ),
+                                                                size: 24,
+                                                              ),
+                                                            ),
+                                                          ),
                                                     )
                                                   : Container(
-                                                      color: appColor(context).grey800,
+                                                      color: appColor(
+                                                        context,
+                                                      ).grey800,
                                                       child: Center(
-                                                        child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 24),
+                                                        child: Icon(
+                                                          Icons.person,
+                                                          color:
+                                                              appColor(context)
+                                                                  .white
+                                                                  .withValues(
+                                                                    alpha: 0.5,
+                                                                  ),
+                                                          size: 24,
+                                                        ),
                                                       ),
                                                     ),
                                             ),
@@ -558,15 +818,21 @@ class VideoCallingScreen extends StatelessWidget {
                             vertical: 14,
                           ),
                           decoration: BoxDecoration(
-                            color: appColor(context).white.withValues(alpha: 0.15),
+                            color: appColor(
+                              context,
+                            ).white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(40),
                             border: Border.all(
-                              color: appColor(context).white.withValues(alpha: 0.15),
+                              color: appColor(
+                                context,
+                              ).white.withValues(alpha: 0.15),
                               width: 1,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: appColor(context).black.withValues(alpha: 0.1),
+                                color: appColor(
+                                  context,
+                                ).black.withValues(alpha: 0.1),
                                 blurRadius: 10,
                               ),
                             ],
@@ -595,7 +861,9 @@ class VideoCallingScreen extends StatelessWidget {
                                   },
                                   child: _buildRoundTool(
                                     context,
-                                    asset: isMuted ? ImageAssets.micOff : ImageAssets.recorder,
+                                    asset: isMuted
+                                        ? ImageAssets.micOff
+                                        : ImageAssets.recorder,
                                     isActive: !isMuted,
                                   ),
                                 ),
@@ -612,17 +880,26 @@ class VideoCallingScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 6),
                                 GestureDetector(
-                                  onTap: callManager.state == CallState.connected
+                                  onTap:
+                                      callManager.state == CallState.connected
                                       ? () {
-                                          showAddUserDialog(context, callManager.myUserId);
+                                          showAddUserDialog(
+                                            context,
+                                            callManager.myUserId,
+                                          );
                                         }
                                       : null,
                                   child: Opacity(
-                                    opacity: callManager.state == CallState.connected ? 1.0 : 0.4,
+                                    opacity:
+                                        callManager.state == CallState.connected
+                                        ? 1.0
+                                        : 0.4,
                                     child: _buildRoundTool(
                                       context,
                                       asset: ImageAssets.addUser,
-                                      isActive: callManager.state == CallState.connected,
+                                      isActive:
+                                          callManager.state ==
+                                          CallState.connected,
                                     ),
                                   ),
                                 ),
@@ -637,7 +914,9 @@ class VideoCallingScreen extends StatelessWidget {
                                     height: 44,
                                     width: 88,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFD32F2F), // Vibrant crimson hangup tone
+                                      color: const Color(
+                                        0xFFD32F2F,
+                                      ), // Vibrant crimson hangup tone
                                       borderRadius: BorderRadius.circular(22),
                                       boxShadow: const [
                                         BoxShadow(
@@ -674,7 +953,10 @@ class VideoCallingScreen extends StatelessWidget {
                       Navigator.of(context).pop();
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
                         color: Colors.black.withValues(alpha: 0.5),
@@ -746,7 +1028,7 @@ class VideoCallGridView extends StatelessWidget {
   Widget build(BuildContext context) {
     final roomManager = callManager.roomManager;
     final total = members.length;
-    final int numPages = total <= 6 ? 1 : 1 + ((total - 6) / 5.0).ceil();
+    final int numPages = total <= 4 ? 1 : 1 + ((total - 4) / 3.0).ceil();
     final int currentPage = callController.currentPage;
 
     return Container(
@@ -757,12 +1039,21 @@ class VideoCallGridView extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 10),
+              if (callManager.isGroup) ...[
+                Text(
+                  callManager.receiverName ?? 'Group',
+                  style: fontStyle.clashDisplayBold18.textColor(Colors.white),
+                ),
+                const SizedBox(height: 6),
+              ],
               // Top timer display
               Text(
                 callManager.state == CallState.connected
                     ? callManager.callDuration
                     : "Calling...",
-                style: fontStyle.clashDisplaySemiBold16.textColor(Colors.white70),
+                style: fontStyle.clashDisplaySemiBold16.textColor(
+                  Colors.white70,
+                ),
               ),
               const SizedBox(height: 20),
               // Grid Area inside PageView
@@ -775,45 +1066,54 @@ class VideoCallGridView extends StatelessWidget {
                     // Extract items for this page index
                     List<Map<String, dynamic>> pageMembers = [];
                     bool showIndicatorCard = false;
-                    List<Map<String, dynamic>> remainingMembersForIndicator = [];
+                    List<Map<String, dynamic>> remainingMembersForIndicator =
+                        [];
 
-                    if (total <= 6) {
+                    if (total <= 4) {
                       pageMembers = members;
                     } else {
-                      final int startIndex = pageIndex * 5;
+                      final int startIndex = pageIndex * 3;
                       if (pageIndex < numPages - 1) {
-                        // Non-last page: show 5 members + 1 indicator card
-                        final int endIndex = startIndex + 5;
+                        // Non-last page: show 3 members + 1 indicator card
+                        final int endIndex = startIndex + 3;
                         pageMembers = members.sublist(startIndex, endIndex);
                         showIndicatorCard = true;
-                        remainingMembersForIndicator = members.sublist(endIndex);
+                        remainingMembersForIndicator = members.sublist(
+                          endIndex,
+                        );
                       } else {
                         // Last page: show remaining members
                         pageMembers = members.sublist(startIndex);
                       }
                     }
 
-                    final int gridItemCount = pageMembers.length + (showIndicatorCard ? 1 : 0);
+                    final int gridItemCount =
+                        pageMembers.length + (showIndicatorCard ? 1 : 0);
 
                     return GridView.builder(
-                      physics: const NeverScrollableScrollPhysics(), // Scroll managed by PageView
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.8,
-                      ),
+                      physics:
+                          const NeverScrollableScrollPhysics(), // Scroll managed by PageView
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.8,
+                          ),
                       itemCount: gridItemCount,
                       itemBuilder: (context, index) {
-                        if (showIndicatorCard && index == 5) {
+                        if (showIndicatorCard && index == 3) {
                           final remaining = remainingMembersForIndicator;
-                          final visibleCount = remaining.length > 4 ? 4 : remaining.length;
-                          
+                          final visibleCount = remaining.length > 4
+                              ? 4
+                              : remaining.length;
+
                           // Layout details for overlapping avatars
                           const double avatarSize = 44.0;
                           const double overlap = 14.0;
                           const double itemWidth = avatarSize - overlap;
-                          final double stackWidth = avatarSize + (visibleCount - 1) * itemWidth;
+                          final double stackWidth =
+                              avatarSize + (visibleCount - 1) * itemWidth;
 
                           return Container(
                             decoration: BoxDecoration(
@@ -831,7 +1131,9 @@ class VideoCallGridView extends StatelessWidget {
                                 children: [
                                   Positioned.fill(
                                     child: Container(
-                                      color: Colors.black.withValues(alpha: 0.15),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.15,
+                                      ),
                                     ),
                                   ),
                                   Column(
@@ -842,7 +1144,9 @@ class VideoCallGridView extends StatelessWidget {
                                         width: stackWidth,
                                         height: avatarSize,
                                         child: Stack(
-                                          children: List.generate(visibleCount, (vIndex) {
+                                          children: List.generate(visibleCount, (
+                                            vIndex,
+                                          ) {
                                             // Reverse generation so leftmost is top-most
                                             final i = visibleCount - 1 - vIndex;
                                             final m = remaining[i];
@@ -859,23 +1163,50 @@ class VideoCallGridView extends StatelessWidget {
                                                     color: Colors.white,
                                                     width: 2,
                                                   ),
-                                                  color: Colors.white.withValues(alpha: 0.1),
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.1),
                                                 ),
                                                 child: ClipRRect(
-                                                  borderRadius: BorderRadius.circular(avatarSize / 2),
-                                                  child: (mAvatar != null && mAvatar.isNotEmpty)
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                        avatarSize / 2,
+                                                      ),
+                                                  child:
+                                                      (mAvatar != null &&
+                                                          mAvatar.isNotEmpty)
                                                       ? CachedNetworkImage(
-                                                          imageUrl: ApiService.getImageUrl(mAvatar),
-                                                          cacheKey: _normalizeAvatarUrl(mAvatar),
+                                                          imageUrl:
+                                                              ApiService.getImageUrl(
+                                                                mAvatar,
+                                                              ),
+                                                          cacheKey:
+                                                              _normalizeAvatarUrl(
+                                                                mAvatar,
+                                                              ),
                                                           fit: BoxFit.cover,
-                                                          placeholder: (context, url) => Container(
-                                                            color: Colors.white.withValues(alpha: 0.05),
-                                                          ),
-                                                          errorWidget: (context, url, error) => const Icon(
-                                                            Icons.person,
-                                                            color: Colors.white70,
-                                                            size: 20,
-                                                          ),
+                                                          placeholder:
+                                                              (
+                                                                context,
+                                                                url,
+                                                              ) => Container(
+                                                                color: Colors
+                                                                    .white
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.05,
+                                                                    ),
+                                                              ),
+                                                          errorWidget:
+                                                              (
+                                                                context,
+                                                                url,
+                                                                error,
+                                                              ) => const Icon(
+                                                                Icons.person,
+                                                                color: Colors
+                                                                    .white70,
+                                                                size: 20,
+                                                              ),
                                                         )
                                                       : const Icon(
                                                           Icons.person,
@@ -891,11 +1222,15 @@ class VideoCallGridView extends StatelessWidget {
                                       const SizedBox(height: 14),
                                       // Count text
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
                                         child: Text(
                                           "+${remaining.length} others",
                                           textAlign: TextAlign.center,
-                                          style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                          style: fontStyle
+                                              .clashDisplaySemiBold14
+                                              .textColor(Colors.white),
                                         ),
                                       ),
                                     ],
@@ -908,7 +1243,26 @@ class VideoCallGridView extends StatelessWidget {
 
                         final member = pageMembers[index];
                         final bool isMe = member['isMe'] == true;
-                        final String userId = member['user_id']?.toString() ?? '';
+                        final String userId =
+                            member['user_id']?.toString() ?? '';
+                        final String? status = member['status']
+                            ?.toString()
+                            .toLowerCase();
+                        final bool isRemoteConnected =
+                            callManager
+                                .roomManager
+                                .room
+                                ?.remoteParticipants
+                                .values
+                                .any((rp) => rp.identity == userId) ??
+                            false;
+                        final bool isCalling =
+                            !isMe &&
+                            !isRemoteConnected &&
+                            (status == 'ringing' ||
+                                status == 'dialing' ||
+                                status == 'invited' ||
+                                status == null);
                         final String name = member['name'] ?? 'User';
                         final String? avatar = member['avatar'];
 
@@ -920,32 +1274,67 @@ class VideoCallGridView extends StatelessWidget {
                           isCameraOn = roomManager.isCameraOn;
                           videoTrack = roomManager.localVideoTrack;
                         } else {
-                          videoTrack = roomManager.getRemoteVideoTrackFor(userId);
+                          videoTrack = roomManager.getRemoteVideoTrackFor(
+                            userId,
+                          );
                           isCameraOn = videoTrack != null && !videoTrack.muted;
                         }
 
                         final bool isMuted = isMe
                             ? roomManager.isMuted
                             : (callManager.mutedParticipants[userId] == true ||
-                                callController.participants.any((p) {
-                                  final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                                  return pId?.toString() == userId && (p['is_muted'] == true || p['isMuted'] == true);
-                                }));
+                                  callController.participants.any((p) {
+                                    final pId =
+                                        p['user_id'] ?? p['id'] ?? p['_id'];
+                                    return pId?.toString() == userId &&
+                                        (p['is_muted'] == true ||
+                                            p['isMuted'] == true);
+                                  }));
 
                         final bool isActive = isCameraOn && videoTrack != null;
+                        final bool isSpeaking = isMe
+                            ? (callManager
+                                      .roomManager
+                                      .room
+                                      ?.localParticipant
+                                      ?.isSpeaking ??
+                                  false)
+                            : (callManager
+                                      .roomManager
+                                      .room
+                                      ?.remoteParticipants[userId]
+                                      ?.isSpeaking ??
+                                  false);
 
                         return Container(
                           decoration: BoxDecoration(
-                            color: isMe 
-                                ? const Color(0xFF6B1D2F).withValues(alpha: 0.25)
+                            color: isMe
+                                ? const Color(
+                                    0xFF6B1D2F,
+                                  ).withValues(alpha: 0.25)
                                 : Colors.white.withValues(alpha: 0.04),
                             borderRadius: BorderRadius.circular(24),
                             border: Border.all(
-                              color: isMe 
-                                  ? const Color(0xFF8B263E).withValues(alpha: 0.5)
-                                  : Colors.white.withValues(alpha: 0.08),
-                              width: 1.5,
+                              color: isSpeaking
+                                  ? const Color(0xFF23C123)
+                                  : (isMe
+                                        ? const Color(
+                                            0xFF8B263E,
+                                          ).withValues(alpha: 0.5)
+                                        : Colors.white.withValues(alpha: 0.08)),
+                              width: isSpeaking ? 3.0 : 1.5,
                             ),
+                            boxShadow: isSpeaking
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF23C123,
+                                      ).withValues(alpha: 0.3),
+                                      blurRadius: 12,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(24),
@@ -958,7 +1347,10 @@ class VideoCallGridView extends StatelessWidget {
                                         child: isMe
                                             ? Transform(
                                                 alignment: Alignment.center,
-                                                transform: Matrix4.identity()..rotateY(3.14159), // Mirror local horizontally
+                                                transform: Matrix4.identity()
+                                                  ..rotateY(
+                                                    3.14159,
+                                                  ), // Mirror local horizontally
                                                 child: lk.VideoTrackRenderer(
                                                   videoTrack!,
                                                   fit: lk.VideoViewFit.cover,
@@ -975,82 +1367,197 @@ class VideoCallGridView extends StatelessWidget {
                                           // Background shadow/avatar
                                           (avatar != null && avatar.isNotEmpty)
                                               ? CachedNetworkImage(
-                                                  imageUrl: ApiService.getImageUrl(avatar),
-                                                  cacheKey: _normalizeAvatarUrl(avatar),
-                                                  fit: BoxFit.cover,
-                                                  placeholder: (context, url) => Container(color: appColor(context).grey900),
-                                                  errorWidget: (context, url, error) => Container(
-                                                    color: appColor(context).grey900,
-                                                    child: Center(
-                                                      child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 60),
-                                                    ),
+                                                  imageUrl:
+                                                      ApiService.getImageUrl(
+                                                        avatar,
+                                                      ),
+                                                  cacheKey: _normalizeAvatarUrl(
+                                                    avatar,
                                                   ),
+                                                  fit: BoxFit.cover,
+                                                  placeholder: (context, url) =>
+                                                      Container(
+                                                        color: appColor(
+                                                          context,
+                                                        ).grey900,
+                                                      ),
+                                                  errorWidget:
+                                                      (
+                                                        context,
+                                                        url,
+                                                        error,
+                                                      ) => Container(
+                                                        color: appColor(
+                                                          context,
+                                                        ).grey900,
+                                                        child: Center(
+                                                          child: Icon(
+                                                            Icons.person,
+                                                            color:
+                                                                appColor(
+                                                                      context,
+                                                                    ).white
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.15,
+                                                                    ),
+                                                            size: 60,
+                                                          ),
+                                                        ),
+                                                      ),
                                                 )
                                               : Container(
-                                                  color: appColor(context).grey900,
+                                                  color: appColor(
+                                                    context,
+                                                  ).grey900,
                                                   child: Center(
-                                                    child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.15), size: 60),
+                                                    child: Icon(
+                                                      Icons.person,
+                                                      color: appColor(context)
+                                                          .white
+                                                          .withValues(
+                                                            alpha: 0.15,
+                                                          ),
+                                                      size: 60,
+                                                    ),
                                                   ),
                                                 ),
                                           // Backdrop blur
                                           Positioned.fill(
                                             child: BackdropFilter(
-                                              filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                                              filter: ImageFilter.blur(
+                                                sigmaX: 16.0,
+                                                sigmaY: 16.0,
+                                              ),
                                               child: Container(
-                                                color: appColor(context).black.withValues(alpha: 0.5),
+                                                color: appColor(
+                                                  context,
+                                                ).black.withValues(alpha: 0.5),
                                               ),
                                             ),
                                           ),
                                           // Small circle avatar in center
                                           Center(
-                                            child: Container(
-                                              width: 72,
-                                              height: 72,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                border: Border.all(
-                                                  color: appColor(context).white.withValues(alpha: 0.3),
-                                                  width: 2.5,
-                                                ),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: appColor(context).black.withValues(alpha: 0.3),
-                                                    blurRadius: 12,
-                                                    spreadRadius: 2,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  width: 72,
+                                                  height: 72,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(
+                                                      color: appColor(context)
+                                                          .white
+                                                          .withValues(
+                                                            alpha: 0.3,
+                                                          ),
+                                                      width: 2.5,
+                                                    ),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: appColor(context)
+                                                            .black
+                                                            .withValues(
+                                                              alpha: 0.3,
+                                                            ),
+                                                        blurRadius: 12,
+                                                        spreadRadius: 2,
+                                                      ),
+                                                    ],
                                                   ),
-                                                ],
-                                              ),
-                                              child: ClipRRect(
-                                                borderRadius: BorderRadius.circular(36),
-                                                child: (avatar != null && avatar.isNotEmpty)
-                                                    ? CachedNetworkImage(
-                                                        imageUrl: ApiService.getImageUrl(avatar),
-                                                        cacheKey: _normalizeAvatarUrl(avatar),
-                                                        fit: BoxFit.cover,
-                                                        placeholder: (context, url) => Container(
-                                                          color: appColor(context).grey800,
-                                                          child: const Center(
-                                                            child: SizedBox(
-                                                              width: 20,
-                                                              height: 20,
-                                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
+                                                  child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          36,
+                                                        ),
+                                                    child:
+                                                        (avatar != null &&
+                                                            avatar.isNotEmpty)
+                                                        ? CachedNetworkImage(
+                                                            imageUrl:
+                                                                ApiService.getImageUrl(
+                                                                  avatar,
+                                                                ),
+                                                            cacheKey:
+                                                                _normalizeAvatarUrl(
+                                                                  avatar,
+                                                                ),
+                                                            fit: BoxFit.cover,
+                                                            placeholder: (context, url) => Container(
+                                                              color: appColor(
+                                                                context,
+                                                              ).grey800,
+                                                              child: const Center(
+                                                                child: SizedBox(
+                                                                  width: 20,
+                                                                  height: 20,
+                                                                  child: CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2,
+                                                                    color: Colors
+                                                                        .white24,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            errorWidget:
+                                                                (
+                                                                  context,
+                                                                  url,
+                                                                  error,
+                                                                ) => Container(
+                                                                  color:
+                                                                      appColor(
+                                                                        context,
+                                                                      ).grey800,
+                                                                  child: Center(
+                                                                    child: Icon(
+                                                                      Icons
+                                                                          .person,
+                                                                      color: appColor(context)
+                                                                          .white
+                                                                          .withValues(
+                                                                            alpha:
+                                                                                0.5,
+                                                                          ),
+                                                                      size: 36,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                          )
+                                                        : Container(
+                                                            color: appColor(
+                                                              context,
+                                                            ).grey800,
+                                                            child: Center(
+                                                              child: Icon(
+                                                                Icons.person,
+                                                                color:
+                                                                    appColor(
+                                                                      context,
+                                                                    ).white.withValues(
+                                                                      alpha:
+                                                                          0.5,
+                                                                    ),
+                                                                size: 36,
+                                                              ),
                                                             ),
                                                           ),
+                                                  ),
+                                                ),
+                                                if (isCalling) ...[
+                                                  const SizedBox(height: 8),
+                                                  Text(
+                                                    "Calling..",
+                                                    style: fontStyle
+                                                        .clashDisplayMedium12
+                                                        .textColor(
+                                                          Colors.white70,
                                                         ),
-                                                        errorWidget: (context, url, error) => Container(
-                                                          color: appColor(context).grey800,
-                                                          child: Center(
-                                                            child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 36),
-                                                          ),
-                                                        ),
-                                                      )
-                                                    : Container(
-                                                        color: appColor(context).grey800,
-                                                        child: Center(
-                                                          child: Icon(Icons.person, color: appColor(context).white.withValues(alpha: 0.5), size: 36),
-                                                        ),
-                                                      ),
-                                              ),
+                                                  ),
+                                                ],
+                                              ],
                                             ),
                                           ),
                                         ],
@@ -1066,16 +1573,24 @@ class VideoCallGridView extends StatelessWidget {
                                       children: [
                                         Expanded(
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.5),
-                                              borderRadius: BorderRadius.circular(8),
+                                              color: Colors.black.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                             child: Text(
                                               name,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: fontStyle.clashDisplaySemiBold12.textColor(Colors.white),
+                                              style: fontStyle
+                                                  .clashDisplaySemiBold12
+                                                  .textColor(Colors.white),
                                             ),
                                           ),
                                         ),
@@ -1089,18 +1604,26 @@ class VideoCallGridView extends StatelessWidget {
                                     top: 12,
                                     right: 12,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF8B263E), // Deep wine pill color
+                                        color: const Color(
+                                          0xFF8B263E,
+                                        ), // Deep wine pill color
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.15),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.15,
+                                          ),
                                           width: 1,
                                         ),
                                       ),
                                       child: Text(
                                         "Me",
-                                        style: fontStyle.clashDisplayBold10.textColor(Colors.white),
+                                        style: fontStyle.clashDisplayBold10
+                                            .textColor(Colors.white),
                                       ),
                                     ),
                                   ),
@@ -1113,10 +1636,15 @@ class VideoCallGridView extends StatelessWidget {
                                     child: Container(
                                       padding: const EdgeInsets.all(6),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFD32F2F).withValues(alpha: 0.95), // Premium crimson mute badge
+                                        color: const Color(0xFFD32F2F)
+                                            .withValues(
+                                              alpha: 0.95,
+                                            ), // Premium crimson mute badge
                                         shape: BoxShape.circle,
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.15),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.15,
+                                          ),
                                           width: 1,
                                         ),
                                       ),
@@ -1148,9 +1676,11 @@ class VideoCallGridView extends StatelessWidget {
                       width: isActive ? 24 : 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isActive 
+                        color: isActive
                             ? const Color(0xFF8B263E) // Active dot
-                            : Colors.white.withValues(alpha: 0.3), // Inactive dot
+                            : Colors.white.withValues(
+                                alpha: 0.3,
+                              ), // Inactive dot
                         borderRadius: BorderRadius.circular(4),
                       ),
                     );

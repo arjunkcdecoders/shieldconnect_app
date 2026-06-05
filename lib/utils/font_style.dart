@@ -60,6 +60,11 @@ class FontStyle {
     fontSize: 10,
     fontWeight: FontWeight.w500,
   );
+  TextStyle get clashDisplayBold9 => const TextStyle(
+    fontFamily: clashDisplay,
+    fontSize: 9,
+    fontWeight: FontWeight.w600,
+  );
 
   TextStyle get clashDisplaySemiBold24 => const TextStyle(
     fontFamily: clashDisplay,

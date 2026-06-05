@@ -8,6 +8,7 @@ import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/controller/status_controller.dart';
+import 'package:shieldconnect_app/controller/profile_controller.dart';
 
 class BottomnavScreen extends StatelessWidget {
   const BottomnavScreen({super.key});
@@ -38,6 +39,8 @@ class BottomnavScreen extends StatelessWidget {
             } else if (index == 1) {
               Provider.of<CallListController>(context, listen: false).init();
             } else if (index == 2) {
+              Provider.of<ProfileController>(context, listen: false).init();
+            } else if (index == 3) {
               Provider.of<StatusController>(context, listen: false).init();
             }
           },
@@ -80,6 +83,19 @@ class BottomnavScreen extends StatelessWidget {
                 height: 24,
               ),
               label: 'Calls',
+            ),
+            BottomNavigationBarItem(
+              icon: Image.asset(
+                ImageAssets.dhsiInactive,
+                width: 24,
+                height: 24,
+              ),
+              activeIcon: Image.asset(
+                ImageAssets.dhsi,
+                width: 24,
+                height: 24,
+              ),
+              label: 'DHSI',
             ),
             BottomNavigationBarItem(
               icon: Image.asset(
