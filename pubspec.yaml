@@ -53,6 +53,7 @@ dependencies:
   firebase_messaging: ^16.2.2
   livekit_client: ^2.7.0
   flutter_callkit_incoming: ^3.1.1
+  connectivity_plus: ^7.1.1
 
 dev_dependencies:
   flutter_test:

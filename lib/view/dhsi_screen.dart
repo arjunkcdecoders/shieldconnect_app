@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/dhsi_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/model/dhsi_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
@@ -11,9 +13,46 @@ import 'package:shieldconnect_app/view/notification_screen.dart';
 class DhsiScreen extends StatelessWidget {
   const DhsiScreen({super.key});
 
+  String getLevelBadgeAsset(int level) {
+    // if (level == 3) return ImageAssets.level3;
+    // if (level == 4) return ImageAssets.level4;
+    return ImageAssets.scoreBadge; // Fallback default badge
+  }
+
+  String getTimelineBadgeAsset(int level) {
+    switch (level) {
+      case 1:
+        return ImageAssets.level1;
+      case 2:
+        return ImageAssets.level2;
+      case 3:
+        return ImageAssets.level3;
+      case 4:
+        return ImageAssets.level4;
+      case 5:
+        return ImageAssets.level5;
+      case 6:
+        return ImageAssets.level6;
+      default:
+        return ImageAssets.level1;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileController = Provider.of<ProfileController>(context);
+    final dhsiController = Provider.of<DhsiController>(context);
+
+    // Fetch DHSI data when user ID is available and data isn't loaded yet
+    if (profileController.userId.isNotEmpty &&
+        dhsiController.dhsiData == null &&
+        !dhsiController.isLoading &&
+        dhsiController.errorMessage == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        dhsiController.fetchDhsiData(profileController.userId);
+      });
+    }
+
     final String userName = profileController.name.isNotEmpty
         ? profileController.name
         : "Maisie";
@@ -22,44 +61,130 @@ class DhsiScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFFFF), // Soft premium pink/white tint
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20.0,
-              vertical: 12.0,
+        child: RefreshIndicator(
+          color: const Color(0xFFEB3667),
+          onRefresh: () async {
+            if (profileController.userId.isNotEmpty) {
+              await dhsiController.fetchDhsiData(profileController.userId);
+            }
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Header: Avatar (with green badge) & Circular Actions
-                _buildHeader(context, userAvatar),
-                const SizedBox(height: 20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 12.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Header: Avatar (with green badge) & Circular Actions
+                  _buildHeader(context, userAvatar),
+                  const SizedBox(height: 20),
 
-                // 2. Main DHSI Score Card
-                _buildScoreCard(context, userName, userAvatar),
-                const SizedBox(height: 20),
+                  if (dhsiController.isLoading &&
+                      dhsiController.dhsiData == null)
+                    const SizedBox(
+                      height: 400,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFEB3667),
+                        ),
+                      ),
+                    )
+                  else if (dhsiController.errorMessage != null &&
+                      dhsiController.dhsiData == null)
+                    SizedBox(
+                      height: 400,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Color(0xFFEB3667),
+                              size: 40,
+                            ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24.0,
+                              ),
+                              child: Text(
+                                dhsiController.errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: fontStyle.clashDisplayMedium12.textColor(
+                                  appColor(context).textSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFEB3667),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: () {
+                                if (profileController.userId.isNotEmpty) {
+                                  dhsiController.fetchDhsiData(
+                                    profileController.userId,
+                                  );
+                                }
+                              },
+                              child: const Text("Retry"),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (dhsiController.dhsiData != null) ...[
+                    // 2. Main DHSI Score Card
+                    _buildScoreCard(
+                      context,
+                      dhsiController.dhsiData!,
+                      userName,
+                      userAvatar,
+                    ),
+                    const SizedBox(height: 20),
 
-                // 3. Positive Streak Card
-                _buildStreakCard(context),
-                const SizedBox(height: 20),
+                    // 3. Positive Streak Card
+                    _buildStreakCard(context, dhsiController.dhsiData!),
+                    const SizedBox(height: 20),
 
-                // 4. Your DHSI Level (Horizontal scrolling timeline)
-                _buildLevelTimeline(context, userAvatar),
-                const SizedBox(height: 20),
+                    // 4. Your DHSI Level (Horizontal scrolling timeline)
+                    _buildLevelTimeline(
+                      context,
+                      dhsiController.dhsiData!,
+                      userAvatar,
+                    ),
+                    const SizedBox(height: 20),
 
-                // 5. What affects your DHSI?
-                _buildAffectsGrid(context),
-                const SizedBox(height: 20),
+                    // 5. What affects your DHSI?
+                    _buildAffectsGrid(context, dhsiController.dhsiData!),
+                    const SizedBox(height: 20),
 
-                // 6. Your DHSI Trend (Chart)
-                _buildTrendChart(context),
-                const SizedBox(height: 20),
+                    // 6. Your DHSI Trend (Chart)
+                    _buildTrendChart(context, dhsiController.dhsiData!),
+                    const SizedBox(height: 20),
 
-                // 7. What improved your score?
-                _buildImprovementsGrid(context),
-                const SizedBox(height: 30),
-              ],
+                    // 7. What improved your score?
+                    _buildImprovementsGrid(context, dhsiController.dhsiData!),
+                    const SizedBox(height: 30),
+                  ] else ...[
+                    const SizedBox(
+                      height: 400,
+                      child: Center(
+                        child: Text("No safety index data available."),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -184,9 +309,27 @@ class DhsiScreen extends StatelessWidget {
   // Score Card Component
   Widget _buildScoreCard(
     BuildContext context,
+    DhsiData dhsiData,
     String userName,
     String userAvatar,
   ) {
+    final score = dhsiData.score;
+    final status = dhsiData.status;
+
+    // Safety status configurations
+    Color statusBgColor = const Color(0xFFE2F6E2);
+    Color statusTextColor = const Color(0xFF1A9E16);
+
+    if (status.toLowerCase() == 'danger') {
+      statusBgColor = const Color(0xFFFDE8E8);
+      statusTextColor = const Color(0xFFE02424);
+    } else if (status.toLowerCase() == 'warning') {
+      statusBgColor = const Color(0xFFFFFBEB);
+      statusTextColor = const Color(0xFFD97706);
+    }
+
+    final currentLevel = dhsiData.level?.currentLevel ?? 1;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -230,13 +373,11 @@ class DhsiScreen extends StatelessWidget {
                 width: 76,
                 height: 76,
                 child: CircularProgressIndicator(
-                  value: 0.82,
+                  value: score / 100.0,
                   strokeWidth: 4,
                   strokeCap: StrokeCap.round,
                   backgroundColor: Colors.white.withValues(alpha: 0.4),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFEB3667),
-                  ),
+                  valueColor: AlwaysStoppedAnimation<Color>(statusTextColor),
                 ),
               ),
               // Main User avatar
@@ -252,21 +393,40 @@ class DhsiScreen extends StatelessWidget {
                       ? Image.network(
                           ApiService.getImageUrl(userAvatar),
                           fit: BoxFit.cover,
+                          errorBuilder: (c, o, s) =>
+                              Image.asset(ImageAssets.dhsi, fit: BoxFit.cover),
                         )
-                      : Image.asset(
-                          ImageAssets.dhsi,
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) => Image.asset(
-                            ImageAssets.level82,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                      : Image.asset(ImageAssets.dhsi, fit: BoxFit.cover),
                 ),
               ),
               // Score badge overlapping bottom
               Positioned(
-                bottom: -8,
-                child: Image.asset(ImageAssets.level82, width: 32, height: 35),
+                bottom: -20,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Image.asset(
+                      getLevelBadgeAsset(currentLevel),
+                      width: 52,
+                      height: 56,
+                      errorBuilder: (c, o, s) => Image.asset(
+                        ImageAssets.level82,
+                        width: 52,
+                        height: 56,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Text(
+                        "$score",
+                        style: fontStyle.clashDisplayBold12.copyWith(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               // Sparkles / Stars
               Positioned(top: 2, left: 8, child: _buildSparkle(9)),
@@ -282,16 +442,16 @@ class DhsiScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Hi, $userName!",
+                  "Hi, ${dhsiData.user?.name ?? userName}!",
                   style: fontStyle.clashDisplayBold16.textColor(
                     appColor(context).black,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  "You're doing amazing!",
+                  score >= 70 ? "You're doing amazing!" : "Stay safe online!",
                   style: fontStyle.clashDisplaySemiBold12.textColor(
-                    const Color(0xFFEB3667),
+                    statusTextColor,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -313,7 +473,7 @@ class DhsiScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFEB3667).withValues(alpha: 0.04),
+                        color: statusTextColor.withValues(alpha: 0.04),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -328,9 +488,9 @@ class DhsiScreen extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            "82",
+                            "$score",
                             style: fontStyle.clashDisplayBold20.textColor(
-                              const Color(0xFFEB3667),
+                              statusTextColor,
                             ),
                           ),
                           Text(
@@ -348,14 +508,14 @@ class DhsiScreen extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE2F6E2),
+                          color: statusBgColor,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          "Safe",
+                          status,
                           style: fontStyle.clashDisplayMedium10
                               .copyWith(fontSize: 9)
-                              .textColor(const Color(0xFF1A9E16)),
+                              .textColor(statusTextColor),
                         ),
                       ),
                     ],
@@ -370,7 +530,9 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // Streak Component
-  Widget _buildStreakCard(BuildContext context) {
+  Widget _buildStreakCard(BuildContext context, DhsiData dhsiData) {
+    final streak = dhsiData.streak;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -398,12 +560,12 @@ class DhsiScreen extends StatelessWidget {
               style: fontStyle.clashDisplayBold14.textColor(
                 appColor(context).black,
               ),
-              children: const [
+              children: [
                 TextSpan(
-                  text: "12 ",
-                  style: TextStyle(color: Color(0xFFEB3667)),
+                  text: "$streak ",
+                  style: const TextStyle(color: Color(0xFFEB3667)),
                 ),
-                TextSpan(text: "Days Positive Streak"),
+                const TextSpan(text: "Days Positive Streak"),
               ],
             ),
           ),
@@ -426,15 +588,14 @@ class DhsiScreen extends StatelessWidget {
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildStreakDay(context, "Mon", isChecked: true),
-                  _buildStreakDay(context, "Tue", isChecked: true),
-                  _buildStreakDay(context, "Wed", isChecked: true),
-                  _buildStreakDay(context, "Thu", isChecked: true),
-                  _buildStreakDay(context, "Fri", isChecked: true),
-                  _buildStreakDay(context, "Sat", isChecked: true),
-                  _buildStreakDay(context, "Today", isToday: true),
-                ],
+                children: dhsiData.streakDays.map((d) {
+                  return _buildStreakDay(
+                    context,
+                    d.day,
+                    isChecked: d.checked,
+                    isToday: d.isToday,
+                  );
+                }).toList(),
               ),
             ],
           ),
@@ -507,7 +668,52 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // Levels Timeline Component
-  Widget _buildLevelTimeline(BuildContext context, String userAvatar) {
+  Widget _buildLevelTimeline(
+    BuildContext context,
+    DhsiData dhsiData,
+    String userAvatar,
+  ) {
+    final currentLevel = dhsiData.level?.currentLevel ?? 1;
+
+    List<Widget> timelineWidgets = [];
+
+    for (int i = 0; i < dhsiData.allLevels.length; i++) {
+      final levelRange = dhsiData.allLevels[i];
+      final bool isCompleted = levelRange.level < currentLevel;
+      final bool isCurrent = levelRange.level == currentLevel;
+      final bool isLocked = levelRange.level > currentLevel;
+
+      timelineWidgets.add(
+        _buildTimelineItem(
+          context,
+          title: "Level ${levelRange.level}",
+          subtitle: levelRange.name,
+          badgeImage: isLocked
+              ? ImageAssets.locked
+              : getTimelineBadgeAsset(levelRange.level),
+          color: isCurrent
+              ? const Color(0xFFEB3667)
+              : (isCompleted ? const Color(0xFF673AB7) : Colors.grey),
+          isCompleted: isCompleted,
+          isCurrent: isCurrent,
+          isLocked: isLocked,
+          userAvatar: isCurrent ? (dhsiData.user?.avatar ?? userAvatar) : null,
+        ),
+      );
+
+      if (i < dhsiData.allLevels.length - 1) {
+        Color connectorColor = Colors.grey;
+        if (isCompleted) {
+          connectorColor = const Color(0xFF673AB7);
+        } else if (isCurrent) {
+          connectorColor = const Color(0xFFEB3667);
+        }
+        timelineWidgets.add(
+          _buildTimelineConnector(context, color: connectorColor),
+        );
+      }
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -542,53 +748,7 @@ class DhsiScreen extends StatelessWidget {
             physics: const BouncingScrollPhysics(),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                children: [
-                  // Leading connector line going off-screen to the left
-                  _buildTimelineConnector(
-                    context,
-                    color: const Color(0xFFFF9800),
-                  ),
-                  // Level 3 item (Completed)
-                  _buildTimelineItem(
-                    context,
-                    title: "Level 3",
-                    subtitle: "Kind Communicator",
-                    badgeImage: ImageAssets.level3,
-                    color: const Color(0xFF673AB7),
-                    isCompleted: true,
-                  ),
-                  _buildTimelineConnector(
-                    context,
-                    color: const Color(0xFF673AB7),
-                  ),
-                  // Level 4 item (Current)
-                  _buildTimelineItem(
-                    context,
-                    title: "Level 4",
-                    subtitle: "Respect Explorer",
-                    badgeImage: ImageAssets.level4,
-                    color: const Color(0xFFEB3667),
-                    isCurrent: true,
-                    userAvatar: userAvatar,
-                  ),
-                  _buildTimelineConnector(
-                    context,
-                    color: const Color(0xFFEB3667),
-                  ),
-                  // Level 5 item (Locked)
-                  _buildTimelineItem(
-                    context,
-                    title: "Level 5",
-                    subtitle: "Empathy Champion",
-                    badgeImage: ImageAssets.locked,
-                    color: Colors.grey,
-                    isLocked: true,
-                  ),
-                  // Trailing connector line going off-screen to the right
-                  _buildTimelineConnector(context, color: Colors.grey.shade400),
-                ],
-              ),
+              child: Row(children: timelineWidgets),
             ),
           ),
           const SizedBox(height: 16),
@@ -605,7 +765,7 @@ class DhsiScreen extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: Color(0xFFFFF8FC),
+                    color: const Color(0xFFFFF8FC),
                     border: Border.all(
                       color: const Color(0xFFFFD5DD),
                       width: 1,
@@ -614,9 +774,15 @@ class DhsiScreen extends StatelessWidget {
                   child: Row(
                     children: [
                       Text(
-                        "180 Points to reach level 5  ",
-                        style: fontStyle.clashDisplayMedium10.textColor(
+                        "${dhsiData.level?.pointsToNext ?? 0} Points to reach",
+                        style: fontStyle.clashDisplayBold10.textColor(
                           appColor(context).black,
+                        ),
+                      ),
+                      Text(
+                        " ${dhsiData.level?.nextLevelName ?? 'next level'}  ",
+                        style: fontStyle.clashDisplayBold10.textColor(
+                          appColor(context).primary,
                         ),
                       ),
                       const Text("🚀", style: TextStyle(fontSize: 12)),
@@ -707,9 +873,8 @@ class DhsiScreen extends StatelessWidget {
           // Card Container
           Positioned(
             top: 24,
-            left: 0,
-            right: 0,
             child: Container(
+              width: 100,
               height: 68,
               padding: const EdgeInsets.only(
                 top: 24,
@@ -771,6 +936,10 @@ class DhsiScreen extends StatelessWidget {
                           ? Image.network(
                               ApiService.getImageUrl(userAvatar),
                               fit: BoxFit.cover,
+                              errorBuilder: (c, o, s) => Image.asset(
+                                ImageAssets.maisieAvatar,
+                                fit: BoxFit.cover,
+                              ),
                             )
                           : Image.asset(
                               ImageAssets.maisieAvatar,
@@ -778,13 +947,18 @@ class DhsiScreen extends StatelessWidget {
                             ),
                     ),
                   ),
-                  // Overlapping pink shield badge (level4 image)
+                  // Overlapping pink shield badge (dynamic based on badgeImage parameter)
                   Positioned(
                     bottom: -6,
                     child: Image.asset(
-                      ImageAssets.level4,
+                      badgeImage,
                       width: 18,
                       height: 20,
+                      errorBuilder: (c, o, s) => Image.asset(
+                        ImageAssets.level4,
+                        width: 18,
+                        height: 20,
+                      ),
                     ),
                   ),
                 ] else ...[
@@ -794,6 +968,12 @@ class DhsiScreen extends StatelessWidget {
                     width: 38,
                     height: 42,
                     fit: BoxFit.contain,
+                    errorBuilder: (c, o, s) => Image.asset(
+                      ImageAssets.level82,
+                      width: 38,
+                      height: 42,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ],
               ],
@@ -861,7 +1041,48 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // Affects Index Grid Component
-  Widget _buildAffectsGrid(BuildContext context) {
+  Widget _buildAffectsGrid(BuildContext context, DhsiData dhsiData) {
+    Color getFactorStatusColor(String level) {
+      switch (level.toLowerCase()) {
+        case 'high':
+          return const Color(0xFFE02424);
+        case 'medium':
+          return const Color(0xFFF59E0B);
+        case 'low':
+        default:
+          return const Color(0xFF1A9E16);
+      }
+    }
+
+    Color getFactorBgColor(String level) {
+      switch (level.toLowerCase()) {
+        case 'high':
+          return const Color(0xFFFFF0F2);
+        case 'medium':
+          return const Color(0xFFFFF7EA);
+        case 'low':
+        default:
+          return const Color(0xFFF0FDF4);
+      }
+    }
+
+    Color getFactorBorderColor(String level) {
+      switch (level.toLowerCase()) {
+        case 'high':
+          return const Color(0xFFFFD5DD);
+        case 'medium':
+          return const Color(0xFFFFEAD5);
+        case 'low':
+        default:
+          return const Color(0xFFD5FAD9);
+      }
+    }
+
+    final harm = dhsiData.factors?.harmSignals;
+    final behavior = dhsiData.factors?.behaviorChanges;
+    final repeat = dhsiData.factors?.repeatExposure;
+    final good = dhsiData.factors?.goodChoices;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -898,57 +1119,65 @@ class DhsiScreen extends StatelessWidget {
             physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
-                _buildAffectCard(
-                  context,
-                  title: "Harm Signals",
-                  status: "Medium",
-                  statusColor: const Color(0xFFF59E0B),
-                  desc: "You avoided some harmful content.",
-                  imageAsset: ImageAssets.harm,
-                  bgColor: const Color(0xFFFFF0F2),
-                  borderColor: const Color(0xFFFFD5DD),
-                  progressValue: 0.66,
-                  progressColor: const Color(0xFFF59E0B),
-                ),
-                const SizedBox(width: 12),
-                _buildAffectCard(
-                  context,
-                  title: "Behavior Changes",
-                  status: "Low",
-                  statusColor: const Color(0xFF1A9E16),
-                  desc: "You're showing positive change!",
-                  imageAsset: ImageAssets.changes,
-                  bgColor: const Color(0xFFF4F6FF),
-                  borderColor: const Color(0xFFDCE2FF),
-                  progressValue: 0.33,
-                  progressColor: const Color(0xFF1A9E16),
-                ),
-                const SizedBox(width: 12),
-                _buildAffectCard(
-                  context,
-                  title: "Repeat Exposure",
-                  status: "Medium",
-                  statusColor: const Color(0xFFF59E0B),
-                  desc: "You sometimes visit risky spaces.",
-                  imageAsset: ImageAssets.repeat,
-                  bgColor: const Color(0xFFFFF7EA),
-                  borderColor: const Color(0xFFFFEAD5),
-                  progressValue: 0.66,
-                  progressColor: const Color(0xFFF59E0B),
-                ),
-                const SizedBox(width: 12),
-                _buildAffectCard(
-                  context,
-                  title: "Good Choices",
-                  status: "Low",
-                  statusColor: const Color(0xFF1A9E16),
-                  desc: "You make kind and smart choices!",
-                  imageAsset: ImageAssets.choices,
-                  bgColor: const Color(0xFFF0FDF4),
-                  borderColor: const Color(0xFFD5FAD9),
-                  progressValue: 0.33,
-                  progressColor: const Color(0xFF1A9E16),
-                ),
+                if (harm != null) ...[
+                  _buildAffectCard(
+                    context,
+                    title: "Harm Signals",
+                    status: harm.level,
+                    statusColor: getFactorStatusColor(harm.level),
+                    desc: harm.description,
+                    imageAsset: ImageAssets.harm,
+                    bgColor: getFactorBgColor(harm.level),
+                    borderColor: getFactorBorderColor(harm.level),
+                    progressValue: harm.progressBarValue / 100.0,
+                    progressColor: getFactorStatusColor(harm.level),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (behavior != null) ...[
+                  _buildAffectCard(
+                    context,
+                    title: "Behavior Changes",
+                    status: behavior.level,
+                    statusColor: getFactorStatusColor(behavior.level),
+                    desc: behavior.description,
+                    imageAsset: ImageAssets.changes,
+                    bgColor: getFactorBgColor(behavior.level),
+                    borderColor: getFactorBorderColor(behavior.level),
+                    progressValue: behavior.progressBarValue / 100.0,
+                    progressColor: getFactorStatusColor(behavior.level),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (repeat != null) ...[
+                  _buildAffectCard(
+                    context,
+                    title: "Repeat Exposure",
+                    status: repeat.level,
+                    statusColor: getFactorStatusColor(repeat.level),
+                    desc: repeat.description,
+                    imageAsset: ImageAssets.repeat,
+                    bgColor: getFactorBgColor(repeat.level),
+                    borderColor: getFactorBorderColor(repeat.level),
+                    progressValue: repeat.progressBarValue / 100.0,
+                    progressColor: getFactorStatusColor(repeat.level),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                if (good != null) ...[
+                  _buildAffectCard(
+                    context,
+                    title: "Good Choices",
+                    status: good.level,
+                    statusColor: getFactorStatusColor(good.level),
+                    desc: good.description,
+                    imageAsset: ImageAssets.choices,
+                    bgColor: getFactorBgColor(good.level),
+                    borderColor: getFactorBorderColor(good.level),
+                    progressValue: good.progressBarValue / 100.0,
+                    progressColor: getFactorStatusColor(good.level),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1061,7 +1290,19 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // DHSITrend Chart Component
-  Widget _buildTrendChart(BuildContext context) {
+  Widget _buildTrendChart(BuildContext context, DhsiData dhsiData) {
+    final trend = dhsiData.trend;
+    final thisWeekScore = trend?.thisWeekScore ?? 0;
+    final lastWeekScore = trend?.lastWeekScore ?? 0;
+    final diff = trend?.diff ?? 0;
+
+    final List<double> chartPoints =
+        trend?.dailyScores.map((s) => s.score.toDouble()).toList() ?? [];
+    final List<String> chartLabels =
+        trend?.dailyScores.map((s) => s.day).toList() ?? [];
+
+    final bool isDiffPositive = diff >= 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -1081,7 +1322,7 @@ class DhsiScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Your DHSITrend",
+            "Your DHSI Trend",
             style: fontStyle.clashDisplayBold14.textColor(
               appColor(context).black,
             ),
@@ -1104,7 +1345,7 @@ class DhsiScreen extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        "82",
+                        "$thisWeekScore",
                         style: fontStyle.clashDisplayBold20.textColor(
                           const Color(0xFFEB3667),
                         ),
@@ -1116,20 +1357,28 @@ class DhsiScreen extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE2F6E2),
+                          color: isDiffPositive
+                              ? const Color(0xFFE2F6E2)
+                              : const Color(0xFFFDE8E8),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            const Icon(
-                              Icons.arrow_upward,
-                              color: Color(0xFF1A9E16),
+                            Icon(
+                              isDiffPositive
+                                  ? Icons.arrow_upward
+                                  : Icons.arrow_downward,
+                              color: isDiffPositive
+                                  ? const Color(0xFF1A9E16)
+                                  : const Color(0xFFE02424),
                               size: 10,
                             ),
                             Text(
-                              " +6",
+                              isDiffPositive ? " +$diff" : " $diff",
                               style: fontStyle.clashDisplayMedium10.textColor(
-                                const Color(0xFF1A9E16),
+                                isDiffPositive
+                                    ? const Color(0xFF1A9E16)
+                                    : const Color(0xFFE02424),
                               ),
                             ),
                           ],
@@ -1146,7 +1395,7 @@ class DhsiScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    "76",
+                    "$lastWeekScore",
                     style: fontStyle.clashDisplayBold20.textColor(
                       appColor(context).textSecondary,
                     ),
@@ -1158,21 +1407,15 @@ class DhsiScreen extends StatelessWidget {
               Expanded(
                 child: SizedBox(
                   height: 120,
-                  child: CustomPaint(
-                    painter: _TrendChartPainter(
-                      points: [71, 74, 76, 79, 80, 78, 82],
-                      labels: [
-                        "Sun",
-                        "Mon",
-                        "Tue",
-                        "Wed",
-                        "Thu",
-                        "Fri",
-                        "Today",
-                      ],
-                      lineColor: const Color(0xFFEB3667),
-                    ),
-                  ),
+                  child: chartPoints.isNotEmpty
+                      ? CustomPaint(
+                          painter: _TrendChartPainter(
+                            points: chartPoints,
+                            labels: chartLabels,
+                            lineColor: const Color(0xFFEB3667),
+                          ),
+                        )
+                      : const Center(child: Text("No trend data available")),
                 ),
               ),
             ],
@@ -1183,7 +1426,7 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // Improvements Grid Component
-  Widget _buildImprovementsGrid(BuildContext context) {
+  Widget _buildImprovementsGrid(BuildContext context, DhsiData dhsiData) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -1219,39 +1462,38 @@ class DhsiScreen extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             child: Row(
-              children: [
-                _buildImproveCard(
-                  context,
-                  pts: "+15 pts",
-                  desc: "You sent positive messages",
-                  imageAsset: ImageAssets.blueBubble,
-                  iconBgColor: const Color(0xFFE8F4FD), // Light blue
-                ),
-                const SizedBox(width: 12),
-                _buildImproveCard(
-                  context,
-                  pts: "+10pts",
-                  desc: "You respected different opinions",
-                  imageAsset: ImageAssets.opinion,
-                  iconBgColor: const Color(0xFFE8F7EC), // Light green
-                ),
-                const SizedBox(width: 12),
-                _buildImproveCard(
-                  context,
-                  pts: "+10 pts",
-                  desc: "You reported harmful content",
-                  imageAsset: ImageAssets.reported,
-                  iconBgColor: const Color(0xFFF2EAFF), // Light purple
-                ),
-                const SizedBox(width: 12),
-                _buildImproveCard(
-                  context,
-                  pts: "+8 pts",
-                  desc: "You helped a friend",
-                  imageAsset: ImageAssets.help,
-                  iconBgColor: const Color(0xFFF2EAFF), // Light purple
-                ),
-              ],
+              children: dhsiData.improvements.map((imp) {
+                String asset = ImageAssets.help;
+                Color iconBg = const Color(0xFFF2EAFF);
+                final lowerText = imp.text.toLowerCase();
+
+                if (lowerText.contains("positive")) {
+                  asset = ImageAssets.blueBubble;
+                  iconBg = const Color(0xFFE8F4FD);
+                } else if (lowerText.contains("respect") ||
+                    lowerText.contains("opinion")) {
+                  asset = ImageAssets.opinion;
+                  iconBg = const Color(0xFFE8F7EC);
+                } else if (lowerText.contains("report")) {
+                  asset = ImageAssets.reported;
+                  iconBg = const Color(0xFFF2EAFF);
+                } else if (lowerText.contains("help") ||
+                    lowerText.contains("friend")) {
+                  asset = ImageAssets.help;
+                  iconBg = const Color(0xFFFFF0F5);
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12.0),
+                  child: _buildImproveCard(
+                    context,
+                    pts: "+${imp.points} pts",
+                    desc: imp.text,
+                    imageAsset: asset,
+                    iconBgColor: iconBg,
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -1355,13 +1597,13 @@ class _TrendChartPainter extends CustomPainter {
     final double range = maxVal - minVal;
 
     final int segments = points.length - 1;
-    final double xSpacing = width / segments;
+    final double xSpacing = width / (segments > 0 ? segments : 1);
 
     final List<Offset> offsetPoints = [];
     for (int i = 0; i < points.length; i++) {
       final double x = i * xSpacing;
       // map point to height
-      final double normalizedY = (points[i] - minVal) / range;
+      final double normalizedY = range > 0 ? (points[i] - minVal) / range : 0.5;
       final double y =
           height - (normalizedY * (height - 15)); // reverse since y is down
       offsetPoints.add(Offset(x, y));

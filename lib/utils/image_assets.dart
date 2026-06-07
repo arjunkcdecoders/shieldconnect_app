@@ -78,11 +78,28 @@ class ImageAssets {
   static const String dhsiInactive = "$_path/dhsiInactive.png";
   static const String harm = "$_path/harm.png";
   static const String help = "$_path/help.png";
-  static const String level3 = "$_path/level3.png";
-  static const String level4 = "$_path/level4.png";
+  static const String scoreBadge = "$_path/scoreBadge.png";
+  static const String level1 = "$_path/b1.png";
+  static const String level2 = "$_path/b2.png";
+  static const String level3 = "$_path/b3.png";
+  static const String level4 = "$_path/b4.png";
+  static const String level5 = "$_path/b5.png";
+  static const String level6 = "$_path/b6.png";
   static const String level82 = "$_path/level82.png";
   static const String locked = "$_path/locked.png";
   static const String opinion = "$_path/opinion.png";
   static const String repeat = "$_path/repeat.png";
   static const String reported = "$_path/reported.png";
+  //moderator
+  static const String home = "$_path/home.png";
+  static const String homeActive = "$_path/homeActive.png";
+  static const String users = "$_path/users.png";
+  static const String usersActive = "$_path/usersActive.png";
+  static const String moderation = "$_path/moderation.png";
+  static const String moderationActive = "$_path/moderationActive.png";
+  static const String profile = "$_path/profile.png";
+  static const String profileActive = "$_path/profileActive.png";
+  static const String usFlag = "$_path/usFlag.png";
+  static const String messagedots = "$_path/messagedots.png";
+  static const String checkVerified = "$_path/check-verified.png";
 }

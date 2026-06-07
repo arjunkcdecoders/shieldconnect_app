@@ -32,6 +32,8 @@ class UserModel {
   final String? fcmToken;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final bool? isModerator;
+  final String? region;
   
   // Fields found in API responses
   final String? token;
@@ -78,6 +80,8 @@ class UserModel {
     this.groupsInCommon,
     this.sharedMedia,
     this.settings,
+    this.isModerator,
+    this.region,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -118,6 +122,10 @@ class UserModel {
       groupsInCommon: json['groups_in_common'] as List<dynamic>?,
       sharedMedia: json['shared_media'] as List<dynamic>?,
       settings: json['settings'] != null ? SettingsModel.fromJson(json['settings'] as Map<String, dynamic>) : null,
+      isModerator: json['is_moderator'] as bool? ?? json['isModerator'] as bool?,
+      region: json['region'] is Map
+          ? (json['region']['name'] as String? ?? json['region']['_id'] as String?)
+          : json['region'] as String?,
     );
   }
 
@@ -159,6 +167,8 @@ class UserModel {
       'groups_in_common': groupsInCommon,
       'shared_media': sharedMedia,
       'settings': settings?.toJson(),
+      'is_moderator': isModerator,
+      'region': region,
     };
   }
 }

@@ -771,16 +771,16 @@ class _StatusViewBodyState extends State<_StatusViewBody>
                               ),
                             ),
                           ),
-                          IconButton(
-                            onPressed: () => _showViewsBottomSheet(context),
-                            icon: const Icon(
-                              Icons.more_vert,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
+                          // IconButton(
+                          //   onPressed: () => _showViewsBottomSheet(context),
+                          //   icon: const Icon(
+                          //     Icons.more_vert,
+                          //     color: Colors.white,
+                          //     size: 24,
+                          //   ),
+                          //   padding: EdgeInsets.zero,
+                          //   constraints: const BoxConstraints(),
+                          // ),
                         ],
                       ),
                       const SizedBox(height: 12),

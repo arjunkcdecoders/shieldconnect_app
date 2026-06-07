@@ -98,7 +98,8 @@ class VideoCallingScreen extends StatelessWidget {
               resolvedAvatar;
         }
       } catch (_) {
-        if (callController.hasFetchedParticipants) {
+        final bool isConnected = callManager.state == CallState.connected;
+        if (isConnected && callController.hasFetchedParticipants) {
           hasLeft = true;
         }
       }
@@ -170,6 +171,7 @@ class VideoCallingScreen extends StatelessWidget {
         final isSpeakerOn = roomManager.isSpeakerOn;
         final isCameraOn = roomManager.isCameraOn;
         final localVideoTrack = roomManager.localVideoTrack;
+        final isConnected = callManager.state == CallState.connected;
 
         String? myAvatar = callManager.myUserAvatar;
         if (myAvatar == null || myAvatar.isEmpty) {
@@ -248,7 +250,8 @@ class VideoCallingScreen extends StatelessWidget {
                 otherHasLeft = true;
               }
             } catch (_) {
-              if (callController.hasFetchedParticipants) {
+              final bool isConnected = callManager.state == CallState.connected;
+              if (isConnected && callController.hasFetchedParticipants) {
                 otherHasLeft = true;
               }
             }
@@ -259,7 +262,7 @@ class VideoCallingScreen extends StatelessWidget {
             (callManager.isGroup && activeOther.isNotEmpty)
             ? "$userName - ${activeOther['name']}"
             : (callManager.isGroup || activeOther.isEmpty)
-            ? (otherHasLeft ? 'Call ending...' : userName)
+            ? (otherHasLeft ? '🔚📞' : userName)
             : (activeOther['name'] ?? userName);
         final String activeAvatar = (callManager.isGroup || activeOther.isEmpty)
             ? (otherHasLeft ? '' : (callManager.receiverAvatar ?? ''))
@@ -489,17 +492,15 @@ class VideoCallingScreen extends StatelessWidget {
                               ),
                           ],
                         ),
-                        if (callManager.state != CallState.connected) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            callManager.state == CallState.dialing
-                                ? "Calling..."
-                                : "Ringing...",
-                            style: fontStyle.clashDisplaySemiBold16.textColor(
-                              appColor(context).white,
-                            ),
-                          ),
-                        ],
+                        // if (callManager.statusText != null) ...[
+                        //   const SizedBox(height: 16),
+                        //   Text(
+                        //     callManager.statusText!,
+                        //     style: fontStyle.clashDisplaySemiBold16.textColor(
+                        //       appColor(context).white,
+                        //     ),
+                        //   ),
+                        // ],
                       ],
                     ),
                   ),
@@ -555,7 +556,10 @@ class VideoCallingScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            callManager.callDuration,
+                            callManager.statusText ??
+                                (callManager.state == CallState.connected
+                                    ? callManager.callDuration
+                                    : "Calling..."),
                             style: fontStyle.clashDisplayMedium14.textColor(
                               appColor(context).white.withValues(alpha: 0.9),
                             ),
@@ -845,43 +849,79 @@ class VideoCallingScreen extends StatelessWidget {
                               children: [
                                 // Standard circle utility tools
                                 GestureDetector(
-                                  onTap: () {
-                                    callManager.setCameraEnabled(!isCameraOn);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.videoOn,
-                                    isActive: isCameraOn,
+                                  onTap: isConnected
+                                      ? () {
+                                          callManager.setCameraEnabled(
+                                            !isCameraOn,
+                                          );
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.videoOn,
+                                      isActive: isCameraOn,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 GestureDetector(
-                                  onTap: () {
-                                    callManager.setMicrophoneEnabled(isMuted);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: isMuted
-                                        ? ImageAssets.micOff
-                                        : ImageAssets.recorder,
-                                    isActive: !isMuted,
+                                  onTap: isConnected
+                                      ? () {
+                                          roomManager.switchCamera();
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      icon: Icons.cameraswitch_outlined,
+                                      isActive: false,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 GestureDetector(
-                                  onTap: () {
-                                    roomManager.setSpeakerphoneOn(!isSpeakerOn);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.volume,
-                                    isActive: isSpeakerOn,
+                                  onTap: isConnected
+                                      ? () {
+                                          callManager.setMicrophoneEnabled(
+                                            isMuted,
+                                          );
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: isMuted
+                                          ? ImageAssets.micOff
+                                          : ImageAssets.recorder,
+                                      isActive: !isMuted,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 GestureDetector(
-                                  onTap:
-                                      callManager.state == CallState.connected
+                                  onTap: isConnected
+                                      ? () {
+                                          roomManager.setSpeakerphoneOn(
+                                            !isSpeakerOn,
+                                          );
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.volume,
+                                      isActive: isSpeakerOn,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: isConnected
                                       ? () {
                                           showAddUserDialog(
                                             context,
@@ -890,35 +930,30 @@ class VideoCallingScreen extends StatelessWidget {
                                         }
                                       : null,
                                   child: Opacity(
-                                    opacity:
-                                        callManager.state == CallState.connected
-                                        ? 1.0
-                                        : 0.4,
+                                    opacity: isConnected ? 1.0 : 0.4,
                                     child: _buildRoundTool(
                                       context,
                                       asset: ImageAssets.addUser,
-                                      isActive:
-                                          callManager.state ==
-                                          CallState.connected,
+                                      isActive: isConnected,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
 
-                                // Elongated solid RED hangup button seen on video calls mockup
+                                // Circular solid RED hangup button
                                 GestureDetector(
                                   onTap: () {
                                     callManager.endCall();
                                   },
                                   child: Container(
                                     height: 44,
-                                    width: 88,
-                                    decoration: BoxDecoration(
-                                      color: const Color(
+                                    width: 44,
+                                    decoration: const BoxDecoration(
+                                      color: Color(
                                         0xFFD32F2F,
                                       ), // Vibrant crimson hangup tone
-                                      borderRadius: BorderRadius.circular(22),
-                                      boxShadow: const [
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
                                         BoxShadow(
                                           color: Color(0xFFB71C1C),
                                           offset: Offset(0, 3),
@@ -984,7 +1019,8 @@ class VideoCallingScreen extends StatelessWidget {
   /// Render standard circular toolbar modifiers
   Widget _buildRoundTool(
     BuildContext context, {
-    required String asset,
+    String? asset,
+    IconData? icon,
     required bool isActive,
   }) {
     return Container(
@@ -1001,12 +1037,14 @@ class VideoCallingScreen extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Image.asset(
-          asset,
-          color: appColor(context).white,
-          width: 20,
-          height: 20,
-        ),
+        child: asset != null
+            ? Image.asset(
+                asset,
+                color: appColor(context).white,
+                width: 20,
+                height: 20,
+              )
+            : Icon(icon, color: appColor(context).white, size: 20),
       ),
     );
   }
@@ -1048,9 +1086,10 @@ class VideoCallGridView extends StatelessWidget {
               ],
               // Top timer display
               Text(
-                callManager.state == CallState.connected
-                    ? callManager.callDuration
-                    : "Calling...",
+                callManager.statusText ??
+                    (callManager.state == CallState.connected
+                        ? callManager.callDuration
+                        : "Calling..."),
                 style: fontStyle.clashDisplaySemiBold16.textColor(
                   Colors.white70,
                 ),

@@ -181,7 +181,7 @@ class LoginScreen extends StatelessWidget {
                     onTap: () {
                       controller.clearError();
                       Provider.of<SignupController>(context, listen: false)
-                          .clearError();
+                          .resetFields();
                       Navigator.push(
                         context,
                         MaterialPageRoute(

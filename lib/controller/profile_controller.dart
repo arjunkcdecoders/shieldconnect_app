@@ -24,6 +24,7 @@ class ProfileController extends ChangeNotifier {
     nameFocusNode.addListener(notifyListeners);
     bioFocusNode.addListener(notifyListeners);
     emailFocusNode.addListener(notifyListeners);
+    regionFocusNode.addListener(notifyListeners);
   }
 
   bool _isLoading = false;
@@ -36,11 +37,14 @@ class ProfileController extends ChangeNotifier {
   bool _shouldRemoveAvatar = false;
   bool _showImageOptions = false;
   List<dynamic> _archivedChats = [];
+  bool _isModerator = false;
+  String _region = "";
 
   // Controllers for editing
   final TextEditingController nameController = TextEditingController();
   final TextEditingController bioController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
+  final TextEditingController regionController = TextEditingController();
 
   // Delete Account Flow States
   bool _isPasswordVerifying = false;
@@ -52,6 +56,7 @@ class ProfileController extends ChangeNotifier {
   final FocusNode nameFocusNode = FocusNode();
   final FocusNode bioFocusNode = FocusNode();
   final FocusNode emailFocusNode = FocusNode();
+  final FocusNode regionFocusNode = FocusNode();
 
   bool get isLoading => _isLoading;
   String get userId => _userId;
@@ -68,6 +73,8 @@ class ProfileController extends ChangeNotifier {
   bool get isPasswordVerified => _isPasswordVerified;
   bool get isAccountDeleting => _isAccountDeleting;
   bool get showDeleteFailedText => _showDeleteFailedText;
+  bool get isModerator => _isModerator;
+  String get region => _region;
 
   // Initialize data
   Future<void> init() async {
@@ -77,9 +84,6 @@ class ProfileController extends ChangeNotifier {
 
   // Fetch user details from session
   Future<void> fetchUserDetails() async {
-    _isLoading = true;
-    notifyListeners();
-
     try {
       _shouldRemoveAvatar = false;
       _showImageOptions = false;
@@ -91,7 +95,10 @@ class ProfileController extends ChangeNotifier {
         final Map<String, dynamic> userMap = jsonDecode(sessionStr);
         final UserModel user = UserModel.fromJson(userMap);
         _userId = user.id ?? "";
-        debugPrint("ProfileController: userId: $_userId");
+        _isModerator = user.isModerator ?? false;
+        _region = user.region ?? "";
+        regionController.text = _region;
+        debugPrint("ProfileController: userId: $_userId, isModerator: $_isModerator, region: $_region");
 
         if (_userId.isNotEmpty) {
           final response = await ApiService().get('/users/$_userId?currentUserId=$_userId');
@@ -109,11 +116,27 @@ class ProfileController extends ChangeNotifier {
               _email = data['email'] ?? "";
               _imageUrl = data['avatar'] ?? "";
               _bio = data['bio'] ?? "";
+              _isModerator = data['is_moderator'] as bool? ?? data['isModerator'] as bool? ?? false;
+
+              // Safe region parsing
+              final dynamic rawRegion = data['region'];
+              if (rawRegion is Map) {
+                _region = rawRegion['name'] as String? ?? "";
+              } else if (rawRegion is String) {
+                if (RegExp(r'^[0-9a-fA-F]{24}$').hasMatch(rawRegion)) {
+                  _region = await _fetchRegionNameById(rawRegion);
+                } else {
+                  _region = rawRegion;
+                }
+              } else {
+                _region = "";
+              }
 
               // Populate controllers for EditProfileScreen
               nameController.text = _name;
               bioController.text = _bio;
               emailController.text = _email;
+              regionController.text = _region;
 
               // Save the fetched user to SharedPreferences to keep session updated with settings
               final UserModel fetchedUser = UserModel.fromJson(data);
@@ -126,8 +149,29 @@ class ProfileController extends ChangeNotifier {
       debugPrint("Error fetching user details from API: $e");
     }
 
-    _isLoading = false;
     notifyListeners();
+  }
+
+  Future<String> _fetchRegionNameById(String regionId) async {
+    try {
+      final response = await ApiService().get('/admin/regions');
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        final List<dynamic> regionsList = json['data'] ?? [];
+        for (var r in regionsList) {
+          if (r['_id'] == regionId) {
+            return r['name'] as String? ?? "";
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching region name by ID: $e");
+    }
+    return regionId;
   }
 
   final Set<String> _failedUnarchiveChatIds = {};
@@ -432,6 +476,9 @@ class ProfileController extends ChangeNotifier {
         _archivedChats = [];
         _failedUnarchiveChatIds.clear();
         _pickedImage = null;
+        _isModerator = false;
+        _region = "";
+        regionController.clear();
         
         // Reset delete states
         deletePasswordController.clear();
@@ -488,6 +535,9 @@ class ProfileController extends ChangeNotifier {
     _archivedChats = [];
     _failedUnarchiveChatIds.clear();
     _pickedImage = null;
+    _isModerator = false;
+    _region = "";
+    regionController.clear();
 
     _isLoading = false;
     notifyListeners();
@@ -512,10 +562,12 @@ class ProfileController extends ChangeNotifier {
     nameController.dispose();
     bioController.dispose();
     emailController.dispose();
+    regionController.dispose();
     deletePasswordController.dispose();
     nameFocusNode.dispose();
     bioFocusNode.dispose();
     emailFocusNode.dispose();
+    regionFocusNode.dispose();
     super.dispose();
   }
 }

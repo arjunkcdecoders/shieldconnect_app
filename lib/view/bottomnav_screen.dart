@@ -17,6 +17,11 @@ class BottomnavScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Provider.of<BottomnavController>(context);
 
+    // Call checkStatusFeature in post frame callback to avoid setstate during build error
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.checkStatusFeature();
+    });
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: controller.currentScreen,
@@ -34,13 +39,20 @@ class BottomnavScreen extends StatelessWidget {
           currentIndex: controller.currentIndex,
           onTap: (index) {
             controller.changeTab(index);
-            if (index == 0) {
+            
+            // Map back to original indices for controller initialization
+            int resolvedIndex = index;
+            if (!controller.statusFeatureEnabled && index >= 3) {
+              resolvedIndex = index + 1;
+            }
+
+            if (resolvedIndex == 0) {
               Provider.of<HomeScreenController>(context, listen: false).init();
-            } else if (index == 1) {
+            } else if (resolvedIndex == 1) {
               Provider.of<CallListController>(context, listen: false).init();
-            } else if (index == 2) {
+            } else if (resolvedIndex == 2) {
               Provider.of<ProfileController>(context, listen: false).init();
-            } else if (index == 3) {
+            } else if (resolvedIndex == 3) {
               Provider.of<StatusController>(context, listen: false).init();
             }
           },
@@ -97,19 +109,20 @@ class BottomnavScreen extends StatelessWidget {
               ),
               label: 'DHSI',
             ),
-            BottomNavigationBarItem(
-              icon: Image.asset(
-                ImageAssets.statusInActive,
-                width: 24,
-                height: 24,
+            if (controller.statusFeatureEnabled)
+              BottomNavigationBarItem(
+                icon: Image.asset(
+                  ImageAssets.statusInActive,
+                  width: 24,
+                  height: 24,
+                ),
+                activeIcon: Image.asset(
+                  ImageAssets.statusActive,
+                  width: 24,
+                  height: 24,
+                ),
+                label: 'Status',
               ),
-              activeIcon: Image.asset(
-                ImageAssets.statusActive,
-                width: 24,
-                height: 24,
-              ),
-              label: 'Status',
-            ),
             BottomNavigationBarItem(
               icon: Image.asset(
                 ImageAssets.settingsInActive,

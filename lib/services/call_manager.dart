@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:math';
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'package:shieldconnect_app/view/voice_calling_screen.dart';
 import 'package:shieldconnect_app/view/video_calling_screen.dart';
 import 'package:shieldconnect_app/view/voice_call_receiving_screen.dart';
 import 'package:shieldconnect_app/view/video_call_receiving_screen.dart';
+import 'package:shieldconnect_app/model/settings_model.dart';
 
 import 'package:record/record.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +33,8 @@ class CallManager extends ChangeNotifier {
   CallManager._internal() {
     _initCallKitListener();
     roomManager.addListener(notifyListeners);
+    SocketService().connectionNotifier.addListener(notifyListeners);
+    _initConnectivityListener();
   }
 
   final RoomManager roomManager = RoomManager();
@@ -38,6 +42,9 @@ class CallManager extends ChangeNotifier {
 
   CallState _state = CallState.idle;
   CallState get state => _state;
+
+  String? _statusText;
+  String? get statusText => _statusText;
 
   String? _currentCallId;
   String? get currentCallId => _currentCallId;
@@ -57,6 +64,9 @@ class CallManager extends ChangeNotifier {
   final Map<String, bool> _mutedParticipants = {};
   Map<String, bool> get mutedParticipants => _mutedParticipants;
 
+  Map<String, dynamic>? _incomingWaitingCall;
+  Map<String, dynamic>? get incomingWaitingCall => _incomingWaitingCall;
+
   String? _receiverAvatar;
   String? get receiverAvatar => _receiverAvatar;
 
@@ -70,6 +80,10 @@ class CallManager extends ChangeNotifier {
   String _callDuration = "00:00";
   String get callDuration => _callDuration;
   int get secondsElapsed => _secondsElapsed;
+
+  bool _isConnectingAudio = false;
+  bool get isConnectingAudio => _isConnectingAudio;
+  Timer? _audioConnectTimer;
 
   String? _myUserId;
   String? get myUserId => _myUserId;
@@ -223,6 +237,9 @@ class CallManager extends ChangeNotifier {
     fetchActiveGroupCalls();
     _startActiveCallsTimer();
 
+    // Attempt session-level recovery/reconnection
+    attemptReconnect();
+
     dev.log('📞 CallManager: Initialized for $myUserId', name: 'CallManager');
   }
 
@@ -252,6 +269,11 @@ class CallManager extends ChangeNotifier {
       switch (event) {
         case ck_event.CallEventActionCallAccept():
           final callId = event.id;
+          if (_incomingWaitingCall != null &&
+              _incomingWaitingCall!['callId'] == callId) {
+            await acceptWaitingCall();
+            break;
+          }
           var roomId = _currentRoomId;
           var callerId = _callerId;
           var isVideoCall = _isVideo;
@@ -311,6 +333,11 @@ class CallManager extends ChangeNotifier {
 
         case ck_event.CallEventActionCallDecline():
           final callId = event.id;
+          if (_incomingWaitingCall != null &&
+              _incomingWaitingCall!['callId'] == callId) {
+            await declineWaitingCall();
+            break;
+          }
           var roomId = _currentRoomId;
 
           if (_state == CallState.connected) {
@@ -557,7 +584,7 @@ class CallManager extends ChangeNotifier {
       '📞 CallManager: Received incoming_call Socket event payload: $data',
       name: 'CallManager',
     );
-    if (data == null || _state != CallState.idle) return;
+    if (data == null) return;
 
     Map<dynamic, dynamic> map = {};
     if (data is Map) {
@@ -579,6 +606,54 @@ class CallManager extends ChangeNotifier {
           error: e,
         );
       }
+    }
+
+    if (_state != CallState.idle) {
+      dev.log(
+        '📞 CallManager: Received incoming_call while in an active call. Handling as Call Waiting.',
+        name: 'CallManager',
+      );
+      final callerIdVal = map['callerId']?.toString();
+      final isVideoVal = map['isVideo'] == true || map['isVideo'] == 'true';
+      final isGroupVal =
+          map['isGroup'] == true ||
+          map['isGroup'] == 'true' ||
+          map['is_group'] == true ||
+          map['is_group'] == 'true' ||
+          (map['groupName'] != null &&
+              map['groupName'].toString().isNotEmpty) ||
+          (map['group_name'] != null &&
+              map['group_name'].toString().isNotEmpty);
+      final receiverNameVal = isGroupVal
+          ? (map['groupName']?.toString() ??
+                map['group_name']?.toString() ??
+                map['callerName']?.toString())
+          : map['callerName']?.toString();
+      final String? callerAvVal = map['callerAvatar']?.toString();
+      final String? groupAvVal =
+          map['groupAvatar']?.toString() ?? map['group_avatar']?.toString();
+      final receiverAvatarVal = isGroupVal
+          ? (groupAvVal == null ||
+                    groupAvVal == 'null' ||
+                    groupAvVal.isEmpty ||
+                    groupAvVal == callerAvVal
+                ? null
+                : groupAvVal)
+          : (callerAvVal ?? map['receiverAvatar']?.toString());
+
+      _incomingWaitingCall = {
+        'callId': map['callId']?.toString(),
+        'roomId': map['roomId']?.toString(),
+        'callerId': callerIdVal,
+        'isVideo': isVideoVal,
+        'isGroup': isGroupVal,
+        'receiverName': receiverNameVal,
+        'receiverAvatar': receiverAvatarVal,
+        'map': map,
+      };
+      notifyListeners();
+      _showWaitingCallKitNotification();
+      return;
     }
 
     _callerId = map['callerId']?.toString();
@@ -791,7 +866,10 @@ class CallManager extends ChangeNotifier {
       _state = CallState.connected;
       // _stopRingTone();
       _stopDialTone();
-      _startCallDurationTimer(); // Start call duration timer immediately
+      _startCallConnectedFlow();
+      unawaited(_cacheCallSession());
+      unawaited(_checkCurrentConnectivity());
+      _startConnectivityPolling();
       notifyListeners();
 
       // Dismiss CallKit overlay
@@ -920,6 +998,174 @@ class CallManager extends ChangeNotifier {
     }
   }
 
+  Future<void> _showWaitingCallKitNotification() async {
+    if (_incomingWaitingCall == null) return;
+    final waiting = _incomingWaitingCall!;
+    final params = CallKitParams(
+      id: waiting['callId'] ?? '',
+      nameCaller: waiting['receiverName'] ?? 'Incoming Call',
+      appName: 'ShieldConnect',
+      avatar:
+          (waiting['receiverAvatar'] != null &&
+              waiting['receiverAvatar']!.isNotEmpty)
+          ? ApiService.getImageUrl(waiting['receiverAvatar']!)
+          : 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
+      type: waiting['isVideo'] == true ? 1 : 0,
+      duration: 30000,
+      extra: <String, dynamic>{
+        'callerId': waiting['callerId'],
+        'roomId': waiting['roomId'],
+        'isVideo': waiting['isVideo'],
+        'isGroup': waiting['isGroup'],
+        'isWaitingCall': true,
+      },
+      android: const AndroidParams(
+        isCustomNotification: true,
+        ringtonePath: 'ringing_tone',
+        backgroundColor: '#121212',
+        actionColor: '#25D366',
+        incomingCallNotificationChannelName: 'Incoming Call Waiting',
+      ),
+      ios: const IOSParams(
+        iconName: 'AppIcon',
+        handleType: 'generic',
+        supportsVideo: true,
+        ringtonePath: 'ringing_tone.mp3',
+      ),
+    );
+    await FlutterCallkitIncoming.showCallkitIncoming(params);
+  }
+
+  Future<void> declineWaitingCall() async {
+    if (_incomingWaitingCall == null) return;
+    final waiting = _incomingWaitingCall!;
+    _incomingWaitingCall = null;
+    notifyListeners();
+
+    final String? callId = waiting['callId'];
+    final String? callerId = waiting['callerId'];
+    final String? roomId = waiting['roomId'];
+
+    try {
+      if (callId != null) {
+        await FlutterCallkitIncoming.endCall(callId);
+      } else {
+        await FlutterCallkitIncoming.endAllCalls();
+      }
+
+      if (callId != null && _myUserId != null) {
+        await _apiService.post(
+          '/call/decline',
+          data: {'call_id': callId, 'user_id': _myUserId},
+        );
+      }
+
+      if (callId != null) {
+        SocketService().emit('call_rejected', {
+          'to': callerId,
+          'callId': callId,
+          'roomId': roomId,
+          'callerId': callerId,
+          'receiverId': _myUserId,
+        });
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error declining waiting call: $e',
+        name: 'CallManager',
+      );
+    }
+  }
+
+  Future<void> acceptWaitingCall() async {
+    if (_incomingWaitingCall == null) return;
+    final waiting = _incomingWaitingCall!;
+    _incomingWaitingCall = null;
+    notifyListeners();
+
+    // Request microphone permission at runtime before accepting the waiting call
+    final hasMicPermission = await _requestMicrophonePermission();
+    if (!hasMicPermission) {
+      dev.log(
+        '⚠️ CallManager: Microphone permission denied. Cannot accept waiting call.',
+        name: 'CallManager',
+      );
+      return;
+    }
+
+    try {
+      // 1. End current active call (starts cleanup and pops the old screen synchronously)
+      unawaited(endCall());
+
+      // 2. Set new call parameters
+      _currentCallId = waiting['callId'];
+      _currentRoomId = waiting['roomId'];
+      _callerId = waiting['callerId'];
+      _receiverId = _myUserId;
+      _isGroup = waiting['isGroup'] == true;
+      _receiverName = waiting['receiverName'];
+      _receiverAvatar = waiting['receiverAvatar'];
+      _isVideo = waiting['isVideo'] == true;
+      _state = CallState.connected;
+      _incomingParticipantsCount = 0;
+
+      _startCallConnectedFlow();
+      notifyListeners();
+
+      // 3. Navigate to the correct screen (Voice or Video) immediately
+      _isCallScreenPushed = true;
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => _isVideo
+              ? VideoCallingScreen(userName: _receiverName ?? 'User')
+              : VoiceCallingScreen(
+                  userName: _receiverName ?? 'User',
+                  avatarUrl: _receiverAvatar,
+                ),
+        ),
+      );
+
+      // 4. REST /call/answer endpoint for the new call in the background
+      if (_currentCallId != null && _myUserId != null) {
+        final cId = _currentCallId;
+        final uId = _myUserId;
+        unawaited(() async {
+          try {
+            await _apiService.post(
+              '/call/answer',
+              data: {'call_id': cId, 'user_id': uId},
+            );
+          } catch (e) {
+            dev.log(
+              '🚨 CallManager: Error answering waiting call REST: $e',
+              name: 'CallManager',
+            );
+          }
+        }());
+      }
+
+      // 5. Emit call_accepted socket event for the new call
+      if (_currentCallId != null) {
+        SocketService().emit('call_accepted', {
+          'to': _callerId,
+          'roomId': _currentRoomId,
+          'callId': _currentCallId,
+          'callerId': _callerId,
+          'receiverId': _myUserId,
+        });
+      }
+
+      // 6. Connect to LiveKit room for the new call
+      await _connectLiveKitRoom();
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error accepting waiting call: $e',
+        name: 'CallManager',
+      );
+      _cleanupCall();
+    }
+  }
+
   /// Close current active call session.
   Future<void> endCall() async {
     if (_currentCallId == null || _isHandlingCallAction) {
@@ -950,18 +1196,24 @@ class CallManager extends ChangeNotifier {
         '📞 CallManager: Gracefully ending call session ID: $callId',
         name: 'CallManager',
       );
-      
-      // Clean up local call state and pop screens immediately
-      _cleanupCall();
+
+      // Stop dialing and duration timer immediately
+      _stopDialTone();
+      _durationTimer?.cancel();
+      _audioConnectTimer?.cancel();
+      _isConnectingAudio = false;
+
+      // Disconnect WebRTC room immediately
+      roomManager.disconnectRoom();
+
+      // Show "Call Ending..." status text
+      _statusText = "Call Ending...";
+      notifyListeners();
 
       // REST /call/end endpoint
       await _apiService.post(
         '/call/end',
-        data: {
-          'call_id': callId,
-          'user_id': _myUserId,
-          'duration': duration,
-        },
+        data: {'call_id': callId, 'user_id': _myUserId, 'duration': duration},
       );
 
       if (!isGroupCall && !hasMoreThanTwo) {
@@ -979,12 +1231,18 @@ class CallManager extends ChangeNotifier {
           name: 'CallManager',
         );
       }
+
+      // Show Call Ending.. text to the user for 2 seconds
+      await Future.delayed(const Duration(seconds: 2));
+
+      _cleanupCall();
     } catch (e) {
       dev.log(
         '🚨 CallManager: Error ending call session: $e',
         name: 'CallManager',
         error: e,
       );
+      _cleanupCall();
     } finally {
       _isHandlingCallAction = false;
     }
@@ -1061,16 +1319,52 @@ class CallManager extends ChangeNotifier {
 
   // ─── Socket.IO Subscribed Callbacks ───────────────────────────────────────
 
+  String? _parseCallIdFromSocketData(dynamic data) {
+    if (data == null) return null;
+    Map<dynamic, dynamic> map = {};
+    if (data is Map) {
+      map = data;
+    } else if (data is List && data.isNotEmpty && data[0] is Map) {
+      map = data[0] as Map;
+    } else {
+      try {
+        final decoded = jsonDecode(data.toString());
+        if (decoded is Map) {
+          map = decoded;
+        } else if (decoded is List && decoded.isNotEmpty && decoded[0] is Map) {
+          map = decoded[0] as Map;
+        }
+      } catch (_) {}
+    }
+    return map['callId']?.toString() ??
+        map['call_id']?.toString() ??
+        map['roomId']?.toString() ??
+        map['room_id']?.toString();
+  }
+
   void _handleCallAcceptedEvent(dynamic data) async {
     dev.log(
-      '📞 CallManager: Received call_accepted Socket event',
+      '📞 CallManager: Received call_accepted Socket event: $data',
       name: 'CallManager',
     );
+    final String? eventCallId = _parseCallIdFromSocketData(data);
+    if (eventCallId != null &&
+        eventCallId != _currentCallId &&
+        eventCallId != _currentRoomId) {
+      dev.log(
+        '📞 CallManager: Ignoring call_accepted because eventCallId $eventCallId does not match currentCallId $_currentCallId or currentRoomId $_currentRoomId',
+        name: 'CallManager',
+      );
+      return;
+    }
     if (_state != CallState.dialing) return;
 
     _state = CallState.connected;
     _stopDialTone();
-    _startCallDurationTimer(); // Start call duration timer immediately
+    _startCallConnectedFlow();
+    unawaited(_cacheCallSession());
+    unawaited(_checkCurrentConnectivity());
+    _startConnectivityPolling();
     notifyListeners();
 
     // Connect caller's WebRTC channels if not already connected
@@ -1079,11 +1373,38 @@ class CallManager extends ChangeNotifier {
     }
   }
 
-  void _handleCallRejectedEvent(dynamic data) {
+  void _handleCallRejectedEvent(dynamic data) async {
     dev.log(
       '📞 CallManager: Received call_rejected Socket event: $data',
       name: 'CallManager',
     );
+    final String? eventCallId = _parseCallIdFromSocketData(data);
+    if (_incomingWaitingCall != null &&
+        (eventCallId == _incomingWaitingCall!['callId'] ||
+            eventCallId == _incomingWaitingCall!['roomId'])) {
+      dev.log(
+        '📞 CallManager: Received call_rejected for the waiting call. Clearing waiting call.',
+        name: 'CallManager',
+      );
+      final waitingId = _incomingWaitingCall!['callId'];
+      _incomingWaitingCall = null;
+      notifyListeners();
+      if (waitingId != null) {
+        FlutterCallkitIncoming.endCall(waitingId);
+      }
+      return;
+    }
+
+    if (eventCallId != null &&
+        eventCallId != _currentCallId &&
+        eventCallId != _currentRoomId) {
+      dev.log(
+        '📞 CallManager: Ignoring call_rejected because eventCallId $eventCallId does not match currentCallId $_currentCallId or currentRoomId $_currentRoomId',
+        name: 'CallManager',
+      );
+      return;
+    }
+
     if (_isGroup) {
       dev.log(
         '📞 CallManager: Ignoring call_rejected because it is a group call.',
@@ -1098,29 +1419,117 @@ class CallManager extends ChangeNotifier {
       );
       return;
     }
-    _cleanupCall();
+    _statusText = "Call Declined..";
+    _stopDialTone();
+    notifyListeners();
+    await Future.delayed(const Duration(seconds: 2));
+    if (_state != CallState.idle) {
+      _cleanupCall();
+    }
   }
 
-  void _handleCallEndedEvent(dynamic data) {
+  void _handleCallEndedEvent(dynamic data) async {
     dev.log(
-      '📞 CallManager: Received call_ended Socket event',
+      '📞 CallManager: Received call_ended Socket event: $data',
       name: 'CallManager',
     );
-    _cleanupCall();
+    final String? eventCallId = _parseCallIdFromSocketData(data);
+    if (_incomingWaitingCall != null &&
+        (eventCallId == _incomingWaitingCall!['callId'] ||
+            eventCallId == _incomingWaitingCall!['roomId'])) {
+      dev.log(
+        '📞 CallManager: Received call_ended for the waiting call. Clearing waiting call.',
+        name: 'CallManager',
+      );
+      final waitingId = _incomingWaitingCall!['callId'];
+      _incomingWaitingCall = null;
+      notifyListeners();
+      if (waitingId != null) {
+        FlutterCallkitIncoming.endCall(waitingId);
+      }
+      return;
+    }
+
+    if (eventCallId != null &&
+        eventCallId != _currentCallId &&
+        eventCallId != _currentRoomId) {
+      dev.log(
+        '📞 CallManager: Ignoring call_ended because eventCallId $eventCallId does not match currentCallId $_currentCallId or currentRoomId $_currentRoomId',
+        name: 'CallManager',
+      );
+      return;
+    }
+
+    if (_state != CallState.idle) {
+      _stopDialTone();
+      _durationTimer?.cancel();
+      _audioConnectTimer?.cancel();
+      _isConnectingAudio = false;
+      roomManager.disconnectRoom();
+
+      _statusText = "Call Ending...";
+      notifyListeners();
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (_state != CallState.idle) {
+        _cleanupCall();
+      }
+    }
   }
 
   // ─── Duration Timers & Formatting ────────────────────────────────────────
 
-  void _startDialTimer() {
-    Timer(const Duration(seconds: 40), () {
+  void _startDialTimer() async {
+    int timeoutSecs = 30;
+    try {
+      final settings = await SettingsModel.loadActiveSettings();
+      if (settings.callTimeout != null && settings.callTimeout! > 0) {
+        timeoutSecs = settings.callTimeout!;
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error loading callTimeout settings: $e',
+        name: 'CallManager',
+      );
+    }
+
+    Timer(Duration(seconds: timeoutSecs), () async {
       if (_state == CallState.dialing) {
         dev.log(
-          '📞 CallManager: Outgoing call unanswered. Timing out.',
+          '📞 CallManager: Outgoing call unanswered. Timing out in $timeoutSecs seconds.',
           name: 'CallManager',
         );
-        endCall();
+        if (!_isGroup) {
+          _statusText = "Unanswered Call..";
+          _stopDialTone();
+          notifyListeners();
+          await Future.delayed(const Duration(seconds: 2));
+        }
+        if (_state == CallState.dialing) {
+          endCall();
+        }
       }
     });
+  }
+
+  void _startCallConnectedFlow() {
+    _durationTimer?.cancel();
+    _audioConnectTimer?.cancel();
+
+    if (!_isVideo) {
+      _isConnectingAudio = true;
+      _secondsElapsed = 0;
+      _callDuration = "Connecting to audio...";
+      notifyListeners();
+
+      _audioConnectTimer = Timer(const Duration(seconds: 6), () {
+        _isConnectingAudio = false;
+        _startCallDurationTimer();
+      });
+    } else {
+      _isConnectingAudio = false;
+      _startCallDurationTimer();
+    }
   }
 
   void _startCallDurationTimer() {
@@ -1141,6 +1550,8 @@ class CallManager extends ChangeNotifier {
     _stopDialTone();
     // _stopRingTone();
     _durationTimer?.cancel();
+    _audioConnectTimer?.cancel();
+    _isConnectingAudio = false;
     roomManager.disconnectRoom();
     FlutterCallkitIncoming.endAllCalls();
 
@@ -1161,6 +1572,7 @@ class CallManager extends ChangeNotifier {
     _isMinimized = false;
 
     _state = CallState.idle;
+    _statusText = null;
     _incomingParticipantsCount = 0;
     _mutedParticipants.clear();
     _currentCallId = null;
@@ -1173,6 +1585,9 @@ class CallManager extends ChangeNotifier {
     _callDuration = "00:00";
     _isGroup = false;
 
+    unawaited(_clearCallSessionCache());
+    _connectivityPollingTimer?.cancel();
+    _connectivityPollingTimer = null;
     notifyListeners();
   }
 
@@ -1206,6 +1621,7 @@ class CallManager extends ChangeNotifier {
     String? groupId,
     String? groupName,
     String? groupAvatar,
+    String? callerId,
   }) async {
     if (_state != CallState.idle) {
       dev.log(
@@ -1227,14 +1643,44 @@ class CallManager extends ChangeNotifier {
 
     _isMinimized = false;
     _currentRoomId = roomId;
+    _currentCallId = roomId;
     _isVideo = isVideo;
     _receiverId = groupId;
     _receiverName = groupName ?? 'Group';
     _receiverAvatar = groupAvatar;
+    _callerId = callerId;
     _isGroup = groupId != null && groupId.isNotEmpty;
     _state = CallState.connected;
-    _startCallDurationTimer(); // Start call duration timer immediately
+    _startCallConnectedFlow();
+    unawaited(_cacheCallSession());
+    unawaited(_checkCurrentConnectivity());
+    _startConnectivityPolling();
     notifyListeners();
+
+    // 1. Post to REST /call/answer in background to add this user as active participant
+    if (_myUserId != null) {
+      unawaited(() async {
+        try {
+          await _apiService.post(
+            '/call/answer',
+            data: {'call_id': roomId, 'user_id': _myUserId},
+          );
+        } catch (e) {
+          dev.log('🚨 CallManager: Error answering call REST inside joinCall: $e', name: 'CallManager');
+        }
+      }());
+    }
+
+    // 2. Emit call_accepted socket event
+    if (_myUserId != null) {
+      SocketService().emit('call_accepted', {
+        'to': callerId,
+        'roomId': roomId,
+        'callId': roomId,
+        'callerId': callerId,
+        'receiverId': _myUserId,
+      });
+    }
 
     final context = navigatorKey.currentContext;
     if (context != null && context.mounted) {
@@ -1287,11 +1733,21 @@ class CallManager extends ChangeNotifier {
       final response = await _apiService.get("/call/active/$_myUserId");
       if (response.data != null && response.data['success'] == true) {
         final List calls = response.data['data'] ?? [];
-        _activeGroupCalls = {
-          for (var call in calls)
-            if (call['group_id'] != null)
-              call['group_id'].toString(): Map<String, dynamic>.from(call),
-        };
+        final Map<String, Map<String, dynamic>> temp = {};
+        for (var call in calls) {
+          if (call['group_id'] != null) {
+            String? gid;
+            if (call['group_id'] is Map) {
+              gid = (call['group_id']['_id'] ?? call['group_id']['id'])?.toString();
+            } else {
+              gid = call['group_id'].toString();
+            }
+            if (gid != null) {
+              temp[gid] = Map<String, dynamic>.from(call);
+            }
+          }
+        }
+        _activeGroupCalls = temp;
         notifyListeners();
       }
     } catch (e) {
@@ -1313,11 +1769,13 @@ class CallManager extends ChangeNotifier {
     _activeCallsRefreshTimer = null;
   }
 
-  void _handleGroupCallEndedEvent(dynamic data) {
+  void _handleGroupCallEndedEvent(dynamic data) async {
     dev.log(
       '🛑 Socket: Group call ended signal received: $data',
       name: 'CallManager',
     );
+    String? eventCallId;
+    String? eventGroupId;
     if (data != null) {
       Map<dynamic, dynamic> map = {};
       if (data is Map) {
@@ -1325,14 +1783,65 @@ class CallManager extends ChangeNotifier {
       } else if (data is List && data.isNotEmpty && data[0] is Map) {
         map = data[0] as Map;
       }
-      final groupId = map['groupId'] ?? map['group_id'];
-      if (groupId != null) {
-        _activeGroupCalls.remove(groupId.toString());
+      eventGroupId = (map['groupId'] ?? map['group_id'])?.toString();
+      eventCallId =
+          (map['callId'] ?? map['call_id'] ?? map['roomId'] ?? map['room_id'])
+              ?.toString();
+      if (eventGroupId != null) {
+        _activeGroupCalls.remove(eventGroupId);
         notifyListeners();
       }
     }
     fetchActiveGroupCalls();
-    _cleanupCall();
+
+    if (_incomingWaitingCall != null &&
+        (eventCallId == _incomingWaitingCall!['callId'] ||
+            eventCallId == _incomingWaitingCall!['roomId'])) {
+      dev.log(
+        '📞 CallManager: Received group_call_ended for the waiting call. Clearing waiting call.',
+        name: 'CallManager',
+      );
+      final waitingId = _incomingWaitingCall!['callId'];
+      _incomingWaitingCall = null;
+      notifyListeners();
+      if (waitingId != null) {
+        FlutterCallkitIncoming.endCall(waitingId);
+      }
+      return;
+    }
+
+    if (eventCallId != null &&
+        eventCallId != _currentCallId &&
+        eventCallId != _currentRoomId) {
+      dev.log(
+        '📞 CallManager: Ignoring group_call_ended because eventCallId $eventCallId does not match currentCallId $_currentCallId or currentRoomId $_currentRoomId',
+        name: 'CallManager',
+      );
+      return;
+    }
+    if (eventGroupId != null && eventGroupId != _receiverId && _isGroup) {
+      dev.log(
+        '📞 CallManager: Ignoring group_call_ended because eventGroupId $eventGroupId does not match group recipient ID $_receiverId',
+        name: 'CallManager',
+      );
+      return;
+    }
+
+    if (_state != CallState.idle) {
+      _stopDialTone();
+      _durationTimer?.cancel();
+      _audioConnectTimer?.cancel();
+      _isConnectingAudio = false;
+      roomManager.disconnectRoom();
+
+      _statusText = "Call Ending..";
+      notifyListeners();
+
+      await Future.delayed(const Duration(seconds: 2));
+      if (_state != CallState.idle) {
+        _cleanupCall();
+      }
+    }
   }
 
   void _handleGroupCallStatusUpdate(dynamic data) {
@@ -1493,9 +2002,402 @@ class CallManager extends ChangeNotifier {
     }
   }
 
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool _isNetworkOffline = false;
+  bool get isNetworkOffline => _isNetworkOffline;
+
+  bool get isReconnecting {
+    if (_state != CallState.connected) return false;
+    return roomManager.isReconnecting ||
+        _isNetworkOffline ||
+        !SocketService().connectionNotifier.value;
+  }
+
+  void _initConnectivityListener() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
+      bool isOffline =
+          results.isEmpty || results.every((r) => r == ConnectivityResult.none);
+      if (SocketService().connectionNotifier.value) {
+        isOffline = false;
+      }
+      dev.log(
+        '🔌 CallManager: Connectivity changed: $results (isOffline: $isOffline)',
+        name: 'CallManager',
+      );
+      if (_isNetworkOffline != isOffline) {
+        _isNetworkOffline = isOffline;
+        notifyListeners();
+
+        if (!isOffline && _myUserId != null) {
+          dev.log(
+            '🔌 CallManager: Network restored. Triggering manual Socket.IO reconnect...',
+            name: 'CallManager',
+          );
+          SocketService().connect(_myUserId!);
+
+          if (_state == CallState.connected) {
+            if (!roomManager.isConnected && !roomManager.isConnecting) {
+              dev.log(
+                '🎙️ CallManager: WebRTC room is not connected. Re-connecting to LiveKit room...',
+                name: 'CallManager',
+              );
+              _connectLiveKitRoom();
+            }
+            if (_currentCallId != null) {
+              final context = navigatorKey.currentContext;
+              if (context != null && context.mounted) {
+                try {
+                  final controller = Provider.of<CallController>(
+                    context,
+                    listen: false,
+                  );
+                  controller.fetchParticipants(_currentCallId!);
+                } catch (e) {
+                  dev.log(
+                    '🚨 CallManager: Error refreshing participants: $e',
+                    name: 'CallManager',
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    // Check initial connectivity status immediately
+    unawaited(_checkCurrentConnectivity());
+  }
+
+  Future<void> _cacheCallSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('activeCallId', _currentCallId ?? '');
+      await prefs.setString('activeRoomId', _currentRoomId ?? '');
+      await prefs.setString('activeCallType', _isVideo ? 'video' : 'audio');
+      await prefs.setBool('activeIsGroup', _isGroup);
+      await prefs.setString('activeReceiverName', _receiverName ?? '');
+      await prefs.setString('activeReceiverAvatar', _receiverAvatar ?? '');
+      await prefs.setString('activeCallerId', _callerId ?? '');
+      await prefs.setString('activeReceiverId', _receiverId ?? '');
+      dev.log(
+        '📞 CallManager: Cached call session ID: $_currentCallId',
+        name: 'CallManager',
+      );
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error caching call session: $e',
+        name: 'CallManager',
+      );
+    }
+  }
+
+  Future<void> _clearCallSessionCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('activeCallId');
+      await prefs.remove('activeRoomId');
+      await prefs.remove('activeCallType');
+      await prefs.remove('activeIsGroup');
+      await prefs.remove('activeReceiverName');
+      await prefs.remove('activeReceiverAvatar');
+      await prefs.remove('activeCallerId');
+      await prefs.remove('activeReceiverId');
+      dev.log(
+        '📞 CallManager: Cleared call session cache',
+        name: 'CallManager',
+      );
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error clearing call session cache: $e',
+        name: 'CallManager',
+      );
+    }
+  }
+
+  Future<bool> _isCallSessionValid(String callId) async {
+    if (_myUserId == null) return false;
+    try {
+      // 1. Check active calls first
+      final responseActive = await _apiService.get("/call/active/$_myUserId");
+      if (responseActive.data != null &&
+          responseActive.data['success'] == true) {
+        final List calls = responseActive.data['data'] ?? [];
+        final hasCall = calls.any((c) {
+          if (c is Map) {
+            final String? cId =
+                (c['_id'] ??
+                        c['id'] ??
+                        c['callId'] ??
+                        c['roomId'] ??
+                        c['group_id'])
+                    ?.toString();
+            return cId == callId;
+          }
+          return false;
+        });
+        if (hasCall) {
+          dev.log(
+            '📞 CallManager: Found call ID in active calls list.',
+            name: 'CallManager',
+          );
+          return true;
+        }
+      }
+
+      // 2. Fallback: Check participants
+      final responseParticipants = await _apiService.get(
+        "/call/participants/$callId",
+      );
+      if (responseParticipants.data != null) {
+        final dynamic rawData = responseParticipants.data is Map
+            ? (responseParticipants.data['data'] ??
+                  responseParticipants.data['participants'] ??
+                  [])
+            : responseParticipants.data;
+        List<dynamic> participantsList = [];
+        if (rawData is List) {
+          participantsList = rawData;
+        } else if (responseParticipants.data['success'] == true) {
+          participantsList = responseParticipants.data['data'] ?? [];
+        }
+
+        for (final p in participantsList) {
+          if (p is Map) {
+            final String? pId = (p['user_id'] ?? p['id'] ?? p['_id'])
+                ?.toString();
+            if (pId == _myUserId) {
+              final String? status = p['status']?.toString().toLowerCase();
+              if (status != 'left' &&
+                  status != 'declined' &&
+                  status != 'missed' &&
+                  status != 'rejected') {
+                dev.log(
+                  '📞 CallManager: User is active participant in the call.',
+                  name: 'CallManager',
+                );
+                return true;
+              }
+            }
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error validating cached call: $e',
+        name: 'CallManager',
+      );
+      return false;
+    }
+  }
+
+  Future<void> attemptReconnect() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? cachedCallId = prefs.getString('activeCallId');
+      if (cachedCallId == null || cachedCallId.isEmpty) {
+        dev.log(
+          '📞 CallManager: No cached call session found to reconnect.',
+          name: 'CallManager',
+        );
+        return;
+      }
+
+      dev.log(
+        '📞 CallManager: Found cached call session ID: $cachedCallId. Validating with server...',
+        name: 'CallManager',
+      );
+
+      final bool isValid = await _isCallSessionValid(cachedCallId);
+      if (!isValid) {
+        dev.log(
+          '📞 CallManager: Cached call session is no longer active. Cleaning up.',
+          name: 'CallManager',
+        );
+        await _clearCallSessionCache();
+        return;
+      }
+
+      final String cachedRoomId =
+          prefs.getString('activeRoomId') ?? cachedCallId;
+      final String cachedCallType =
+          prefs.getString('activeCallType') ?? 'audio';
+      final bool cachedIsGroup = prefs.getBool('activeIsGroup') ?? false;
+      final String cachedReceiverName =
+          prefs.getString('activeReceiverName') ?? 'Active Call';
+      final String? cachedReceiverAvatar = prefs.getString(
+        'activeReceiverAvatar',
+      );
+      final String? cachedCallerId = prefs.getString('activeCallerId');
+      final String? cachedReceiverId = prefs.getString('activeReceiverId');
+
+      _currentCallId = cachedCallId;
+      _currentRoomId = cachedRoomId;
+      _isVideo = cachedCallType == 'video';
+      _isGroup = cachedIsGroup;
+      _receiverName = cachedReceiverName;
+      _receiverAvatar =
+          (cachedReceiverAvatar != null && cachedReceiverAvatar.isNotEmpty)
+          ? cachedReceiverAvatar
+          : null;
+      _callerId = cachedCallerId;
+      _receiverId = cachedReceiverId;
+
+      dev.log(
+        '📞 CallManager: Cached call session is valid! Restoring call state and rejoining...',
+        name: 'CallManager',
+      );
+
+      _state = CallState.connected;
+      _startCallConnectedFlow();
+      _startConnectivityPolling();
+      notifyListeners();
+
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        _isCallScreenPushed = true;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => _isVideo
+                ? VideoCallingScreen(userName: _receiverName ?? 'User')
+                : VoiceCallingScreen(
+                    userName: _receiverName ?? 'User',
+                    avatarUrl: _receiverAvatar,
+                  ),
+          ),
+        );
+      }
+
+      await _connectLiveKitRoom();
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error during attemptReconnect: $e',
+        name: 'CallManager',
+      );
+    }
+  }
+
+  Future<void> _checkCurrentConnectivity() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      bool isOffline =
+          results.isEmpty || results.every((r) => r == ConnectivityResult.none);
+      if (SocketService().connectionNotifier.value) {
+        isOffline = false;
+      }
+      dev.log(
+        '🔌 CallManager: checkCurrentConnectivity results: $results (isOffline: $isOffline)',
+        name: 'CallManager',
+      );
+      if (_isNetworkOffline != isOffline) {
+        _isNetworkOffline = isOffline;
+        notifyListeners();
+      }
+    } catch (e) {
+      dev.log(
+        '🚨 CallManager: Error checking current connectivity: $e',
+        name: 'CallManager',
+      );
+    }
+  }
+
   @override
   void dispose() {
     _activeCallsRefreshTimer?.cancel();
+    _connectivitySubscription?.cancel();
+    _connectivityPollingTimer?.cancel();
+    SocketService().connectionNotifier.removeListener(notifyListeners);
+    roomManager.removeListener(notifyListeners);
     super.dispose();
+  }
+
+  Timer? _connectivityPollingTimer;
+
+  void _startConnectivityPolling() {
+    _connectivityPollingTimer?.cancel();
+    _connectivityPollingTimer = Timer.periodic(const Duration(milliseconds: 500), (
+      timer,
+    ) async {
+      if (_state != CallState.connected) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final results = await Connectivity().checkConnectivity();
+        bool isOffline =
+            results.isEmpty ||
+            results.every((r) => r == ConnectivityResult.none);
+        if (SocketService().connectionNotifier.value) {
+          isOffline = false;
+        }
+        if (_isNetworkOffline != isOffline) {
+          dev.log(
+            '🔌 CallManager Poller: Network status changed actively: isOffline: $isOffline',
+            name: 'CallManager',
+          );
+          _isNetworkOffline = isOffline;
+          notifyListeners();
+
+          if (!isOffline && _myUserId != null) {
+            dev.log(
+              '🔌 CallManager Poller: Network restored. Reconnecting socket...',
+              name: 'CallManager',
+            );
+            SocketService().connect(_myUserId!);
+            if (_state == CallState.connected) {
+              if (!roomManager.isConnected && !roomManager.isConnecting) {
+                dev.log(
+                  '🎙️ CallManager Poller: WebRTC room is not connected. Re-connecting to LiveKit room...',
+                  name: 'CallManager',
+                );
+                _connectLiveKitRoom();
+              }
+              if (_currentCallId != null) {
+                final context = navigatorKey.currentContext;
+                if (context != null && context.mounted) {
+                  final controller = Provider.of<CallController>(
+                    context,
+                    listen: false,
+                  );
+                  controller.fetchParticipants(_currentCallId!);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        dev.log('🚨 CallManager Poller error: $e', name: 'CallManager');
+        final isOffline = !SocketService().connectionNotifier.value;
+        if (_isNetworkOffline != isOffline) {
+          dev.log(
+            '🔌 CallManager Poller (Fallback): Network status changed: isOffline: $isOffline',
+            name: 'CallManager',
+          );
+          _isNetworkOffline = isOffline;
+          notifyListeners();
+
+          if (!isOffline && _myUserId != null) {
+            dev.log(
+              '🔌 CallManager Poller (Fallback): Network restored. Reconnecting socket...',
+              name: 'CallManager',
+            );
+            SocketService().connect(_myUserId!);
+            if (_state == CallState.connected &&
+                !roomManager.isConnected &&
+                !roomManager.isConnecting) {
+              dev.log(
+                '🎙️ CallManager Poller (Fallback): WebRTC room is not connected. Re-connecting to LiveKit room...',
+                name: 'CallManager',
+              );
+              _connectLiveKitRoom();
+            }
+          }
+        }
+      }
+    });
   }
 }

@@ -90,6 +90,12 @@ class GroupChatScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        context.read<CallManager>().fetchActiveGroupCalls();
+      }
+    });
+
     return ChangeNotifierProvider<GroupChatController>(
       create: (context) {
         final controller = GroupChatController();
@@ -107,6 +113,107 @@ class GroupChatScreen extends StatelessWidget {
                 children: [
                   // 1. Aesthetic Group Header
                   _buildHeader(context, controller),
+
+                  // Ongoing active call banner for this group chat
+                  Consumer<CallManager>(
+                    builder: (context, callManager, child) {
+                      final String? resolvedGroupId = groupId ?? controller.groupId;
+                      if (resolvedGroupId == null) return const SizedBox.shrink();
+
+                      final activeCall = callManager.activeGroupCalls[resolvedGroupId];
+                      if (activeCall == null) return const SizedBox.shrink();
+
+                      // If user is already active in this call, don't show the join banner
+                      final String? callId = (activeCall['_id'] ?? activeCall['id'])?.toString();
+                      if (callManager.state != CallState.idle && callManager.currentCallId == callId) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final isVideo = activeCall['call_type'] == 'video';
+                      final String roomId = (activeCall['_id'] ?? activeCall['id'] ?? activeCall['roomId'])?.toString() ?? '';
+                      final String name = controller.groupDetails?['name']?.toString() ?? groupName;
+                      final String? image = controller.groupDetails?['group_image'] ?? controller.groupDetails?['avatar'];
+                      final String? callerId = (activeCall['initiator_id'] is Map
+                          ? (activeCall['initiator_id']['_id'] ?? activeCall['initiator_id']['id'])?.toString()
+                          : activeCall['initiator_id']?.toString()) ?? activeCall['callerId']?.toString();
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E1E),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF25D366),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    "Ongoing Group Call",
+                                    style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isVideo ? "Tap Join Now to join the video call" : "Tap Join Now to join the voice call",
+                                    style: fontStyle.clashDisplayRegular12.textColor(Colors.white60),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              onPressed: () {
+                                callManager.joinCall(
+                                  roomId,
+                                  isVideo,
+                                  groupId: resolvedGroupId,
+                                  groupName: name,
+                                  groupAvatar: image,
+                                  callerId: callerId,
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF25D366),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                elevation: 0,
+                              ),
+                              child: Text(
+                                "Join Now",
+                                style: fontStyle.clashDisplayBold12.textColor(Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
 
                   // 2. Dynamic Chat Body
                   Expanded(

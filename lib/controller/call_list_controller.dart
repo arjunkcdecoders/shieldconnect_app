@@ -257,4 +257,56 @@ class CallListController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  List<Map<String, dynamic>> _connectedUsers = [];
+  List<Map<String, dynamic>> get connectedUsers => _connectedUsers;
+
+  bool _isLoadingConnected = false;
+  bool get isLoadingConnected => _isLoadingConnected;
+
+  Future<void> fetchConnectedUsers() async {
+    if (_userId == null || _userId!.isEmpty) {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr != null) {
+        final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+        final UserModel user = UserModel.fromJson(userMap);
+        _userId = user.id;
+      }
+    }
+
+    if (_userId == null || _userId!.isEmpty) {
+      debugPrint("CallListController: userId is null, skipping connected users fetch");
+      return;
+    }
+
+    _isLoadingConnected = true;
+    notifyListeners();
+
+    try {
+      final response = await ApiService().get('/connections/friends/$_userId');
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        final List<dynamic> data = json['data'] ?? [];
+        _connectedUsers = data.map((item) {
+          final Map<String, dynamic> friend = item as Map<String, dynamic>;
+          return {
+            "id": friend['user_id']?.toString() ?? "",
+            "name": friend['name']?.toString() ?? "Unknown",
+            "subtitle": friend['email']?.toString() ?? (friend['bio']?.toString() ?? "Hey there!"),
+            "avatar": friend['avatar']?.toString() ?? "",
+          };
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint("Error fetching connected users in CallListController: $e");
+    } finally {
+      _isLoadingConnected = false;
+      notifyListeners();
+    }
+  }
 }

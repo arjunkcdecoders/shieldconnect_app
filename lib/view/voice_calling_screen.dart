@@ -13,6 +13,7 @@ import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
 import 'package:shieldconnect_app/view/video_calling_screen.dart';
+import 'package:shieldconnect_app/view/call_waiting_overlay.dart';
 
 class VoiceCallingScreen extends StatelessWidget {
   final String userName;
@@ -26,6 +27,7 @@ class VoiceCallingScreen extends StatelessWidget {
     BuildContext context,
   ) {
     final List<Map<String, dynamic>> gridMembers = [];
+    final bool isConnected = callManager.state == CallState.connected;
 
     // Resolve "Me" avatar robustly from various providers
     String? myAvatar = callManager.myUserAvatar;
@@ -101,14 +103,16 @@ class VoiceCallingScreen extends StatelessWidget {
         }
       } catch (_) {
         // If otherId is not found in participants list and we have successfully fetched participants, then they have left.
-        if (callController.hasFetchedParticipants) {
+        if (isConnected && callController.hasFetchedParticipants) {
           hasLeft = true;
         }
       }
 
-      if (callManager.roomManager.hasParticipantLeft(otherId)) {
-        hasLeft = true;
-      }
+      // Do not consider the remote participant as permanently left just because they temporarily dropped from the LiveKit room.
+      // They are only considered left if they are no longer in the participants list from backend polling.
+      // if (callManager.roomManager.hasParticipantLeft(otherId)) {
+      //   hasLeft = true;
+      // }
 
       if (!hasLeft) {
         final bool isOtherMuted =
@@ -127,9 +131,11 @@ class VoiceCallingScreen extends StatelessWidget {
           'is_muted': isOtherMuted,
           'status':
               otherStatus ??
-              (callManager.state == CallState.connected
-                  ? 'connected'
-                  : 'ringing'),
+              (callManager.roomManager.hasParticipantLeft(otherId)
+                  ? 'disconnected'
+                  : (callManager.state == CallState.connected
+                        ? 'connected'
+                        : 'ringing')),
         });
       } else {
         dev.log(
@@ -191,6 +197,7 @@ class VoiceCallingScreen extends StatelessWidget {
           return VideoCallingScreen(userName: userName);
         }
 
+        final isConnected = callManager.state == CallState.connected;
         final isMuted = roomManager.isMuted;
         final isSpeakerOn = roomManager.isSpeakerOn;
 
@@ -211,6 +218,8 @@ class VoiceCallingScreen extends StatelessWidget {
         // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
         if (!callManager.isGroup &&
             callManager.state == CallState.connected &&
+            callManager.roomManager.isConnected &&
+            !callManager.isReconnecting &&
             callManager.secondsElapsed > 2 &&
             callController.hasFetchedParticipants &&
             activeOther.isEmpty) {
@@ -230,31 +239,30 @@ class VoiceCallingScreen extends StatelessWidget {
                   : (callManager.callerId ?? ''));
 
         bool otherHasLeft = false;
-        if (!callManager.isGroup &&
+        if (isConnected &&
+            !callManager.isGroup &&
             activeOther.isEmpty &&
             activeOtherId.isNotEmpty) {
-          if (roomManager.hasParticipantLeft(activeOtherId)) {
-            otherHasLeft = true;
-          } else {
-            try {
-              final matchingParticipant = callController.participants
-                  .firstWhere((p) {
-                    final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                    return pId?.toString() == activeOtherId;
-                  });
-              final String? status = matchingParticipant['status']
-                  ?.toString()
-                  .toLowerCase();
-              if (status == 'left' ||
-                  status == 'declined' ||
-                  status == 'missed' ||
-                  status == 'rejected') {
-                otherHasLeft = true;
-              }
-            } catch (_) {
-              if (callController.hasFetchedParticipants) {
-                otherHasLeft = true;
-              }
+          // Do not treat LiveKit disconnection as immediate leave.
+          try {
+            final matchingParticipant = callController.participants.firstWhere((
+              p,
+            ) {
+              final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+              return pId?.toString() == activeOtherId;
+            });
+            final String? status = matchingParticipant['status']
+                ?.toString()
+                .toLowerCase();
+            if (status == 'left' ||
+                status == 'declined' ||
+                status == 'missed' ||
+                status == 'rejected') {
+              otherHasLeft = true;
+            }
+          } catch (_) {
+            if (callController.hasFetchedParticipants) {
+              otherHasLeft = true;
             }
           }
         }
@@ -263,7 +271,7 @@ class VoiceCallingScreen extends StatelessWidget {
             (callManager.isGroup && activeOther.isNotEmpty)
             ? "$userName - ${activeOther['name']}"
             : (callManager.isGroup || activeOther.isEmpty)
-            ? (otherHasLeft ? 'Call ending...' : userName)
+            ? (otherHasLeft ? '🔚📞' : userName)
             : (activeOther['name'] ?? userName);
         final String? activeAvatar =
             (callManager.isGroup || activeOther.isEmpty)
@@ -274,6 +282,8 @@ class VoiceCallingScreen extends StatelessWidget {
             callManager.state == CallState.idle ||
             (!callManager.isGroup &&
                 callManager.state == CallState.connected &&
+                callManager.roomManager.isConnected &&
+                !callManager.isReconnecting &&
                 callManager.secondsElapsed > 4 &&
                 callController.hasFetchedParticipants &&
                 activeOther.isEmpty);
@@ -303,9 +313,10 @@ class VoiceCallingScreen extends StatelessWidget {
                           child: CallGridView(
                             members: gridMembers,
                             callDuration:
-                                callManager.state == CallState.connected
-                                ? callManager.callDuration
-                                : "Calling...",
+                                callManager.statusText ??
+                                (callManager.state == CallState.connected
+                                    ? callManager.callDuration
+                                    : "Calling..."),
                           ),
                         )
                       : isCallEnding
@@ -441,6 +452,24 @@ class VoiceCallingScreen extends StatelessWidget {
                                           ),
                                         ),
                                       ),
+                                      if (callManager.isConnectingAudio)
+                                        Positioned.fill(
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 144,
+                                              height: 144,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 4.0,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(const Color(0xFFE91E63)),
+                                                backgroundColor: Colors.white
+                                                    .withValues(alpha: 0.1),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       if (isConnected && isOtherMuted)
                                         Positioned(
                                           bottom: 4,
@@ -490,9 +519,10 @@ class VoiceCallingScreen extends StatelessWidget {
 
                               // Dedicated dynamic timer badge
                               Text(
-                                callManager.state == CallState.connected
-                                    ? callManager.callDuration
-                                    : "Calling...",
+                                callManager.statusText ??
+                                    (callManager.state == CallState.connected
+                                        ? callManager.callDuration
+                                        : "Calling..."),
                                 style: fontStyle.clashDisplayMedium14.textColor(
                                   appColor(
                                     context,
@@ -545,45 +575,63 @@ class VoiceCallingScreen extends StatelessWidget {
                               children: [
                                 // A. Standard Toolbar Actions
                                 GestureDetector(
-                                  onTap: () {
-                                    callManager.setCameraEnabled(
-                                      !roomManager.isCameraOn,
-                                    );
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.videoOn,
-                                    isActive: roomManager.isCameraOn,
+                                  onTap: isConnected
+                                      ? () {
+                                          callManager.setCameraEnabled(
+                                            !roomManager.isCameraOn,
+                                          );
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.videoOn,
+                                      isActive: roomManager.isCameraOn,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap: () {
-                                    callManager.setMicrophoneEnabled(isMuted);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: isMuted
-                                        ? ImageAssets.micOff
-                                        : ImageAssets.recorder,
-                                    isActive: !isMuted,
+                                  onTap: isConnected
+                                      ? () {
+                                          callManager.setMicrophoneEnabled(
+                                            isMuted,
+                                          );
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: isMuted
+                                          ? ImageAssets.micOff
+                                          : ImageAssets.recorder,
+                                      isActive: !isMuted,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap: () {
-                                    roomManager.setSpeakerphoneOn(!isSpeakerOn);
-                                  },
-                                  child: _buildRoundTool(
-                                    context,
-                                    asset: ImageAssets.volume,
-                                    isActive: isSpeakerOn,
+                                  onTap: isConnected
+                                      ? () {
+                                          roomManager.setSpeakerphoneOn(
+                                            !isSpeakerOn,
+                                          );
+                                        }
+                                      : null,
+                                  child: Opacity(
+                                    opacity: isConnected ? 1.0 : 0.4,
+                                    child: _buildRoundTool(
+                                      context,
+                                      asset: ImageAssets.volume,
+                                      isActive: isSpeakerOn,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap:
-                                      callManager.state == CallState.connected
+                                  onTap: isConnected
                                       ? () {
                                           showAddUserDialog(
                                             context,
@@ -592,16 +640,11 @@ class VoiceCallingScreen extends StatelessWidget {
                                         }
                                       : null,
                                   child: Opacity(
-                                    opacity:
-                                        callManager.state == CallState.connected
-                                        ? 1.0
-                                        : 0.4,
+                                    opacity: isConnected ? 1.0 : 0.4,
                                     child: _buildRoundTool(
                                       context,
                                       asset: ImageAssets.addUser,
-                                      isActive:
-                                          callManager.state ==
-                                          CallState.connected,
+                                      isActive: isConnected,
                                     ),
                                   ),
                                 ),
@@ -674,6 +717,53 @@ class VoiceCallingScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // 4. Call Waiting Overlay Card
+                  if (callManager.incomingWaitingCall != null)
+                    Positioned(
+                      bottom: 120,
+                      left: 20,
+                      right: 20,
+                      child: CallWaitingOverlay(
+                        waitingCall: callManager.incomingWaitingCall!,
+                        onAccept: () => callManager.acceptWaitingCall(),
+                        onDecline: () => callManager.declineWaitingCall(),
+                      ),
+                    ),
+                  if (callManager.isReconnecting)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFFE91E63),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Text(
+                                    "Reconnecting...",
+                                    style: fontStyle.clashDisplayBold18
+                                        .textColor(Colors.white),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "Please check your internet connection",
+                                    style: fontStyle.clashDisplaySemiBold12
+                                        .textColor(Colors.white54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

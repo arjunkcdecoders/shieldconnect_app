@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/model/api_response.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
@@ -29,6 +31,20 @@ class SignupController extends ChangeNotifier {
   bool _isPasswordVisible = false;
   bool get isPasswordVisible => _isPasswordVisible;
 
+  List<dynamic> _regions = [];
+  List<dynamic> get regions => _regions;
+
+  bool _isLoadingRegions = false;
+  bool get isLoadingRegions => _isLoadingRegions;
+
+  String? _selectedRegionId;
+  String? get selectedRegionId => _selectedRegionId;
+
+  void setSelectedRegionId(String? value) {
+    _selectedRegionId = value;
+    notifyListeners();
+  }
+
   SignupController() {
     userNameFocus.addListener(notifyListeners);
     emailFocus.addListener(notifyListeners);
@@ -40,6 +56,29 @@ class SignupController extends ChangeNotifier {
     passwordController.addListener(notifyListeners);
 
     passwordFocus.addListener(_onPasswordFocusChange);
+
+    fetchRegions();
+  }
+
+  Future<void> fetchRegions() async {
+    _isLoadingRegions = true;
+    notifyListeners();
+    try {
+      final response = await ApiService().get('/admin/regions');
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        _regions = json['data'] ?? [];
+      }
+    } catch (e) {
+      debugPrint("Error fetching regions: $e");
+    } finally {
+      _isLoadingRegions = false;
+      notifyListeners();
+    }
   }
 
   void _onPasswordFocusChange() {
@@ -62,6 +101,17 @@ class SignupController extends ChangeNotifier {
       _isSuccess = false;
       notifyListeners();
     }
+  }
+
+  void resetFields() {
+    userNameController.clear();
+    emailController.clear();
+    passwordController.clear();
+    _selectedRegionId = null;
+    _message = '';
+    _isSuccess = false;
+    _isLoading = false;
+    notifyListeners();
   }
 
   void togglePasswordVisibility() {
@@ -91,6 +141,13 @@ class SignupController extends ChangeNotifier {
         emailController.text.trim().isEmpty ||
         passwordController.text.trim().isEmpty) {
       _message = "Please fill the fields";
+      _isSuccess = false;
+      notifyListeners();
+      return;
+    }
+
+    if (_selectedRegionId == null || _selectedRegionId!.isEmpty) {
+      _message = "Please select a region";
       _isSuccess = false;
       notifyListeners();
       return;
@@ -129,6 +186,7 @@ class SignupController extends ChangeNotifier {
           "name": userNameController.text.trim(),
           "email": emailController.text.trim(),
           "password": passwordController.text.trim(),
+          "region": _selectedRegionId,
         },
       );
 

@@ -17,12 +17,19 @@ import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
 import 'package:shieldconnect_app/controller/announcement_controller.dart';
 import 'package:shieldconnect_app/controller/notification_controller.dart';
 import 'package:shieldconnect_app/utils/date_helper.dart';
+import 'package:shieldconnect_app/services/call_manager.dart';
 
 class ChatlistScreen extends StatelessWidget {
   const ChatlistScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        context.read<CallManager>().fetchActiveGroupCalls();
+      }
+    });
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
@@ -328,7 +335,115 @@ class ChatlistScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 28),
+                   const SizedBox(height: 28),
+
+                  // Active ongoing group call banner(s)
+                  Consumer<CallManager>(
+                    builder: (context, callManager, child) {
+                      final activeCalls = callManager.activeGroupCalls;
+                      if (activeCalls.isEmpty) return const SizedBox.shrink();
+
+                      // Filter out calls that the user is currently actively in
+                      final joinableCalls = activeCalls.entries.where((entry) {
+                        final call = entry.value;
+                        final callId = (call['_id'] ?? call['id'])?.toString();
+                        return callManager.state == CallState.idle || callManager.currentCallId != callId;
+                      }).toList();
+
+                      if (joinableCalls.isEmpty) return const SizedBox.shrink();
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: joinableCalls.map((entry) {
+                          final call = entry.value;
+                          final groupId = entry.key;
+                          final groupName = call['group_name'] ?? call['group_id']?['name'] ?? 'Group Call';
+                          final groupImage = call['group_avatar'] ?? call['group_id']?['group_image'] ?? call['group_id']?['avatar'];
+                          final isVideo = call['call_type'] == 'video';
+                          final roomId = (call['_id'] ?? call['id'] ?? call['roomId'])?.toString() ?? '';
+                          final String? callerId = (call['initiator_id'] is Map
+                              ? (call['initiator_id']['_id'] ?? call['initiator_id']['id'])?.toString()
+                              : call['initiator_id']?.toString()) ?? call['callerId']?.toString();
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 16.0),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E1E1E), // Premium dark theme
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.1),
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF25D366),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        "$groupName - Live Call",
+                                        style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        isVideo ? "Tap Join Now to join the video call" : "Tap Join Now to join the voice call",
+                                        style: fontStyle.clashDisplayRegular12.textColor(Colors.white60),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    callManager.joinCall(
+                                      roomId,
+                                      isVideo,
+                                      groupId: groupId,
+                                      groupName: groupName,
+                                      groupAvatar: groupImage,
+                                      callerId: callerId,
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF25D366),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    "Join Now",
+                                    style: fontStyle.clashDisplayBold12.textColor(Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
 
                   // Chat list
                   Expanded(

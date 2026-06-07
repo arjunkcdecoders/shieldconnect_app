@@ -31,6 +31,7 @@ class VoiceCallReceivingScreen extends StatelessWidget {
     BuildContext context,
   ) {
     final List<Map<String, dynamic>> gridMembers = [];
+    final bool isConnected = callManager.state == CallState.connected;
 
     // Resolve "Me" avatar robustly from various providers
     String? myAvatar = callManager.myUserAvatar;
@@ -106,14 +107,16 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         }
       } catch (_) {
         // If otherId is not found in participants list and we have successfully fetched participants, then they have left.
-        if (callController.hasFetchedParticipants) {
+        if (isConnected && callController.hasFetchedParticipants) {
           hasLeft = true;
         }
       }
 
-      if (callManager.roomManager.hasParticipantLeft(otherId)) {
-        hasLeft = true;
-      }
+      // Do not consider the remote participant as permanently left just because they temporarily dropped from the LiveKit room.
+      // They are only considered left if they are no longer in the participants list from backend polling.
+      // if (callManager.roomManager.hasParticipantLeft(otherId)) {
+      //   hasLeft = true;
+      // }
 
       if (!hasLeft) {
         final bool isOtherMuted =
@@ -132,9 +135,11 @@ class VoiceCallReceivingScreen extends StatelessWidget {
           'is_muted': isOtherMuted,
           'status':
               otherStatus ??
-              (callManager.state == CallState.connected
-                  ? 'connected'
-                  : 'ringing'),
+              (callManager.roomManager.hasParticipantLeft(otherId)
+                  ? 'disconnected'
+                  : (callManager.state == CallState.connected
+                        ? 'connected'
+                        : 'ringing')),
         });
       } else {
         dev.log(
@@ -219,6 +224,8 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         // UI-level safeguard: Auto-end call if connected and no other active participant is in the call
         if (!callManager.isGroup &&
             isConnected &&
+            callManager.roomManager.isConnected &&
+            !callManager.isReconnecting &&
             callManager.secondsElapsed > 2 &&
             callController.hasFetchedParticipants &&
             activeOther.isEmpty) {
@@ -238,31 +245,30 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                   : (callManager.callerId ?? ''));
 
         bool otherHasLeft = false;
-        if (!callManager.isGroup &&
+        if (isConnected &&
+            !callManager.isGroup &&
             activeOther.isEmpty &&
             activeOtherId.isNotEmpty) {
-          if (roomManager.hasParticipantLeft(activeOtherId)) {
-            otherHasLeft = true;
-          } else {
-            try {
-              final matchingParticipant = callController.participants
-                  .firstWhere((p) {
-                    final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                    return pId?.toString() == activeOtherId;
-                  });
-              final String? status = matchingParticipant['status']
-                  ?.toString()
-                  .toLowerCase();
-              if (status == 'left' ||
-                  status == 'declined' ||
-                  status == 'missed' ||
-                  status == 'rejected') {
-                otherHasLeft = true;
-              }
-            } catch (_) {
-              if (callController.hasFetchedParticipants) {
-                otherHasLeft = true;
-              }
+          // Do not treat LiveKit disconnection as immediate leave.
+          try {
+            final matchingParticipant = callController.participants.firstWhere((
+              p,
+            ) {
+              final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+              return pId?.toString() == activeOtherId;
+            });
+            final String? status = matchingParticipant['status']
+                ?.toString()
+                .toLowerCase();
+            if (status == 'left' ||
+                status == 'declined' ||
+                status == 'missed' ||
+                status == 'rejected') {
+              otherHasLeft = true;
+            }
+          } catch (_) {
+            if (callController.hasFetchedParticipants) {
+              otherHasLeft = true;
             }
           }
         }
@@ -271,7 +277,7 @@ class VoiceCallReceivingScreen extends StatelessWidget {
             (callManager.isGroup && activeOther.isNotEmpty)
             ? "$userName - ${activeOther['name']}"
             : (callManager.isGroup || activeOther.isEmpty)
-            ? (otherHasLeft ? 'Call ending...' : userName)
+            ? (otherHasLeft ? '🔚📞' : userName)
             : (activeOther['name'] ?? userName);
         final String? activeAvatar =
             (callManager.isGroup || activeOther.isEmpty)
@@ -282,6 +288,8 @@ class VoiceCallReceivingScreen extends StatelessWidget {
             callManager.state == CallState.idle ||
             (!callManager.isGroup &&
                 isConnected &&
+                callManager.roomManager.isConnected &&
+                !callManager.isReconnecting &&
                 callManager.secondsElapsed > 4 &&
                 callController.hasFetchedParticipants &&
                 activeOther.isEmpty);
@@ -446,6 +454,24 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                                           ),
                                         ),
                                       ),
+                                      if (callManager.isConnectingAudio)
+                                        Positioned.fill(
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 144,
+                                              height: 144,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 4.0,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(const Color(0xFFE91E63)),
+                                                backgroundColor: Colors.white
+                                                    .withValues(alpha: 0.1),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       if (isConnected && isOtherMuted)
                                         Positioned(
                                           bottom: 4,
@@ -495,11 +521,14 @@ class VoiceCallReceivingScreen extends StatelessWidget {
 
                               // Incoming Call Status / Call Duration
                               Text(
-                                isConnected
-                                    ? callManager.callDuration
-                                    : callManager.incomingParticipantsCount > 1
-                                    ? "Incoming voice call... (${callManager.incomingParticipantsCount} members in this call)"
-                                    : "Incoming voice call...",
+                                callManager.statusText ??
+                                    (isConnected
+                                        ? callManager.callDuration
+                                        : callManager
+                                                  .incomingParticipantsCount >
+                                              1
+                                        ? "Incoming voice call... (${callManager.incomingParticipantsCount} members in this call)"
+                                        : "Incoming voice call..."),
                                 style: fontStyle.clashDisplayMedium14.textColor(
                                   appColor(
                                     context,
@@ -787,6 +816,41 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                               //   ),
                               // ),
                             ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (callManager.isReconnecting)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                          child: Container(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFFE91E63),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Text(
+                                    "Reconnecting...",
+                                    style: fontStyle.clashDisplayBold18
+                                        .textColor(Colors.white),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "Please check your internet connection",
+                                    style: fontStyle.clashDisplaySemiBold12
+                                        .textColor(Colors.white54),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),

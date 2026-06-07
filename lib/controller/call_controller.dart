@@ -57,18 +57,21 @@ class CallController extends ChangeNotifier {
 
   void _handleCallManagerStateChange() {
     final callManager = CallManager();
-    if (callManager.state == CallState.connected &&
+    if ((callManager.state == CallState.connected ||
+            callManager.state == CallState.dialing ||
+            callManager.state == CallState.ringing) &&
         callManager.currentCallId != null) {
-      _currentPage = 0;
-      _pageController?.dispose();
-      _pageController = PageController(initialPage: 0);
-      _hasFetchedParticipants = false;
-      startParticipantsPolling(callManager.currentCallId!);
+      if (_pollingCallId != callManager.currentCallId) {
+        _currentPage = 0;
+        _pageController?.dispose();
+        _pageController = PageController(initialPage: 0);
+        _hasFetchedParticipants = false;
+        startParticipantsPolling(callManager.currentCallId!);
+      }
     } else if (callManager.state == CallState.idle) {
-      _currentPage = 0;
-      _pageController?.dispose();
-      _pageController = null;
-      stopParticipantsPolling();
+      if (_pollingCallId != null || _pageController != null) {
+        stopParticipantsPolling();
+      }
     }
   }
 
@@ -78,6 +81,72 @@ class CallController extends ChangeNotifier {
     _participantsTimer?.cancel();
     _pageController?.dispose();
     super.dispose();
+  }
+
+  int getGridMembersCount() {
+    final callManager = CallManager();
+    final myId = callManager.myUserId;
+
+    // We always have "Me"
+    int count = 1;
+
+    // If not group call, we have the other participant
+    final String otherId = (myId == callManager.callerId)
+        ? (callManager.receiverId ?? '')
+        : (callManager.callerId ?? '');
+
+    bool hasOther = false;
+    if (otherId.isNotEmpty && !callManager.isGroup) {
+      // Check if other has left
+      bool otherLeft = false;
+      if (callManager.roomManager.hasParticipantLeft(otherId)) {
+        otherLeft = true;
+      } else {
+        try {
+          final p = _participants.firstWhere((p) {
+            final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+            return pId?.toString() == otherId;
+          });
+          final String? status = p['status']?.toString().toLowerCase();
+          if (status == 'left' ||
+              status == 'declined' ||
+              status == 'missed' ||
+              status == 'rejected') {
+            otherLeft = true;
+          }
+        } catch (_) {
+          if (_hasFetchedParticipants) {
+            otherLeft = true;
+          }
+        }
+      }
+      if (!otherLeft) {
+        count++;
+        hasOther = true;
+      }
+    }
+
+    // Add other unique participants from _participants
+    for (final p in _participants) {
+      final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+      if (pId != null) {
+        final String pIdStr = pId.toString();
+        if (callManager.roomManager.hasParticipantLeft(pIdStr)) {
+          continue;
+        }
+        // Check if it's Me
+        if (pIdStr == myId?.toString()) {
+          continue;
+        }
+        // Check if it's the other 1-to-1 participant we already counted
+        if (hasOther && pIdStr == otherId) {
+          continue;
+        }
+        count++;
+      }
+    }
+
+    return count;
   }
 
   Future<void> fetchFriends(String? myUserId) async {
@@ -162,6 +231,8 @@ class CallController extends ChangeNotifier {
 
         // Automatically end the call if connected and no other participant is left
         if (CallManager().state == CallState.connected &&
+            CallManager().roomManager.isConnected &&
+            !CallManager().isReconnecting &&
             CallManager().secondsElapsed > 2 &&
             !hasOtherActiveParticipant) {
           dev.log(
@@ -228,7 +299,7 @@ class CallController extends ChangeNotifier {
           _participants = newParticipants;
 
           // Clamp _currentPage based on new participant list length
-          final int total = _participants.length;
+          final int total = getGridMembersCount();
           final int numPages = total <= 4 ? 1 : 1 + ((total - 4) / 3.0).ceil();
           if (_currentPage >= numPages) {
             _currentPage = numPages - 1;

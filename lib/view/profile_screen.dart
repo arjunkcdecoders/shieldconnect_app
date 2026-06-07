@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/view/delete_account_dialog.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/view/moderator/bottomnav_screen/bottomnav_screen.dart'
+    as mod;
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -18,6 +20,9 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ProfileController>().fetchUserDetails();
+    });
     return Scaffold(
       backgroundColor: appColor(context).white,
       body: SafeArea(
@@ -118,14 +123,6 @@ class ProfileScreen extends StatelessWidget {
                 // Focused User Summary Block
                 Consumer<ProfileController>(
                   builder: (context, controller, child) {
-                    if (controller.isLoading) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 40),
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    }
                     return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -214,6 +211,39 @@ class ProfileScreen extends StatelessWidget {
                                 appColor(context).textMediumGrey,
                               ),
                               textAlign: TextAlign.center,
+                            ),
+                          ],
+                          if (controller.isModerator) ...[
+                            const SizedBox(height: 12),
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: true,
+                                  builder: (context) => const ModeratorModeDialog(),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: appColor(
+                                    context,
+                                  ).primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: appColor(context).primary,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  "🛡️ Moderator Mode",
+                                  style: fontStyle.clashDisplaySemiBold12
+                                      .textColor(appColor(context).primary),
+                                ),
+                              ),
                             ),
                           ],
                         ],
@@ -766,6 +796,128 @@ class FullScreenProfilePictureScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class ModeratorModeDialog extends StatelessWidget {
+  const ModeratorModeDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: appColor(context).white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Circular Header Shield Icon
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: appColor(context).primary.withValues(alpha: 0.1),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.security_rounded,
+                  color: appColor(context).primary,
+                  size: 28,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Title
+            Text(
+              "Enter Moderator Mode?",
+              style: fontStyle.clashDisplayBold18.textColor(
+                appColor(context).darkText,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+
+            // Description
+            Text(
+              "You will be redirected to the Content Moderation Dashboard to review pending safety queues, reports, and user flagged activities.",
+              style: fontStyle.clashDisplayMedium12.textColor(
+                appColor(context).grey600,
+              ).copyWith(height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // Cancel and Enter Buttons
+            Row(
+              children: [
+                // Cancel Button
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: appColor(context).white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: appColor(context).grey200,
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Cancel",
+                          style: fontStyle.clashDisplaySemiBold14.textColor(
+                            appColor(context).darkText,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Enter Mode Button
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context); // Dismiss dialog
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const mod.BottomnavScreen(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: appColor(context).primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Enter Mode",
+                          style: fontStyle.clashDisplaySemiBold14.textColor(
+                            appColor(context).white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

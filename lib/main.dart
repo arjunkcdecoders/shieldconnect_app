@@ -23,6 +23,7 @@ import 'package:shieldconnect_app/controller/help_support_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/controller/chat_settings_controller.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
+import 'package:shieldconnect_app/controller/dhsi_controller.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shieldconnect_app/services/fcm_service.dart';
 import 'package:shieldconnect_app/services/call_manager.dart';
@@ -61,6 +62,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => ChatSettingsController()),
         ChangeNotifierProvider(create: (_) => CallManager()),
         ChangeNotifierProvider(create: (_) => CallController()),
+        ChangeNotifierProvider(create: (_) => DhsiController()),
       ],
       child: const MyApp(),
     ),

@@ -188,9 +188,9 @@ class VideoCallReceivingScreen extends StatelessWidget {
 
                             // Incoming Call Status
                             Text(
-                              callManager.incomingParticipantsCount > 1
+                              callManager.statusText ?? (callManager.incomingParticipantsCount > 1
                                   ? "Incoming video call... (${callManager.incomingParticipantsCount} members in this call)"
-                                  : "Incoming video call...",
+                                  : "Incoming video call..."),
                               style: fontStyle.clashDisplayMedium14.textColor(
                                 appColor(context).white.withValues(alpha: 0.7),
                               ),

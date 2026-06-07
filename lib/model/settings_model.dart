@@ -17,6 +17,9 @@ class SettingsModel {
   final int? maxGroupMembers;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final bool? statusFeatureEnabled;
+  final bool? statusFeature;
+  final bool? statusFeatureActive;
 
   SettingsModel({
     this.id,
@@ -34,6 +37,9 @@ class SettingsModel {
     this.maxGroupMembers,
     this.createdAt,
     this.updatedAt,
+    this.statusFeatureEnabled,
+    this.statusFeature,
+    this.statusFeatureActive,
   });
 
   int getDocLimitBytes() => _parseLimitToBytes(docLimit, 20 * 1024 * 1024);
@@ -129,6 +135,9 @@ class SettingsModel {
       maxGroupMembers: json['maxGroupMembers'] as int? ?? json['max_group_members'] as int?,
       createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'] as String) : (json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null),
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'] as String) : (json['updated_at'] != null ? DateTime.tryParse(json['updated_at'] as String) : null),
+      statusFeatureEnabled: json['statusFeatureEnabled'] as bool?,
+      statusFeature: json['statusFeature'] as bool?,
+      statusFeatureActive: json['statusFeatureActive'] as bool?,
     );
   }
 
@@ -149,6 +158,9 @@ class SettingsModel {
       'maxGroupMembers': maxGroupMembers,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'statusFeatureEnabled': statusFeatureEnabled,
+      'statusFeature': statusFeature,
+      'statusFeatureActive': statusFeatureActive,
     };
   }
 }

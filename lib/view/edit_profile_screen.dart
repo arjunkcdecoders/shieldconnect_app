@@ -217,6 +217,15 @@ class EditProfileScreen extends StatelessWidget {
                       keyboardType: TextInputType.emailAddress,
                       readOnly: true, // Fixed email
                     ),
+                    const SizedBox(height: 20),
+
+                    CustomTextField(
+                      labelText: "Region",
+                      hintText: "Enter",
+                      controller: controller.regionController,
+                      focusNode: controller.regionFocusNode,
+                      readOnly: true, // Fixed region
+                    ),
                     const SizedBox(height: 40),
 
                     // 4. Destructive Save action stadium button

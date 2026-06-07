@@ -108,6 +108,34 @@ class SignupScreen extends StatelessWidget {
                   onPressed: controller.togglePasswordVisibility,
                 ),
               ),
+              const SizedBox(height: 20),
+
+              // Region Dropdown
+              CustomDropdownField(
+                labelText: "Region",
+                hintText: "Select Region",
+                value:
+                    (controller.selectedRegionId != null &&
+                        controller.regions.any(
+                          (e) => e['_id'] == controller.selectedRegionId,
+                        ))
+                    ? controller.selectedRegionId
+                    : null,
+                items: controller.regions.map((e) {
+                  return DropdownMenuItem<String>(
+                    value: e['_id'] as String?,
+                    child: Text(
+                      e['name'] as String? ?? '',
+                      style: fontStyle.clashDisplayRegular14
+                          .textColor(appColor(context).black)
+                          .copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  controller.setSelectedRegionId(val);
+                },
+              ),
               const SizedBox(height: 16),
 
               // Dynamic validation conditions
@@ -378,6 +406,80 @@ class CustomTextField extends StatelessWidget {
             style: fontStyle.clashDisplayRegular14
                 .textColor(appColor(context).black)
                 .copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class CustomDropdownField extends StatelessWidget {
+  final String labelText;
+  final String hintText;
+  final String? value;
+  final List<DropdownMenuItem<String>> items;
+  final ValueChanged<String?> onChanged;
+
+  const CustomDropdownField({
+    super.key,
+    required this.labelText,
+    required this.hintText,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          labelText,
+          style: fontStyle.clashDisplayRegular12
+              .textColor(appColor(context).darkGrey)
+              .copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey(value),
+          dropdownColor: appColor(context).white,
+          initialValue: value,
+          items: items,
+          onChanged: onChanged,
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: fontStyle.clashDisplayRegular14.textColor(
+              appColor(context).textGrey,
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF9FAFB),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: appColor(context).grey.withValues(alpha: 0.3),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(
+                color: appColor(context).primary,
+                width: 1.5,
+              ),
+            ),
+          ),
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: appColor(context).primary,
           ),
         ),
       ],

@@ -27,6 +27,9 @@ class RoomManager extends ChangeNotifier {
   bool _isConnecting = false;
   bool get isConnecting => _isConnecting;
 
+  bool _isReconnecting = false;
+  bool get isReconnecting => _isReconnecting;
+
   final Set<String> _connectedParticipants = {};
   Set<String> get connectedParticipants => _connectedParticipants;
 
@@ -105,6 +108,24 @@ class RoomManager extends ChangeNotifier {
       listener.on<lk.RoomDisconnectedEvent>((event) {
         dev.log('🎙️ LiveKit: Room disconnected', name: 'RoomManager');
         _cleanupRoomState();
+        notifyListeners();
+      });
+
+      listener.on<lk.RoomReconnectingEvent>((event) {
+        dev.log('🎙️ LiveKit: Room reconnecting', name: 'RoomManager');
+        _isReconnecting = true;
+        notifyListeners();
+      });
+
+      listener.on<lk.RoomAttemptReconnectEvent>((event) {
+        dev.log('🎙️ LiveKit: Room attempting reconnect', name: 'RoomManager');
+        _isReconnecting = true;
+        notifyListeners();
+      });
+
+      listener.on<lk.RoomReconnectedEvent>((event) {
+        dev.log('🎙️ LiveKit: Room reconnected', name: 'RoomManager');
+        _isReconnecting = false;
         notifyListeners();
       });
 
@@ -276,6 +297,83 @@ class RoomManager extends ChangeNotifier {
     }
   }
 
+  /// Switch between front and back camera.
+  Future<void> switchCamera() async {
+    final track = _localVideoTrack;
+    if (track is lk.LocalVideoTrack) {
+      try {
+        final options = track.currentOptions;
+        if (options is lk.CameraCaptureOptions) {
+          final currentPos = options.cameraPosition;
+          final newPos = currentPos == lk.CameraPosition.front
+              ? lk.CameraPosition.back
+              : lk.CameraPosition.front;
+
+          dev.log(
+            '🎙️ LiveKit: Switching camera position from $currentPos to $newPos',
+            name: 'RoomManager',
+          );
+          await track.setCameraPosition(newPos);
+          notifyListeners();
+          return;
+        }
+
+        // Fallback: Use device ID based switching if currentOptions is not CameraCaptureOptions
+        final devices = await lk.Hardware.instance.videoInputs();
+        if (devices.length > 1) {
+          final current = lk.Hardware.instance.selectedVideoInput;
+          final currentLabel = current?.label.toLowerCase() ?? '';
+          final isCurrentlyBack = currentLabel.contains('back') ||
+              currentLabel.contains('rear') ||
+              currentLabel.contains('environment');
+
+          lk.MediaDevice? next;
+          if (isCurrentlyBack) {
+            // Switch to front camera
+            try {
+              next = devices.firstWhere((d) {
+                final lbl = d.label.toLowerCase();
+                return lbl.contains('front') || lbl.contains('user') || lbl.contains('facing');
+              });
+            } catch (_) {}
+          } else {
+            // Switch to back camera
+            try {
+              next = devices.firstWhere((d) {
+                final lbl = d.label.toLowerCase();
+                return lbl.contains('back') || lbl.contains('rear') || lbl.contains('environment');
+              });
+            } catch (_) {}
+          }
+
+          // Fallback: Choose any device that is different from current
+          next ??= devices.firstWhere(
+            (device) => device.deviceId != current?.deviceId,
+            orElse: () => devices.first,
+          );
+
+          dev.log('🎙️ LiveKit: Switching local camera to ${next.deviceId} (${next.label})', name: 'RoomManager');
+          await track.switchCamera(next.deviceId);
+          lk.Hardware.instance.selectedVideoInput = next;
+          notifyListeners();
+        } else {
+          dev.log('⚠️ LiveKit: Only one camera device available, cannot switch.', name: 'RoomManager');
+        }
+      } catch (e) {
+        dev.log(
+          '🚨 LiveKit: Failed to switch camera: $e',
+          name: 'RoomManager',
+          error: e,
+        );
+      }
+    } else {
+      dev.log(
+        '⚠️ LiveKit: Local video track is not a LocalVideoTrack. Cannot switch camera.',
+        name: 'RoomManager',
+      );
+    }
+  }
+
   /// Toggle hardware speakerphone routing.
   Future<void> setSpeakerphoneOn(bool speakerOn) async {
     try {
@@ -334,6 +432,7 @@ class RoomManager extends ChangeNotifier {
     _localVideoTrack = null;
     _remoteVideoTrack = null;
     _connectedParticipants.clear();
+    _isReconnecting = false;
   }
 
   lk.VideoTrack? getRemoteVideoTrackFor(String userId) {
