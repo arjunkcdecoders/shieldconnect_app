@@ -62,7 +62,7 @@ class ModerationApiClient {
       return ModerationStatsResponse(
         success: false,
         message: e.toString(),
-        data: ModerationStats(pending: 0, reviewedToday: 0, escalations: 0),
+        data: ModerationStats(pending: 0, reviewedToday: 0, escalations: 0, usersCount: 0),
       );
     }
   }

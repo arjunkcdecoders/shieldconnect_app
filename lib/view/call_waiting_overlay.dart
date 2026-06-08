@@ -19,6 +19,9 @@ class CallWaitingOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Commented out to prevent displaying in-app CallWaitingOverlay
+    return const SizedBox.shrink();
+    /*
     final String callerName = waitingCall['receiverName'] ?? 'User';
     final String? avatarUrl = waitingCall['receiverAvatar'];
     final bool isVideo = waitingCall['isVideo'] == true;
@@ -172,5 +175,6 @@ class CallWaitingOverlay extends StatelessWidget {
         ),
       ),
     );
+    */
   }
 }

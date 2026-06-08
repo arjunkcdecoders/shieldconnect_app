@@ -19,6 +19,8 @@ import 'package:shieldconnect_app/view/video_calling_screen.dart';
 import 'package:shieldconnect_app/view/voice_call_receiving_screen.dart';
 import 'package:shieldconnect_app/view/video_call_receiving_screen.dart';
 import 'package:shieldconnect_app/model/settings_model.dart';
+import 'package:shieldconnect_app/utils/app_colors.dart';
+import 'package:shieldconnect_app/utils/font_style.dart';
 
 import 'package:record/record.dart';
 import 'package:provider/provider.dart';
@@ -36,6 +38,10 @@ class CallManager extends ChangeNotifier {
     SocketService().connectionNotifier.addListener(notifyListeners);
     _initConnectivityListener();
   }
+
+  BuildContext? _moderationDialogContext;
+  bool _isModerationDialogDelayed = false;
+  final List<Map<dynamic, dynamic>> _pendingModerationWarnings = [];
 
   final RoomManager roomManager = RoomManager();
   final ApiService _apiService = ApiService();
@@ -231,6 +237,9 @@ class CallManager extends ChangeNotifier {
     socketService.on('group_call_status_update', _handleGroupCallStatusUpdate);
     socketService.on('call_state_snapshot', _handleCallStateSnapshot);
     socketService.on('user_mute_status_update', _handleUserMuteStatusUpdate);
+    socketService.moderationViolationNotifier.addListener(
+      _onModerationViolationNotified,
+    );
 
     // Initial history and active call pools fetch
     fetchCallHistory();
@@ -254,6 +263,9 @@ class CallManager extends ChangeNotifier {
     socketService.off('group_call_status_update');
     socketService.off('call_state_snapshot');
     socketService.off('user_mute_status_update');
+    socketService.moderationViolationNotifier.removeListener(
+      _onModerationViolationNotified,
+    );
   }
 
   // ─── Callkit Actions Stream ───────────────────────────────────────────────
@@ -1093,11 +1105,30 @@ class CallManager extends ChangeNotifier {
       return;
     }
 
-    try {
-      // 1. End current active call (starts cleanup and pops the old screen synchronously)
-      unawaited(endCall());
+    final String? oldCallId = _currentCallId;
+    final String? oldRoomId = _currentRoomId;
+    final String? oldCallerId = _callerId;
+    final String? oldReceiverId = _receiverId;
+    final int oldDuration = _secondsElapsed;
+    final bool oldIsGroup = _isGroup;
 
-      // 2. Set new call parameters
+    try {
+      dev.log(
+        '📞 CallManager: Transitioning to waiting call session ID: ${waiting['callId']} immediately.',
+        name: 'CallManager',
+      );
+
+      // 1. Immediately end/cleanup the current active call locally (timers, dialing tone)
+      _dismissModerationDialog();
+      _stopDialTone();
+      _durationTimer?.cancel();
+      _audioConnectTimer?.cancel();
+      _isConnectingAudio = false;
+
+      final bool wasCallScreenPushed = _isCallScreenPushed;
+      final bool wasReceivingScreenPushed = _isReceivingScreenPushed;
+
+      // 2. Set new call parameters immediately so that the pushed screen builds with new metadata
       _currentCallId = waiting['callId'];
       _currentRoomId = waiting['roomId'];
       _callerId = waiting['callerId'];
@@ -1108,55 +1139,128 @@ class CallManager extends ChangeNotifier {
       _isVideo = waiting['isVideo'] == true;
       _state = CallState.connected;
       _incomingParticipantsCount = 0;
+      _secondsElapsed = 0;
+      _callDuration = "00:00";
+      _mutedParticipants.clear();
 
       _startCallConnectedFlow();
       notifyListeners();
 
       // 3. Navigate to the correct screen (Voice or Video) immediately
-      _isCallScreenPushed = true;
-      navigatorKey.currentState?.push(
-        MaterialPageRoute(
-          builder: (context) => _isVideo
-              ? VideoCallingScreen(userName: _receiverName ?? 'User')
-              : VoiceCallingScreen(
-                  userName: _receiverName ?? 'User',
-                  avatarUrl: _receiverAvatar,
-                ),
-        ),
-      );
-
-      // 4. REST /call/answer endpoint for the new call in the background
-      if (_currentCallId != null && _myUserId != null) {
-        final cId = _currentCallId;
-        final uId = _myUserId;
-        unawaited(() async {
+      final currentContext = navigatorKey.currentContext;
+      if (wasCallScreenPushed && currentContext != null && !_isMinimized) {
+        navigatorKey.currentState?.pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => _isVideo
+                ? VideoCallingScreen(userName: _receiverName ?? 'User')
+                : VoiceCallingScreen(
+                    userName: _receiverName ?? 'User',
+                    avatarUrl: _receiverAvatar,
+                  ),
+          ),
+        );
+      } else {
+        if (wasReceivingScreenPushed &&
+            currentContext != null &&
+            !_isMinimized) {
           try {
+            navigatorKey.currentState?.pop();
+          } catch (_) {}
+        }
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (context) => _isVideo
+                ? VideoCallingScreen(userName: _receiverName ?? 'User')
+                : VoiceCallingScreen(
+                    userName: _receiverName ?? 'User',
+                    avatarUrl: _receiverAvatar,
+                  ),
+          ),
+        );
+      }
+      _isCallScreenPushed = true;
+      _isReceivingScreenPushed = false;
+      _isMinimized = false;
+
+      // 4. Perform the rest of the connection and termination logic asynchronously in the background
+      unawaited(() async {
+        try {
+          // A. Disconnect LiveKit room of the old call
+          await roomManager.disconnectRoom();
+
+          // B. Emit call_ended socket event and call /call/end REST endpoint for the old call
+          if (oldCallId != null) {
+            try {
+              // REST /call/end endpoint
+              await _apiService.post(
+                '/call/end',
+                data: {
+                  'call_id': oldCallId,
+                  'user_id': _myUserId,
+                  'duration': oldDuration,
+                },
+              );
+
+              // Determine if there are more than two participants
+              bool hasMoreThanTwo = false;
+              if (currentContext != null) {
+                try {
+                  final controller = Provider.of<CallController>(
+                    currentContext,
+                    listen: false,
+                  );
+                  hasMoreThanTwo = controller.participants.length > 2;
+                } catch (_) {}
+              }
+
+              if (!oldIsGroup && !hasMoreThanTwo) {
+                final targetId = (oldCallerId == _myUserId)
+                    ? oldReceiverId
+                    : oldCallerId;
+                SocketService().emit('call_ended', {
+                  'to': targetId,
+                  'callId': oldCallId,
+                  'roomId': oldRoomId,
+                  'callerId': oldCallerId,
+                  'receiverId': oldReceiverId,
+                });
+              }
+            } catch (e) {
+              dev.log(
+                '🚨 CallManager: Error ending old call in background: $e',
+              );
+            }
+          }
+
+          // C. REST /call/answer endpoint for the new call (awaited to ensure backend is active)
+          if (_currentCallId != null && _myUserId != null) {
             await _apiService.post(
               '/call/answer',
-              data: {'call_id': cId, 'user_id': uId},
-            );
-          } catch (e) {
-            dev.log(
-              '🚨 CallManager: Error answering waiting call REST: $e',
-              name: 'CallManager',
+              data: {'call_id': _currentCallId, 'user_id': _myUserId},
             );
           }
-        }());
-      }
 
-      // 5. Emit call_accepted socket event for the new call
-      if (_currentCallId != null) {
-        SocketService().emit('call_accepted', {
-          'to': _callerId,
-          'roomId': _currentRoomId,
-          'callId': _currentCallId,
-          'callerId': _callerId,
-          'receiverId': _myUserId,
-        });
-      }
+          // D. Emit call_accepted socket event for the new call
+          if (_currentCallId != null) {
+            SocketService().emit('call_accepted', {
+              'to': _callerId,
+              'roomId': _currentRoomId,
+              'callId': _currentCallId,
+              'callerId': _callerId,
+              'receiverId': _myUserId,
+            });
+          }
 
-      // 6. Connect to LiveKit room for the new call
-      await _connectLiveKitRoom();
+          // E. Connect to LiveKit room for the new call (awaited to ensure connection is ready)
+          await _connectLiveKitRoom();
+        } catch (e) {
+          dev.log(
+            '🚨 CallManager: Error completing connection for waiting call: $e',
+            name: 'CallManager',
+          );
+          _cleanupCall();
+        }
+      }());
     } catch (e) {
       dev.log(
         '🚨 CallManager: Error accepting waiting call: $e',
@@ -1547,6 +1651,9 @@ class CallManager extends ChangeNotifier {
   }
 
   void _cleanupCall() {
+    _dismissModerationDialog();
+    _isModerationDialogDelayed = false;
+    _pendingModerationWarnings.clear();
     _stopDialTone();
     // _stopRingTone();
     _durationTimer?.cancel();
@@ -1666,7 +1773,10 @@ class CallManager extends ChangeNotifier {
             data: {'call_id': roomId, 'user_id': _myUserId},
           );
         } catch (e) {
-          dev.log('🚨 CallManager: Error answering call REST inside joinCall: $e', name: 'CallManager');
+          dev.log(
+            '🚨 CallManager: Error answering call REST inside joinCall: $e',
+            name: 'CallManager',
+          );
         }
       }());
     }
@@ -1738,7 +1848,8 @@ class CallManager extends ChangeNotifier {
           if (call['group_id'] != null) {
             String? gid;
             if (call['group_id'] is Map) {
-              gid = (call['group_id']['_id'] ?? call['group_id']['id'])?.toString();
+              gid = (call['group_id']['_id'] ?? call['group_id']['id'])
+                  ?.toString();
             } else {
               gid = call['group_id'].toString();
             }
@@ -1886,6 +1997,519 @@ class CallManager extends ChangeNotifier {
       );
     }
   }
+
+  void _dismissModerationDialog() {
+    if (_moderationDialogContext != null) {
+      try {
+        Navigator.of(_moderationDialogContext!).pop();
+      } catch (_) {}
+      _moderationDialogContext = null;
+    }
+  }
+
+  void _onModerationViolationNotified() {
+    final payload = SocketService().moderationViolationNotifier.value;
+    if (payload != null) {
+      _handleModerationViolationEvent(payload);
+    }
+  }
+
+  void handleModerationViolationEvent(dynamic data) {
+    _handleModerationViolationEvent(data);
+  }
+
+  void _handleModerationViolationEvent(dynamic data) {
+    if (_state != CallState.connected) return;
+
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+
+    // 1. Normalize data into a manageable Map structure
+    Map<dynamic, dynamic> payload = {};
+    if (data is Map) {
+      payload = data;
+    } else if (data != null) {
+      try {
+        final decoded = jsonDecode(data.toString());
+        if (decoded is Map) payload = decoded;
+      } catch (_) {}
+    }
+
+    // Queue the warning event
+    _pendingModerationWarnings.add(payload);
+    _tryShowNextModerationWarning(context);
+  }
+
+  void _tryShowNextModerationWarning(BuildContext context) {
+    if (_moderationDialogContext != null ||
+        _isModerationDialogDelayed ||
+        _pendingModerationWarnings.isEmpty) {
+      return;
+    }
+
+    final nextWarning = _pendingModerationWarnings.removeAt(0);
+    _showModerationWarningDialog(
+      context,
+      nextWarning['roomName']?.toString() ?? '',
+      int.tryParse(nextWarning['violationCount']?.toString() ?? '') ?? 0,
+      nextWarning['reason']?.toString() ?? 'Inappropriate content detected',
+      nextWarning['alertType']?.toString() ?? '',
+      nextWarning['type']?.toString() ?? 'general',
+    );
+  }
+
+  void _dismissWarningWithCooldown(BuildContext dialogCtx) {
+    if (_moderationDialogContext == dialogCtx) {
+      try {
+        Navigator.of(dialogCtx).pop();
+      } catch (_) {}
+      _moderationDialogContext = null;
+
+      // Trigger 3-second delay cooldown before allowing next dialog to be shown
+      _isModerationDialogDelayed = true;
+      Timer(const Duration(seconds: 3), () {
+        _isModerationDialogDelayed = false;
+        final activeContext = navigatorKey.currentContext;
+        if (activeContext != null) {
+          _tryShowNextModerationWarning(activeContext);
+        }
+      });
+    }
+  }
+
+  void _showModerationWarningDialog(
+    BuildContext context,
+    String roomName,
+    int violationCount,
+    String reason,
+    String alertType,
+    String type,
+  ) {
+    _dismissModerationDialog();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        _moderationDialogContext = dialogCtx;
+
+        // Automatically close the dialog after 2 seconds
+        Timer(const Duration(seconds: 2), () {
+          _dismissWarningWithCooldown(dialogCtx);
+        });
+
+        return Dialog(
+          backgroundColor: appColor(context).grey900,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: appColor(context).red.withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              color: appColor(context).grey900,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Warning Shield/Gavel Indicator
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: appColor(context).red.withValues(alpha: 0.1),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.warning_amber_rounded,
+                      color: appColor(context).red,
+                      size: 28,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Title
+                Text(
+                  "Moderation Warning",
+                  style: fontStyle.clashDisplayBold18.textColor(
+                    appColor(context).white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+
+                // Violation Count Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: appColor(context).red.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: appColor(context).red.withValues(alpha: 0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    "Warning #$violationCount",
+                    style: fontStyle.clashDisplaySemiBold12.textColor(
+                      appColor(context).red,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Reason / Type Details Box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: appColor(context).black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: appColor(context).white.withValues(alpha: 0.05),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Violation",
+                            style: fontStyle.clashDisplayBold12.textColor(
+                              appColor(context).textGrey,
+                            ),
+                          ),
+                          if (alertType.isNotEmpty)
+                            Text(
+                              "Source",
+                              style: fontStyle.clashDisplayBold12.textColor(
+                                appColor(context).textGrey,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            reason,
+                            style: fontStyle.clashDisplayMedium14.textColor(
+                              appColor(context).white,
+                            ),
+                          ),
+                          if (alertType.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: appColor(
+                                  context,
+                                ).white.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                alertType.toUpperCase(),
+                                style: fontStyle.clashDisplayBold10.textColor(
+                                  appColor(context).white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Friendly guidelines info
+                Text(
+                  "ShieldConnect uses automated moderation to ensure safety. Repeated violations of our guidelines may lead to automatic suspension or call termination.",
+                  style: fontStyle.clashDisplayMedium12
+                      .textColor(appColor(context).textGrey)
+                      .copyWith(height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+
+                // Acknowledge Button
+                GestureDetector(
+                  onTap: () {
+                    _dismissWarningWithCooldown(dialogCtx);
+                  },
+                  child: Container(
+                    height: 44,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: appColor(context).red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        "Acknowledge",
+                        style: fontStyle.clashDisplaySemiBold14.textColor(
+                          appColor(context).white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+  // void _handleModerationViolationEvent(dynamic data) {
+  //   dev.log(
+  //     '📞 CallManager: Received moderation_violation event with data: $data',
+  //     name: 'CallManager',
+  //   );
+  //   if (_state != CallState.connected) return;
+
+  //   final context = navigatorKey.currentContext;
+  //   if (context == null) return;
+
+  //   Map<dynamic, dynamic> map = {};
+  //   if (data is Map) {
+  //     map = data;
+  //   } else if (data != null) {
+  //     try {
+  //       final decoded = jsonDecode(data.toString());
+  //       if (decoded is Map) {
+  //         map = decoded;
+  //       }
+  //     } catch (_) {}
+  //   }
+
+  //   final String reason =
+  //       map['reason']?.toString() ??
+  //       (data is String ? data : 'Inappropriate content detected');
+  //   dev.log("Reasonnnnnnnnnnnnnnnnnnnnnn: $reason");
+  //   final String roomName = map['roomName']?.toString() ?? '';
+  //   final int violationCount =
+  //       int.tryParse(map['violationCount']?.toString() ?? '') ?? 0;
+  //   final String alertType = map['alertType']?.toString() ?? '';
+  //   final String type = map['type']?.toString() ?? 'general';
+
+  //   _showModerationWarningDialog(
+  //     context,
+  //     roomName,
+  //     violationCount,
+  //     reason,
+  //     alertType,
+  //     type,
+  //   );
+  // }
+
+  // void _showModerationWarningDialog(
+  //   BuildContext context,
+  //   String roomName,
+  //   int violationCount,
+  //   String reason,
+  //   String alertType,
+  //   String type,
+  // ) {
+  //   _dismissModerationDialog();
+
+  //   showDialog(
+  //     context: context,
+  //     barrierDismissible: false,
+  //     builder: (dialogCtx) {
+  //       _moderationDialogContext = dialogCtx;
+  //       return Dialog(
+  //         backgroundColor: appColor(context).grey900,
+  //         shape: RoundedRectangleBorder(
+  //           borderRadius: BorderRadius.circular(24),
+  //           side: BorderSide(
+  //             color: appColor(context).red.withValues(alpha: 0.3),
+  //             width: 1.5,
+  //           ),
+  //         ),
+  //         insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+  //         child: Container(
+  //           decoration: BoxDecoration(
+  //             color: appColor(context).grey900,
+  //             borderRadius: BorderRadius.circular(24),
+  //           ),
+  //           padding: const EdgeInsets.all(24.0),
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             children: [
+  //               // Warning Shield/Gavel Indicator
+  //               Container(
+  //                 width: 56,
+  //                 height: 56,
+  //                 decoration: BoxDecoration(
+  //                   shape: BoxShape.circle,
+  //                   color: appColor(context).red.withValues(alpha: 0.1),
+  //                 ),
+  //                 child: Center(
+  //                   child: Icon(
+  //                     Icons.warning_amber_rounded,
+  //                     color: appColor(context).red,
+  //                     size: 28,
+  //                   ),
+  //                 ),
+  //               ),
+  //               const SizedBox(height: 16),
+
+  //               // Title
+  //               Text(
+  //                 "Moderation Warning",
+  //                 style: fontStyle.clashDisplayBold18.textColor(
+  //                   appColor(context).white,
+  //                 ),
+  //                 textAlign: TextAlign.center,
+  //               ),
+  //               const SizedBox(height: 8),
+
+  //               // Violation Count Badge
+  //               Container(
+  //                 padding: const EdgeInsets.symmetric(
+  //                   horizontal: 12,
+  //                   vertical: 4,
+  //                 ),
+  //                 decoration: BoxDecoration(
+  //                   color: appColor(context).red.withValues(alpha: 0.15),
+  //                   borderRadius: BorderRadius.circular(12),
+  //                   border: Border.all(
+  //                     color: appColor(context).red.withValues(alpha: 0.4),
+  //                     width: 1,
+  //                   ),
+  //                 ),
+  //                 child: Text(
+  //                   "Warning #$violationCount",
+  //                   style: fontStyle.clashDisplaySemiBold12.textColor(
+  //                     appColor(context).red,
+  //                   ),
+  //                 ),
+  //               ),
+  //               const SizedBox(height: 16),
+
+  //               // Reason / Type Details Box
+  //               Container(
+  //                 width: double.infinity,
+  //                 padding: const EdgeInsets.all(12),
+  //                 decoration: BoxDecoration(
+  //                   color: appColor(context).black.withValues(alpha: 0.3),
+  //                   borderRadius: BorderRadius.circular(12),
+  //                   border: Border.all(
+  //                     color: appColor(context).white.withValues(alpha: 0.05),
+  //                   ),
+  //                 ),
+  //                 child: Column(
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: [
+  //                     Row(
+  //                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //                       children: [
+  //                         Text(
+  //                           "Violation Category",
+  //                           style: fontStyle.clashDisplayBold12.textColor(
+  //                             appColor(context).textGrey,
+  //                           ),
+  //                         ),
+  //                         if (alertType.isNotEmpty)
+  //                           Text(
+  //                             "Source",
+  //                             style: fontStyle.clashDisplayBold12.textColor(
+  //                               appColor(context).textGrey,
+  //                             ),
+  //                           ),
+  //                       ],
+  //                     ),
+  //                     const SizedBox(height: 6),
+  //                     Row(
+  //                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //                       children: [
+  //                         Text(
+  //                           reason,
+  //                           style: fontStyle.clashDisplayMedium14.textColor(
+  //                             appColor(context).white,
+  //                           ),
+  //                         ),
+  //                         if (alertType.isNotEmpty)
+  //                           Container(
+  //                             padding: const EdgeInsets.symmetric(
+  //                               horizontal: 8,
+  //                               vertical: 2,
+  //                             ),
+  //                             decoration: BoxDecoration(
+  //                               color: appColor(
+  //                                 context,
+  //                               ).white.withValues(alpha: 0.1),
+  //                               borderRadius: BorderRadius.circular(6),
+  //                             ),
+  //                             child: Text(
+  //                               alertType.toUpperCase(),
+  //                               style: fontStyle.clashDisplayBold10.textColor(
+  //                                 appColor(context).white,
+  //                               ),
+  //                             ),
+  //                           ),
+  //                       ],
+  //                     ),
+  //                   ],
+  //                 ),
+  //               ),
+  //               const SizedBox(height: 16),
+
+  //               // Friendly guidelines info
+  //               Text(
+  //                 "ShieldConnect uses automated moderation to ensure safety. Repeated violations of our guidelines may lead to automatic suspension or call termination.",
+  //                 style: fontStyle.clashDisplayMedium12
+  //                     .textColor(appColor(context).textGrey)
+  //                     .copyWith(height: 1.4),
+  //                 textAlign: TextAlign.center,
+  //               ),
+  //               const SizedBox(height: 20),
+
+  //               // Acknowledge Button
+  //               GestureDetector(
+  //                 onTap: () {
+  //                   Navigator.of(dialogCtx).pop();
+  //                   _moderationDialogContext = null;
+  //                 },
+  //                 child: Container(
+  //                   height: 44,
+  //                   width: double.infinity,
+  //                   decoration: BoxDecoration(
+  //                     color: appColor(context).red,
+  //                     borderRadius: BorderRadius.circular(12),
+  //                   ),
+  //                   child: Center(
+  //                     child: Text(
+  //                       "Acknowledge",
+  //                       style: fontStyle.clashDisplaySemiBold14.textColor(
+  //                         appColor(context).white,
+  //                       ),
+  //                     ),
+  //                   ),
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
+  // }
 
   String? _findCallIdInResponse(dynamic responseData) {
     if (responseData == null) return null;

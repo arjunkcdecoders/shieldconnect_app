@@ -22,7 +22,16 @@ class HomeScreen extends StatelessWidget {
               children: [
                 _buildWelcomeHeader(context),
                 const SizedBox(height: 24),
-                _buildStatsGrid(context, controller.dashboardStats),
+                controller.isLoadingStats
+                    ? SizedBox(
+                        height: 100,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: appColor(context).secondary,
+                          ),
+                        ),
+                      )
+                    : _buildStatsGrid(context, controller.dashboardStats),
                 const SizedBox(height: 32),
                 _buildSectionHeader(context, "Moderations"),
                 const SizedBox(height: 16),

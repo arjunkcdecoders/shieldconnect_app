@@ -225,6 +225,18 @@ class RoomManager extends ChangeNotifier {
 
       // Set Speakerphone state
       await lk.Hardware.instance.setSpeakerphoneOn(_isSpeakerOn);
+      if (_isSpeakerOn) {
+        // Enforce speakerphone with a slight delay to ensure routing sticks after initialization
+        Future.delayed(const Duration(milliseconds: 800), () async {
+          try {
+            if (_room != null && _isSpeakerOn) {
+              await lk.Hardware.instance.setSpeakerphoneOn(true);
+            }
+          } catch (e) {
+            dev.log('🚨 LiveKit: Failed delayed speaker activation: $e', name: 'RoomManager');
+          }
+        });
+      }
 
       dev.log(
         '🎙️ LiveKit: Connected successfully. Local Participant Identity: ${room.localParticipant?.identity}',

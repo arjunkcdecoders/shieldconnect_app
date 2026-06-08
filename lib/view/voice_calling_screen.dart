@@ -11,9 +11,8 @@ import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
-import 'package:shieldconnect_app/services/socket_service.dart';
 import 'package:shieldconnect_app/view/video_calling_screen.dart';
-import 'package:shieldconnect_app/view/call_waiting_overlay.dart';
+import 'package:shieldconnect_app/view/add_call_members_screen.dart';
 
 class VoiceCallingScreen extends StatelessWidget {
   final String userName;
@@ -613,29 +612,34 @@ class VoiceCallingScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
-                                  onTap: isConnected
-                                      ? () {
-                                          roomManager.setSpeakerphoneOn(
-                                            !isSpeakerOn,
-                                          );
-                                        }
-                                      : null,
-                                  child: Opacity(
-                                    opacity: isConnected ? 1.0 : 0.4,
-                                    child: _buildRoundTool(
-                                      context,
-                                      asset: ImageAssets.volume,
-                                      isActive: isSpeakerOn,
-                                    ),
-                                  ),
-                                ),
+                                   onTap: isConnected
+                                       ? () {
+                                           roomManager.setSpeakerphoneOn(
+                                             !isSpeakerOn,
+                                           );
+                                         }
+                                       : null,
+                                   child: Opacity(
+                                     opacity: isConnected ? 1.0 : 0.4,
+                                     child: _buildRoundTool(
+                                       context,
+                                       icon: isSpeakerOn
+                                           ? Icons.volume_up
+                                           : Icons.volume_down,
+                                       isActive: isSpeakerOn,
+                                     ),
+                                   ),
+                                 ),
                                 const SizedBox(width: 8),
                                 GestureDetector(
                                   onTap: isConnected
                                       ? () {
-                                          showAddUserDialog(
+                                          Navigator.push(
                                             context,
-                                            callManager.myUserId,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  AddCallMembersScreen(),
+                                            ),
                                           );
                                         }
                                       : null,
@@ -718,17 +722,17 @@ class VoiceCallingScreen extends StatelessWidget {
                     ),
                   ),
                   // 4. Call Waiting Overlay Card
-                  if (callManager.incomingWaitingCall != null)
-                    Positioned(
-                      bottom: 120,
-                      left: 20,
-                      right: 20,
-                      child: CallWaitingOverlay(
-                        waitingCall: callManager.incomingWaitingCall!,
-                        onAccept: () => callManager.acceptWaitingCall(),
-                        onDecline: () => callManager.declineWaitingCall(),
-                      ),
-                    ),
+                  // if (callManager.incomingWaitingCall != null)
+                  //   Positioned(
+                  //     bottom: 120,
+                  //     left: 20,
+                  //     right: 20,
+                  //     child: CallWaitingOverlay(
+                  //       waitingCall: callManager.incomingWaitingCall!,
+                  //       onAccept: () => callManager.acceptWaitingCall(),
+                  //       onDecline: () => callManager.declineWaitingCall(),
+                  //     ),
+                  //   ),
                   if (callManager.isReconnecting)
                     Positioned.fill(
                       child: ClipRRect(
@@ -773,10 +777,10 @@ class VoiceCallingScreen extends StatelessWidget {
     );
   }
 
-  /// Render individual dark circular utilities within call toolbar
   Widget _buildRoundTool(
     BuildContext context, {
-    required String asset,
+    String? asset,
+    IconData? icon,
     required bool isActive,
   }) {
     return Container(
@@ -793,410 +797,14 @@ class VoiceCallingScreen extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Image.asset(
-          asset,
-          color: appColor(context).white,
-          width: 20,
-          height: 20,
-        ),
-      ),
-    );
-  }
-}
-
-class AddUserDialog extends StatelessWidget {
-  const AddUserDialog({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-          child: Container(
-            width: double.infinity,
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.6,
-            ),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E).withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Add Members",
-                      style: fontStyle.clashDisplayBold18.textColor(
-                        Colors.white,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.05),
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white70,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Content
-                Flexible(
-                  child: Consumer<CallController>(
-                    builder: (context, controller, child) {
-                      if (controller.isLoadingFriends) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
-                            child: CircularProgressIndicator(
-                              color: Color(0xFF23C123),
-                            ),
-                          ),
-                        );
-                      }
-
-                      if (controller.friendsErrorMessage != null) {
-                        return Center(
-                          child: Text(
-                            controller.friendsErrorMessage!,
-                            style: fontStyle.clashDisplayMedium12.textColor(
-                              Colors.white70,
-                            ),
-                          ),
-                        );
-                      }
-
-                      final callManager = Provider.of<CallManager>(
-                        context,
-                        listen: false,
-                      );
-                      final String myId = callManager.myUserId ?? '';
-                      final String otherId =
-                          (callManager.myUserId == callManager.callerId)
-                          ? (callManager.receiverId ?? '')
-                          : (callManager.callerId ?? '');
-
-                      final Set<String> existingUserIds = {myId, otherId};
-                      for (final p in controller.participants) {
-                        final pId = p['user_id'] ?? p['id'] ?? p['_id'];
-                        if (pId != null) {
-                          existingUserIds.add(pId.toString());
-                        }
-                      }
-
-                      final filteredFriends = controller.friends.where((
-                        friend,
-                      ) {
-                        // Only allow online users
-                        if (friend['is_online'] != true) return false;
-
-                        final friendId =
-                            friend['user_id'] ?? friend['id'] ?? friend['_id'];
-                        if (friendId == null) return true;
-                        return !existingUserIds.contains(friendId.toString());
-                      }).toList();
-
-                      if (filteredFriends.isEmpty) {
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40),
-                            child: Text(
-                              controller.friends.isEmpty
-                                  ? "No connected friends found."
-                                  : "All friends are already in the call.",
-                              style: fontStyle.clashDisplayMedium12.textColor(
-                                Colors.white54,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: filteredFriends.length,
-                        separatorBuilder: (context, index) => Container(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.05),
-                        ),
-                        itemBuilder: (context, index) {
-                          final friend = filteredFriends[index];
-                          final String friendName = friend['name'] ?? 'User';
-                          final String? friendAvatar = friend['avatar'];
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Row(
-                              children: [
-                                // Avatar Squircle or circle
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      width: 1.5,
-                                    ),
-                                    image:
-                                        (friendAvatar != null &&
-                                            friendAvatar.isNotEmpty)
-                                        ? DecorationImage(
-                                            image: NetworkImage(
-                                              ApiService.getImageUrl(
-                                                friendAvatar,
-                                              ),
-                                            ),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                    color: Colors.white.withValues(alpha: 0.05),
-                                  ),
-                                  child:
-                                      (friendAvatar != null &&
-                                          friendAvatar.isNotEmpty)
-                                      ? null
-                                      : const Icon(
-                                          Icons.person,
-                                          color: Colors.white70,
-                                          size: 20,
-                                        ),
-                                ),
-                                const SizedBox(width: 12),
-
-                                // Details
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        friendName,
-                                        style: fontStyle.clashDisplaySemiBold14
-                                            .textColor(Colors.white),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        friend['is_online'] == true
-                                            ? "Online"
-                                            : "Offline",
-                                        style: fontStyle.clashDisplayMedium10
-                                            .textColor(
-                                              friend['is_online'] == true
-                                                  ? const Color(0xFF23C123)
-                                                  : Colors.white54,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // Invite/Add Button
-                                GestureDetector(
-                                  onTap: () async {
-                                    final callManager =
-                                        Provider.of<CallManager>(
-                                          context,
-                                          listen: false,
-                                        );
-                                    final callId = callManager.currentCallId;
-                                    final friendId =
-                                        friend['user_id'] ??
-                                        friend['id'] ??
-                                        friend['_id'];
-                                    if (context.mounted) {
-                                      Navigator.pop(
-                                        context,
-                                      ); // Close the sheet/dialog immediately
-                                    }
-                                    if (callId != null && friendId != null) {
-                                      final controller =
-                                          Provider.of<CallController>(
-                                            context,
-                                            listen: false,
-                                          );
-                                      final success = await controller
-                                          .addParticipant(
-                                            callId,
-                                            friendId.toString(),
-                                          );
-                                      if (success) {
-                                        // Gather all unique active participant IDs and names
-                                        final List<String> pIds = [];
-                                        final List<String> pNames = [];
-
-                                        // 1. Add "Me" / Caller
-                                        String? myName = callManager.myUserName;
-                                        if (myName == null ||
-                                            myName.isEmpty ||
-                                            myName == 'User') {
-                                          try {
-                                            final profileController =
-                                                Provider.of<ProfileController>(
-                                                  context,
-                                                  listen: false,
-                                                );
-                                            if (profileController
-                                                .name
-                                                .isNotEmpty) {
-                                              myName = profileController.name;
-                                            }
-                                          } catch (_) {}
-                                        }
-
-                                        String? myAvatar =
-                                            callManager.myUserAvatar;
-                                        if (myAvatar == null ||
-                                            myAvatar.isEmpty) {
-                                          try {
-                                            final profileController =
-                                                Provider.of<ProfileController>(
-                                                  context,
-                                                  listen: false,
-                                                );
-                                            if (profileController
-                                                .imageUrl
-                                                .isNotEmpty) {
-                                              myAvatar =
-                                                  profileController.imageUrl;
-                                            }
-                                          } catch (_) {}
-                                        }
-
-                                        if (callManager.myUserId != null) {
-                                          pIds.add(callManager.myUserId!);
-                                          pNames.add(myName ?? 'User');
-                                        }
-
-                                        // 2. Add other participants from controller.participants
-                                        for (final p
-                                            in controller.participants) {
-                                          final pId =
-                                              (p['user_id'] ??
-                                                      p['id'] ??
-                                                      p['_id'])
-                                                  ?.toString();
-                                          final pName =
-                                              (p['name'] ??
-                                                      p['username'] ??
-                                                      'User')
-                                                  .toString();
-                                          if (pId != null &&
-                                              pId.isNotEmpty &&
-                                              !pIds.contains(pId)) {
-                                            pIds.add(pId);
-                                            pNames.add(pName);
-                                          }
-                                        }
-
-                                        // 3. Make sure the newly added friend is included
-                                        final String friendIdStr = friendId
-                                            .toString();
-                                        if (!pIds.contains(friendIdStr)) {
-                                          pIds.add(friendIdStr);
-                                          pNames.add(friendName);
-                                        }
-
-                                        final Map<String, dynamic>
-                                        socketData = {
-                                          'callId': callId,
-                                          'roomId': callManager.currentRoomId,
-                                          'callerId': callManager.myUserId,
-                                          'callerName': myName,
-                                          'callerAvatar': myAvatar,
-                                          'receiverId': friendId.toString(),
-                                          'receiverIds': [friendId.toString()],
-                                          'isVideo': callManager.isVideo,
-                                          'isGroup': true,
-                                          'groupName': callManager.isGroup
-                                              ? (callManager.receiverName ??
-                                                    "Group Call")
-                                              : (myName ?? "Group Call"),
-                                          'group_name': callManager.isGroup
-                                              ? (callManager.receiverName ??
-                                                    "Group Call")
-                                              : (myName ?? "Group Call"),
-                                          'groupAvatar': callManager.isGroup
-                                              ? (callManager.receiverAvatar ??
-                                                    "")
-                                              : (myAvatar ?? ""),
-                                          'group_avatar': callManager.isGroup
-                                              ? (callManager.receiverAvatar ??
-                                                    "")
-                                              : (myAvatar ?? ""),
-                                          'participantIds': pIds,
-                                          'participantNames': pNames,
-                                          'participantsCount': pIds.length,
-                                        };
-                                        SocketService().emit(
-                                          'call_user',
-                                          socketData,
-                                        );
-                                      }
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF23C123,
-                                      ).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: const Color(
-                                          0xFF23C123,
-                                        ).withValues(alpha: 0.2),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      "Add",
-                                      style: fontStyle.clashDisplayBold10
-                                          .textColor(const Color(0xFF23C123)),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: asset != null
+            ? Image.asset(
+                asset,
+                color: appColor(context).white,
+                width: 20,
+                height: 20,
+              )
+            : Icon(icon, color: appColor(context).white, size: 20),
       ),
     );
   }
@@ -1769,15 +1377,6 @@ class CallGridView extends StatelessWidget {
       ),
     );
   }
-}
-
-void showAddUserDialog(BuildContext context, String? myUserId) {
-  Provider.of<CallController>(context, listen: false).fetchFriends(myUserId);
-  showDialog(
-    context: context,
-    barrierDismissible: true,
-    builder: (context) => const AddUserDialog(),
-  );
 }
 
 String? _normalizeAvatarUrl(dynamic avatar) {

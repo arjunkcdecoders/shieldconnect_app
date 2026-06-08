@@ -66,6 +66,7 @@ class CallController extends ChangeNotifier {
         _pageController?.dispose();
         _pageController = PageController(initialPage: 0);
         _hasFetchedParticipants = false;
+        _participants = [];
         startParticipantsPolling(callManager.currentCallId!);
       }
     } else if (callManager.state == CallState.idle) {

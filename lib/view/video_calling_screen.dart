@@ -9,9 +9,9 @@ import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
-import 'package:shieldconnect_app/view/voice_calling_screen.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/view/add_call_members_screen.dart';
 
 class VideoCallingScreen extends StatelessWidget {
   final String userName;
@@ -914,7 +914,9 @@ class VideoCallingScreen extends StatelessWidget {
                                     opacity: isConnected ? 1.0 : 0.4,
                                     child: _buildRoundTool(
                                       context,
-                                      asset: ImageAssets.volume,
+                                      icon: isSpeakerOn
+                                          ? Icons.volume_up
+                                          : Icons.volume_down,
                                       isActive: isSpeakerOn,
                                     ),
                                   ),
@@ -923,9 +925,12 @@ class VideoCallingScreen extends StatelessWidget {
                                 GestureDetector(
                                   onTap: isConnected
                                       ? () {
-                                          showAddUserDialog(
+                                          Navigator.push(
                                             context,
-                                            callManager.myUserId,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  AddCallMembersScreen(),
+                                            ),
                                           );
                                         }
                                       : null,

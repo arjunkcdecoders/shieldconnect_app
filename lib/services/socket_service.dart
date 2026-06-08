@@ -65,6 +65,10 @@ class SocketService {
   final ValueNotifier<Map<String, dynamic>?> newNotificationNotifier =
       ValueNotifier(null);
 
+  /// Fires when a moderation violation is received.
+  final ValueNotifier<Map<String, dynamic>?> moderationViolationNotifier =
+      ValueNotifier(null);
+
   // ─── Getters ─────────────────────────────────────────────────────────────────
   bool get isConnected => _socket?.connected ?? false;
 
@@ -284,6 +288,22 @@ class SocketService {
         newNotificationNotifier.value = Map<String, dynamic>.from(payload);
       }
     });
+
+    _socket!.on('moderation_violation', (data) {
+      dev.log('🔌 SOCKET: moderation_violation event: $data');
+      try {
+        dynamic payload = data;
+        if (data is List && data.isNotEmpty) {
+          payload = data[0];
+        }
+        if (payload is Map) {
+          moderationViolationNotifier.value =
+              Map<String, dynamic>.from(payload);
+        }
+      } catch (e) {
+        dev.log('🚨 SOCKET moderation_violation error: $e');
+      }
+    });
   }
 
   /// Listen to a custom event from the server.
@@ -409,6 +429,10 @@ class SocketService {
     typingIndicatorNotifier.value = null;
     connectionRequestNotifier.value = null;
     newNotificationNotifier.value = null;
-    dev.log("SocketService: Socket disconnected and cleaned up.", name: "SocketService");
+    moderationViolationNotifier.value = null;
+    dev.log(
+      "SocketService: Socket disconnected and cleaned up.",
+      name: "SocketService",
+    );
   }
 }

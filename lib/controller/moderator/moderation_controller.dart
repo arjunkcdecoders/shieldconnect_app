@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../model/user_model.dart';
 import '../../services/moderation_api_client.dart';
 
 class ModerationController extends ChangeNotifier {
@@ -124,13 +127,19 @@ class ModerationController extends ChangeNotifier {
 
     // 1. Try to make API call
     try {
-      String moderatorId = "mod123";
-      try {
-        final session = await _apiClient.fetchSession();
-        if (session.isLoggedIn && session.admin != null) {
-          moderatorId = session.admin!.id;
-        }
-      } catch (_) {}
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr == null) {
+        debugPrint("ModerationController: No user_session found, aborting API call");
+        return false;
+      }
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      final String? moderatorId = user.id;
+      if (moderatorId == null || moderatorId.isEmpty) {
+        debugPrint("ModerationController: moderatorId is null or empty, aborting API call");
+        return false;
+      }
 
       final response = await _apiClient.updateItemStatus(
         itemId: itemId,

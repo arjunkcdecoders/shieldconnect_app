@@ -13,6 +13,7 @@ import 'package:shieldconnect_app/view/video_calling_screen.dart';
 import 'package:shieldconnect_app/controller/call_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/view/add_call_members_screen.dart';
 import 'package:shieldconnect_app/main.dart';
 
 class VoiceCallReceivingScreen extends StatelessWidget {
@@ -722,16 +723,20 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                                     },
                                     child: _buildRoundTool(
                                       context,
-                                      asset: ImageAssets.volume,
+                                      icon: isSpeakerOn
+                                          ? Icons.volume_up
+                                          : Icons.volume_down,
                                       isActive: isSpeakerOn,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   GestureDetector(
                                     onTap: () {
-                                      showAddUserDialog(
+                                      Navigator.push(
                                         context,
-                                        callManager.myUserId,
+                                        MaterialPageRoute(
+                                          builder: (context) => AddCallMembersScreen(),
+                                        ),
                                       );
                                     },
                                     child: _buildRoundTool(
@@ -864,10 +869,10 @@ class VoiceCallReceivingScreen extends StatelessWidget {
     );
   }
 
-  /// Render individual dark circular utilities within call toolbar
   Widget _buildRoundTool(
     BuildContext context, {
-    required String asset,
+    String? asset,
+    IconData? icon,
     required bool isActive,
   }) {
     return Container(
@@ -884,12 +889,14 @@ class VoiceCallReceivingScreen extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Image.asset(
-          asset,
-          color: appColor(context).white,
-          width: 20,
-          height: 20,
-        ),
+        child: asset != null
+            ? Image.asset(
+                asset,
+                color: appColor(context).white,
+                width: 20,
+                height: 20,
+              )
+            : Icon(icon, color: appColor(context).white, size: 20),
       ),
     );
   }
