@@ -4,6 +4,8 @@ import 'package:shieldconnect_app/view/delete_account_dialog.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/view/moderator/bottomnav_screen/bottomnav_screen.dart'
     as mod;
+import 'package:shieldconnect_app/controller/homescreen_controller.dart';
+import 'package:shieldconnect_app/view/bottomnav_screen.dart' as user_nav;
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -213,7 +215,39 @@ class ProfileScreen extends StatelessWidget {
                               textAlign: TextAlign.center,
                             ),
                           ],
-                          if (controller.isModerator) ...[
+                          if (controller.appMode == 'moderator') ...[
+                            const SizedBox(height: 12),
+                            GestureDetector(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: true,
+                                  builder: (context) => const UserModeDialog(),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: appColor(
+                                    context,
+                                  ).primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: appColor(context).primary,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  "👤 User Mode",
+                                  style: fontStyle.clashDisplaySemiBold12
+                                      .textColor(appColor(context).primary),
+                                ),
+                              ),
+                            ),
+                          ] else if (controller.isModerator) ...[
                             const SizedBox(height: 12),
                             GestureDetector(
                               onTap: () {
@@ -888,14 +922,144 @@ class ModeratorModeDialog extends StatelessWidget {
                 // Enter Mode Button
                 Expanded(
                   child: GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       Navigator.pop(context); // Dismiss dialog
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const mod.BottomnavScreen(),
+                      await context.read<ProfileController>().setAppMode('moderator');
+                      if (context.mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const mod.BottomnavScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: appColor(context).primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Enter Mode",
+                          style: fontStyle.clashDisplaySemiBold14.textColor(
+                            appColor(context).white,
+                          ),
                         ),
-                      );
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class UserModeDialog extends StatelessWidget {
+  const UserModeDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: appColor(context).white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Circular Header User Icon
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: appColor(context).primary.withValues(alpha: 0.1),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.person_rounded,
+                  color: appColor(context).primary,
+                  size: 28,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Title
+            Text(
+              "Enter User Mode?",
+              style: fontStyle.clashDisplayBold18.textColor(
+                appColor(context).darkText,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+
+            // Description
+            Text(
+              "You will be redirected back to the main chat application.",
+              style: fontStyle.clashDisplayMedium12.textColor(
+                appColor(context).grey600,
+              ).copyWith(height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // Cancel and Enter Buttons
+            Row(
+              children: [
+                // Cancel Button
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: appColor(context).white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: appColor(context).grey200,
+                          width: 1,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Cancel",
+                          style: fontStyle.clashDisplaySemiBold14.textColor(
+                            appColor(context).darkText,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Enter Mode Button
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () async {
+                      Navigator.pop(context); // Dismiss dialog
+                      await context.read<ProfileController>().setAppMode('user');
+                      if (context.mounted) {
+                        Provider.of<HomeScreenController>(context, listen: false).init();
+                        Provider.of<ProfileController>(context, listen: false).init();
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const user_nav.BottomnavScreen(),
+                          ),
+                        );
+                      }
                     },
                     child: Container(
                       height: 48,

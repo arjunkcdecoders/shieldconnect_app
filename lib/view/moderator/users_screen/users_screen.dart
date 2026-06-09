@@ -17,16 +17,32 @@ class UsersScreen extends StatelessWidget {
           appBar: _buildAppBar(context),
           body: Column(
             children: [
-              _buildSearchBar(context),
+              _buildSearchBar(context, controller),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: controller.users.length,
-                  itemBuilder: (context, index) {
-                    final user = controller.users[index];
-                    return _buildUserCard(context, controller, user, index);
-                  },
-                ),
+                child: controller.isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(),
+                      )
+                    : controller.filteredUsers.isEmpty
+                        ? Center(
+                            child: Text(
+                              "No users found",
+                              style: fontStyle.clashDisplayMedium12
+                                  .textColor(appColor(context).silver)
+                                  .size(14),
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () => controller.fetchUsers(),
+                            child: ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: controller.filteredUsers.length,
+                              itemBuilder: (context, index) {
+                                final user = controller.filteredUsers[index];
+                                return _buildUserCard(context, controller, user, index);
+                              },
+                            ),
+                          ),
               ),
             ],
           ),
@@ -56,7 +72,7 @@ class UsersScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
+  Widget _buildSearchBar(BuildContext context, ModeratorUsersController controller) {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -71,6 +87,7 @@ class UsersScreen extends StatelessWidget {
         ],
       ),
       child: TextField(
+        onChanged: (value) => controller.setSearchQuery(value),
         decoration: InputDecoration(
           hintText: "Search...",
           hintStyle: fontStyle.clashDisplayRegular14
@@ -94,6 +111,8 @@ class UsersScreen extends StatelessWidget {
     Map<String, dynamic> user,
     int index,
   ) {
+    final bool isActive = user['approval_status'] == 'Active';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -109,13 +128,24 @@ class UsersScreen extends StatelessWidget {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundImage: NetworkImage(user['image']),
+                backgroundColor: appColor(context).bgGrey,
+                backgroundImage: (user['avatar'] != null && user['avatar'].toString().isNotEmpty)
+                    ? NetworkImage(user['avatar'].toString())
+                    : null,
+                child: (user['avatar'] == null || user['avatar'].toString().isEmpty)
+                    ? Icon(
+                        Icons.person,
+                        color: appColor(context).silver,
+                        size: 20,
+                      )
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -123,32 +153,34 @@ class UsersScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user['name'],
+                      user['name'] ?? 'Unknown',
                       style: fontStyle.clashDisplayBold30
                           .textColor(appColor(context).black)
                           .size(13),
                     ),
-                    SizedBox(height: 7),
+                    const SizedBox(height: 7),
                     Text(
-                      user['email'],
+                      user['email'] ?? '',
                       style: fontStyle.clashDisplayRegular12
                           .textColor(appColor(context).silver)
                           .size(10),
                     ),
-                    const SizedBox(height: 9),
-                    Text(
-                      user['phone'],
-                      style: fontStyle.clashDisplayRegular12
-                          .textColor(appColor(context).textMediumGrey)
-                          .size(10),
-                    ),
+                    if (user['phone'] != null && user['phone'].toString().isNotEmpty) ...[
+                      const SizedBox(height: 9),
+                      Text(
+                        user['phone'].toString(),
+                        style: fontStyle.clashDisplayRegular12
+                            .textColor(appColor(context).textMediumGrey)
+                            .size(10),
+                      ),
+                    ],
                   ],
                 ),
               ),
               Transform.scale(
                 scale: 0.8,
                 child: Switch(
-                  value: user['isActive'],
+                  value: isActive,
                   activeColor: appColor(context).white,
                   activeTrackColor: appColor(context).primary,
                   inactiveThumbColor: appColor(context).white,
@@ -161,19 +193,20 @@ class UsersScreen extends StatelessWidget {
               ),
             ],
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                user['country'],
-                style: fontStyle.clashDisplaySemiBold18
-                    .textColor(appColor(context).textGrey)
-                    .size(9),
-              ),
-              const SizedBox(width: 4),
-              Image.asset(ImageAssets.usFlag, height: 14, width: 14),
-            ],
-          ),
+          if (user['region'] != null && user['region'].toString().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  user['region'].toString(),
+                  style: fontStyle.clashDisplaySemiBold18
+                      .textColor(appColor(context).textGrey)
+                      .size(9),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -62,7 +62,12 @@ class ModerationApiClient {
       return ModerationStatsResponse(
         success: false,
         message: e.toString(),
-        data: ModerationStats(pending: 0, reviewedToday: 0, escalations: 0, usersCount: 0),
+        data: ModerationStats(
+          pending: 0,
+          reviewedToday: 0,
+          escalations: 0,
+          usersCount: 0,
+        ),
       );
     }
   }
@@ -114,10 +119,21 @@ class ModerationApiClient {
     required String itemId,
     required String status,
     required String moderatorId,
+    bool isProfileUpdate = false,
+    String? profileType,
   }) async {
     try {
+      String finalId = itemId;
+      if (isProfileUpdate) {
+        final String rawId = itemId.replaceFirst('user:', '').replaceFirst('group:', '');
+        if (profileType == 'group') {
+          finalId = 'group:$rawId';
+        } else {
+          finalId = 'user:$rawId';
+        }
+      }
       final response = await _dio.put(
-        '/api/admin/moderation/$itemId',
+        '/api/admin/moderation/$finalId',
         data: {'status': status, 'moderatorId': moderatorId},
       );
       final dynamic responseData = response.data;
@@ -128,6 +144,55 @@ class ModerationApiClient {
     } catch (e) {
       debugPrint("ModerationApiClient: Error updating item status: $e");
       return ActionUpdateResponse(success: false, message: e.toString());
+    }
+  }
+
+  // 5. Fetch Users List (GET /api/admin/users?moderator_id=<MODERATOR_ID>&page=<PAGE>&limit=<LIMIT>)
+  Future<Map<String, dynamic>> fetchUsers({
+    required String moderatorId,
+    required int page,
+    required int limit,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/api/admin/users',
+        queryParameters: {
+          'moderator_id': moderatorId,
+          'page': page,
+          'limit': limit,
+        },
+      );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+      return json;
+    } catch (e) {
+      debugPrint("ModerationApiClient: Error fetching users: $e");
+      return {'success': false, 'data': []};
+    }
+  }
+
+  // 6. Update User Approval Status (PUT /api/admin/users/:userId/approval)
+  Future<bool> updateUserApprovalStatus({
+    required String userId,
+    required String approvalStatus,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/api/admin/users/$userId/approval',
+        data: {
+          'approval_status': approvalStatus,
+        },
+      );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+      return json['success'] ?? false;
+    } catch (e) {
+      debugPrint("ModerationApiClient: Error updating user approval status: $e");
+      return false;
     }
   }
 }

@@ -10,6 +10,7 @@ import 'package:shieldconnect_app/view/onboarding_screen.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
 
 import 'package:shieldconnect_app/services/call_manager.dart';
+import 'package:shieldconnect_app/view/moderator/bottomnav_screen/bottomnav_screen.dart' as mod;
 
 class SplashController extends ChangeNotifier {
   bool _hasStarted = false;
@@ -42,12 +43,20 @@ class SplashController extends ChangeNotifier {
     Timer(const Duration(seconds: 3), () {
       if (context.mounted) {
         if (userSession != null) {
-          Provider.of<HomeScreenController>(context, listen: false).init();
-          Provider.of<ProfileController>(context, listen: false).init();
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const BottomnavScreen()),
-          );
+          final String appMode = prefs.getString('app_mode') ?? 'user';
+          if (appMode == 'moderator') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const mod.BottomnavScreen()),
+            );
+          } else {
+            Provider.of<HomeScreenController>(context, listen: false).init();
+            Provider.of<ProfileController>(context, listen: false).init();
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const BottomnavScreen()),
+            );
+          }
         } else {
           Navigator.pushReplacement(
             context,

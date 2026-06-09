@@ -9,8 +9,9 @@ import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:shieldconnect_app/view/moderator/home_screen/home_screen.dart';
 import 'package:shieldconnect_app/view/moderator/moderation_screen/moderation_screen.dart';
-import 'package:shieldconnect_app/view/moderator/profile_screen/profile_screen.dart';
+
 import 'package:shieldconnect_app/view/moderator/users_screen/users_screen.dart';
+import 'package:shieldconnect_app/view/profile_screen.dart';
 
 class BottomnavScreen extends StatelessWidget {
   const BottomnavScreen({super.key});

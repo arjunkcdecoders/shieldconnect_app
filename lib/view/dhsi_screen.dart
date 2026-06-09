@@ -55,7 +55,7 @@ class DhsiScreen extends StatelessWidget {
 
     final String userName = profileController.name.isNotEmpty
         ? profileController.name
-        : "Maisie";
+        : "User";
     final String userAvatar = profileController.imageUrl;
 
     return Scaffold(
@@ -81,7 +81,7 @@ class DhsiScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 1. Header: Avatar (with green badge) & Circular Actions
-                  _buildHeader(context, userAvatar),
+                  _buildHeader(context, userName, userAvatar),
                   const SizedBox(height: 20),
 
                   if (dhsiController.isLoading &&
@@ -160,6 +160,7 @@ class DhsiScreen extends StatelessWidget {
                     _buildLevelTimeline(
                       context,
                       dhsiController.dhsiData!,
+                      userName,
                       userAvatar,
                     ),
                     const SizedBox(height: 20),
@@ -193,7 +194,7 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // Header Component
-  Widget _buildHeader(BuildContext context, String userAvatar) {
+  Widget _buildHeader(BuildContext context, String userName, String userAvatar) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -225,19 +226,25 @@ class DhsiScreen extends StatelessWidget {
                       ? Image.network(
                           ApiService.getImageUrl(userAvatar),
                           fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) => Icon(
-                            Icons.person,
-                            color: appColor(context).grey400,
-                            size: 24,
+                          errorBuilder: (c, o, s) => Container(
+                            color: appColor(context).secondary.withValues(alpha: 0.1),
+                            alignment: Alignment.center,
+                            child: Text(
+                              userName.isNotEmpty ? userName[0].toUpperCase() : "U",
+                              style: fontStyle.clashDisplayBold16.textColor(
+                                appColor(context).secondary,
+                              ),
+                            ),
                           ),
                         )
-                      : Image.asset(
-                          ImageAssets.dhsi, // fallback to dhsi/avatar
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) => Icon(
-                            Icons.person,
-                            color: appColor(context).grey400,
-                            size: 24,
+                      : Container(
+                          color: appColor(context).secondary.withValues(alpha: 0.1),
+                          alignment: Alignment.center,
+                          child: Text(
+                            userName.isNotEmpty ? userName[0].toUpperCase() : "U",
+                            style: fontStyle.clashDisplayBold16.textColor(
+                              appColor(context).secondary,
+                            ),
                           ),
                         ),
                 ),
@@ -393,10 +400,27 @@ class DhsiScreen extends StatelessWidget {
                       ? Image.network(
                           ApiService.getImageUrl(userAvatar),
                           fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) =>
-                              Image.asset(ImageAssets.dhsi, fit: BoxFit.cover),
+                          errorBuilder: (c, o, s) => Container(
+                            color: appColor(context).secondary.withValues(alpha: 0.1),
+                            alignment: Alignment.center,
+                            child: Text(
+                              userName.isNotEmpty ? userName[0].toUpperCase() : "U",
+                              style: fontStyle.clashDisplayBold24.textColor(
+                                appColor(context).secondary,
+                              ),
+                            ),
+                          ),
                         )
-                      : Image.asset(ImageAssets.dhsi, fit: BoxFit.cover),
+                      : Container(
+                          color: appColor(context).secondary.withValues(alpha: 0.1),
+                          alignment: Alignment.center,
+                          child: Text(
+                            userName.isNotEmpty ? userName[0].toUpperCase() : "U",
+                            style: fontStyle.clashDisplayBold24.textColor(
+                              appColor(context).secondary,
+                            ),
+                          ),
+                        ),
                 ),
               ),
               // Score badge overlapping bottom
@@ -671,6 +695,7 @@ class DhsiScreen extends StatelessWidget {
   Widget _buildLevelTimeline(
     BuildContext context,
     DhsiData dhsiData,
+    String userName,
     String userAvatar,
   ) {
     final currentLevel = dhsiData.level?.currentLevel ?? 1;
@@ -697,6 +722,7 @@ class DhsiScreen extends StatelessWidget {
           isCompleted: isCompleted,
           isCurrent: isCurrent,
           isLocked: isLocked,
+          userName: isCurrent ? (dhsiData.user?.name ?? userName) : null,
           userAvatar: isCurrent ? (dhsiData.user?.avatar ?? userAvatar) : null,
         ),
       );
@@ -758,37 +784,44 @@ class DhsiScreen extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: const Color(0xFFFFF8FC),
-                    border: Border.all(
-                      color: const Color(0xFFFFD5DD),
-                      width: 1,
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: const Color(0xFFFFF8FC),
+                      border: Border.all(
+                        color: const Color(0xFFFFD5DD),
+                        width: 1,
+                      ),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Text(
+                            "${dhsiData.level?.pointsToNext ?? 0} Points to reach",
+                            style: fontStyle.clashDisplayBold10.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                          Text(
+                            " ${dhsiData.level?.nextLevelName ?? 'next level'}  ",
+                            style: fontStyle.clashDisplayBold10.textColor(
+                              appColor(context).primary,
+                            ),
+                          ),
+                          const Text("🚀", style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Text(
-                        "${dhsiData.level?.pointsToNext ?? 0} Points to reach",
-                        style: fontStyle.clashDisplayBold10.textColor(
-                          appColor(context).black,
-                        ),
-                      ),
-                      Text(
-                        " ${dhsiData.level?.nextLevelName ?? 'next level'}  ",
-                        style: fontStyle.clashDisplayBold10.textColor(
-                          appColor(context).primary,
-                        ),
-                      ),
-                      const Text("🚀", style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
                 ),
+                const SizedBox(width: 8),
                 // Indicator dots
                 Row(
                   children: [
@@ -837,6 +870,7 @@ class DhsiScreen extends StatelessWidget {
     bool isCompleted = false,
     bool isCurrent = false,
     bool isLocked = false,
+    String? userName,
     String? userAvatar,
   }) {
     // Determine card background and border colors
@@ -936,14 +970,30 @@ class DhsiScreen extends StatelessWidget {
                           ? Image.network(
                               ApiService.getImageUrl(userAvatar),
                               fit: BoxFit.cover,
-                              errorBuilder: (c, o, s) => Image.asset(
-                                ImageAssets.maisieAvatar,
-                                fit: BoxFit.cover,
+                              errorBuilder: (c, o, s) => Container(
+                                color: appColor(context).secondary.withValues(alpha: 0.1),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  (userName ?? "User").isNotEmpty
+                                      ? (userName ?? "User")[0].toUpperCase()
+                                      : "U",
+                                  style: fontStyle.clashDisplayBold16.textColor(
+                                    appColor(context).secondary,
+                                  ),
+                                ),
                               ),
                             )
-                          : Image.asset(
-                              ImageAssets.maisieAvatar,
-                              fit: BoxFit.cover,
+                          : Container(
+                              color: appColor(context).secondary.withValues(alpha: 0.1),
+                              alignment: Alignment.center,
+                              child: Text(
+                                (userName ?? "User").isNotEmpty
+                                    ? (userName ?? "User")[0].toUpperCase()
+                                    : "U",
+                                style: fontStyle.clashDisplayBold16.textColor(
+                                  appColor(context).secondary,
+                                ),
+                              ),
                             ),
                     ),
                   ),

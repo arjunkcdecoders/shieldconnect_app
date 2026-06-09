@@ -1,13 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/moderator/moderation_controller.dart';
+import 'package:shieldconnect_app/model/moderator/moderation_item.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
+import 'package:shieldconnect_app/view/voice_message_bubble.dart';
 
 class ModerationDetailsScreen extends StatelessWidget {
-  final Map<String, dynamic> item;
+  final ModerationItem item;
 
   const ModerationDetailsScreen({super.key, required this.item});
+
+  void _showSuccessDialog(BuildContext context, String displayStatus) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (dialogContext.mounted) {
+            Navigator.pop(dialogContext);
+          }
+        });
+
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 50,
+                  width: 50,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8F5E9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: Color(0xFF2E7D32),
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Success",
+                  style: fontStyle.clashDisplayBold20
+                      .textColor(appColor(context).black)
+                      .size(18),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Successfully updated to $displayStatus",
+                  textAlign: TextAlign.center,
+                  style: fontStyle.clashDisplayRegular14
+                      .textColor(appColor(context).darkText)
+                      .size(13),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   void _showConfirmationDialog({
     required BuildContext context,
@@ -17,73 +75,163 @@ class ModerationDetailsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: appColor(context).primary, size: 28),
-              const SizedBox(width: 10),
-              Text(
-                "Confirm Action",
-                style: fontStyle.clashDisplayBold20.textColor(appColor(context).black).size(18),
+        bool isLoading = false;
+        bool isFailed = false;
+        return StatefulBuilder(
+          builder: (dialogCtx, setState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-            ],
-          ),
-          content: Text(
-            "Are you sure you want to change the status of this message to $displayStatus?",
-            style: fontStyle.clashDisplayRegular14.textColor(appColor(context).darkText).size(14),
-          ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(
-                "Cancel",
-                style: fontStyle.clashDisplaySemiBold14.textColor(appColor(context).silver).size(14),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: appColor(context).primary,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    "Confirm Action",
+                    style: fontStyle.clashDisplayBold20
+                        .textColor(appColor(context).black)
+                        .size(18),
+                  ),
+                ],
               ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: appColor(context).primary,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              content: Text(
+                "Are you sure you want to change the status of this item to $displayStatus?",
+                style: fontStyle.clashDisplayRegular14
+                    .textColor(appColor(context).darkText)
+                    .size(14),
               ),
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                final controller = Provider.of<ModerationController>(context, listen: false);
-                final itemId = item['postId'] ?? item['_id'] ?? '';
-                final success = await controller.updateItemStatus(
-                  itemId: itemId,
-                  status: apiStatus,
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? "Successfully updated item status to $displayStatus"
-                            : "Failed to update item status. Please try again.",
-                        style: fontStyle.clashDisplayRegular12.textColor(Colors.white),
+              actionsPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isLoading
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+                  child: Text(
+                    "Cancel",
+                    style: fontStyle.clashDisplaySemiBold14
+                        .textColor(appColor(context).silver)
+                        .size(14),
+                  ),
+                ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: appColor(context).primary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                       ),
-                      backgroundColor: success ? Colors.green : Colors.red,
+                      onPressed: isLoading
+                          ? null
+                          : () async {
+                              setState(() {
+                                isLoading = true;
+                                isFailed = false;
+                              });
+                              final controller =
+                                  Provider.of<ModerationController>(
+                                    context,
+                                    listen: false,
+                                  );
+                              final success = await controller.updateItemStatus(
+                                itemId: item.id,
+                                status: apiStatus,
+                                isProfileUpdate: item.isProfileUpdate,
+                                profileType: item.profileType,
+                              );
+                              if (success) {
+                                if (context.mounted) {
+                                  Navigator.pop(dialogContext);
+                                  _showSuccessDialog(context, displayStatus);
+                                  Future.delayed(
+                                    const Duration(milliseconds: 1500),
+                                    () {
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                      }
+                                    },
+                                  );
+                                }
+                              } else {
+                                if (context.mounted) {
+                                  setState(() {
+                                    isLoading = false;
+                                    isFailed = true;
+                                  });
+                                }
+                              }
+                            },
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              "Confirm",
+                              style: fontStyle.clashDisplaySemiBold14
+                                  .textColor(Colors.white)
+                                  .size(14),
+                            ),
                     ),
-                  );
-                  if (success) {
-                    Navigator.pop(context);
-                  }
-                }
-              },
-              child: Text(
-                "Confirm",
-                style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white).size(14),
-              ),
-            ),
-          ],
+                    if (isFailed)
+                      Positioned(
+                        top: -6,
+                        right: -6,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.error_outline,
+                            color: Colors.white,
+                            size: 10,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
         );
       },
     );
+  }
+
+  String _formatTimestamp(String timestampStr) {
+    final parsed = DateTime.tryParse(timestampStr);
+    if (parsed == null) return timestampStr;
+    return "${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} ${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}";
+  }
+
+  String _formatTime(String timestampStr) {
+    final parsed = DateTime.tryParse(timestampStr);
+    if (parsed == null) return '2:20 PM';
+    final hour = parsed.hour > 12 ? parsed.hour - 12 : (parsed.hour == 0 ? 12 : parsed.hour);
+    final amPm = parsed.hour >= 12 ? 'PM' : 'AM';
+    return "$hour:${parsed.minute.toString().padLeft(2, '0')} $amPm";
   }
 
   @override
@@ -133,18 +281,61 @@ class ModerationDetailsScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: Colors.white.withOpacity(0.2),
+                        backgroundImage: (item.isProfileUpdate)
+                            ? ((item.pendingAvatar != null &&
+                                      item.pendingAvatar!.isNotEmpty)
+                                  ? NetworkImage(item.pendingAvatar!)
+                                  : (item.fileUrl != null &&
+                                        item.fileUrl!.isNotEmpty)
+                                  ? NetworkImage(item.fileUrl!)
+                                  : null)
+                            : ((item.senderId?.avatar != null &&
+                                      item.senderId!.avatar!.isNotEmpty)
+                                  ? NetworkImage(item.senderId!.avatar!)
+                                  : null),
+                        child: (item.isProfileUpdate)
+                            ? (((item.pendingAvatar == null ||
+                                          item.pendingAvatar!.isEmpty) &&
+                                      (item.fileUrl == null ||
+                                          item.fileUrl!.isEmpty))
+                                  ? Icon(
+                                      item.profileType == 'group'
+                                          ? Icons.group
+                                          : Icons.person,
+                                      color: Colors.white,
+                                      size: 14,
+                                    )
+                                  : null)
+                            : ((item.senderId?.avatar == null ||
+                                      item.senderId!.avatar!.isEmpty)
+                                  ? const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 14,
+                                    )
+                                  : null),
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        item['postId'] ?? 'post-007',
+                        item.id.length > 6
+                            ? item.id.substring(item.id.length - 6)
+                            : item.id,
                         style: fontStyle.clashDisplayMedium12
                             .textColor(Colors.white.withOpacity(0.8))
                             .size(12),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        item['userName'] ?? 'SkyRunner',
-                        style: fontStyle.clashDisplayBold30
-                            .textColor(Colors.white)
-                            .size(14),
+                      Expanded(
+                        child: Text(
+                          item.senderId?.name ?? 'Unknown',
+                          style: fontStyle.clashDisplayBold30
+                              .textColor(Colors.white)
+                              .size(14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -162,14 +353,22 @@ class ModerationDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.chat_bubble_outline,
+                      Icon(
+                        item.isProfileUpdate
+                            ? (item.profileType == 'group'
+                                  ? Icons.group_outlined
+                                  : Icons.person_outline)
+                            : Icons.chat_bubble_outline,
                         color: Colors.white,
                         size: 16,
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Text',
+                        item.isProfileUpdate
+                            ? (item.profileType == 'group'
+                                  ? 'Group Profile Update'
+                                  : 'User Profile Update')
+                            : 'Text Message',
                         style: fontStyle.clashDisplaySemiBold18
                             .textColor(Colors.white)
                             .size(12),
@@ -181,7 +380,7 @@ class ModerationDetailsScreen extends StatelessWidget {
                     children: [
                       _buildTag(
                         context,
-                        "Risk ${item['riskScore'] ?? '0.87'}",
+                        "Status: ${item.moderationStatus}",
                         Colors.white,
                         appColor(context).primary,
                         borderColor: appColor(context).primary,
@@ -189,14 +388,7 @@ class ModerationDetailsScreen extends StatelessWidget {
                       const SizedBox(width: 6),
                       _buildTag(
                         context,
-                        "GROOMING",
-                        const Color(0xFFE1F5FE),
-                        const Color(0xFF00A3FF),
-                      ),
-                      const SizedBox(width: 6),
-                      _buildTag(
-                        context,
-                        "TRUST_BUILDING",
+                        item.messageType.toUpperCase(),
                         const Color(0xFFE1F5FE),
                         const Color(0xFF00A3FF),
                       ),
@@ -204,7 +396,7 @@ class ModerationDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    item['timestamp'] ?? '1/15/2025  8:45:00 PM',
+                    _formatTimestamp(item.createdAt),
                     style: fontStyle.clashDisplayRegular12
                         .textColor(Colors.white.withOpacity(0.8))
                         .size(11),
@@ -230,107 +422,310 @@ class ModerationDetailsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Text(
-                item['content'] ??
-                    'You seem so mature for your age. I\'ve never met anyone who understands me like you do. Can we talk somewhere more private?',
-                style: fontStyle.clashDisplayMedium12
-                    .textColor(appColor(context).black)
-                    .size(12)
-                    .copyWith(height: 1.4),
-              ),
+              child: item.isProfileUpdate
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "PROPOSED PROFILE DETAILS",
+                          style: fontStyle.clashDisplayBold30
+                              .textColor(appColor(context).primary)
+                              .size(12),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: appColor(
+                                    context,
+                                  ).primary.withOpacity(0.2),
+                                  width: 2.5,
+                                ),
+                              ),
+                              child: CircleAvatar(
+                                radius: 32,
+                                backgroundColor: appColor(context).bgGrey,
+                                backgroundImage:
+                                    (item.pendingAvatar != null &&
+                                        item.pendingAvatar!.isNotEmpty)
+                                    ? NetworkImage(item.pendingAvatar!)
+                                    : (item.fileUrl != null &&
+                                          item.fileUrl!.isNotEmpty)
+                                    ? NetworkImage(item.fileUrl!)
+                                    : null,
+                                child:
+                                    ((item.pendingAvatar == null ||
+                                            item.pendingAvatar!.isEmpty) &&
+                                        (item.fileUrl == null ||
+                                            item.fileUrl!.isEmpty))
+                                    ? Icon(
+                                        item.profileType == 'group'
+                                            ? Icons.group
+                                            : Icons.person,
+                                        color: appColor(context).silver,
+                                        size: 32,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.profileType == 'group'
+                                        ? "Group Name"
+                                        : "Display Name",
+                                    style: fontStyle.clashDisplayMedium12
+                                        .textColor(appColor(context).silver)
+                                        .size(10),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    item.pendingName ?? "Unnamed",
+                                    style: fontStyle.clashDisplayBold30
+                                        .textColor(appColor(context).black)
+                                        .size(15),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    item.profileType == 'group'
+                                        ? "Group Description"
+                                        : "Bio",
+                                    style: fontStyle.clashDisplayMedium12
+                                        .textColor(appColor(context).silver)
+                                        .size(10),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    item.pendingBio ?? "None",
+                                    style: fontStyle.clashDisplayRegular14
+                                        .textColor(appColor(context).black)
+                                        .size(12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Text(
+                      item.content ?? '',
+                      style: fontStyle.clashDisplayMedium12
+                          .textColor(appColor(context).black)
+                          .size(12)
+                          .copyWith(height: 1.4),
+                    ),
             ),
             const SizedBox(height: 20),
 
             // Action Buttons
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionButton(
-                    context,
-                    label: 'Approve',
-                    icon: Icons.check_circle_outline,
-                    color: appColor(context).primary,
-                    textColor: Colors.white,
-                    onTap: () => _showConfirmationDialog(
-                      context: context,
-                      displayStatus: "Approved",
-                      apiStatus: "Approved",
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildActionButton(
-                    context,
-                    label: 'Reject',
-                    icon: Icons.cancel_outlined,
-                    color: const Color(0xFFEBEBEB),
-                    textColor: appColor(context).primary,
-                    onTap: () => _showConfirmationDialog(
-                      context: context,
-                      displayStatus: "Rejected",
-                      apiStatus: "Blocked",
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildActionButton(
-                    context,
-                    label: 'Escalate',
-                    icon: Icons.outlined_flag,
-                    color: const Color(0xFFEBEBEB),
-                    textColor: const Color(0xFF757575),
-                    onTap: () => _showConfirmationDialog(
-                      context: context,
-                      displayStatus: "Escalate",
-                      apiStatus: "Escalate",
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Detected Chat
-            Text(
-              'Detected Chat',
-              style: fontStyle.clashDisplayBold30
-                  .textColor(appColor(context).black)
-                  .size(16),
-            ),
-            const SizedBox(height: 16),
-
-            // Chat Preview
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Image message
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 42, bottom: 4),
-                      child: Text(
-                        'Phoenix Baker',
-                        style: fontStyle.clashDisplayMedium12
-                            .textColor(appColor(context).textSecondary)
-                            .size(11),
+            if (item.moderationStatus == 'Moderation')
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionButton(
+                      context,
+                      label: 'Approve',
+                      icon: Icons.check_circle_outline,
+                      color: appColor(context).primary,
+                      textColor: Colors.white,
+                      onTap: () => _showConfirmationDialog(
+                        context: context,
+                        displayStatus: "Approved",
+                        apiStatus: "Approved",
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildActionButton(
+                      context,
+                      label: 'Reject',
+                      icon: Icons.cancel_outlined,
+                      color: const Color(0xFFEBEBEB),
+                      textColor: appColor(context).primary,
+                      onTap: () => _showConfirmationDialog(
+                        context: context,
+                        displayStatus: "Rejected",
+                        apiStatus: "Blocked",
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildActionButton(
+                      context,
+                      label: 'Escalate',
+                      icon: Icons.outlined_flag,
+                      color: const Color(0xFFEBEBEB),
+                      textColor: const Color(0xFF757575),
+                      iconColor: const Color(0xFFFFDE21),
+                      onTap: () => _showConfirmationDialog(
+                        context: context,
+                        displayStatus: "Escalate",
+                        apiStatus: "Escalate",
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 24),
+
+            // Detected Chat Preview (Only for chat messages)
+            if (!item.isProfileUpdate) ...[
+              Text(
+                'Detected Chat Preview',
+                style: fontStyle.clashDisplayBold30
+                    .textColor(appColor(context).black)
+                    .size(16),
+              ),
+              const SizedBox(height: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Image message (if it is an image message type)
+                  if (item.messageType == 'image')
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 42, bottom: 4),
+                          child: Text(
+                            item.senderId?.name ?? 'Sender',
+                            style: fontStyle.clashDisplayMedium12
+                                .textColor(appColor(context).textSecondary)
+                                .size(11),
+                          ),
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: appColor(context).bgGrey,
+                              backgroundImage:
+                                  (item.senderId?.avatar != null &&
+                                      item.senderId!.avatar!.isNotEmpty)
+                                  ? NetworkImage(item.senderId!.avatar!)
+                                  : null,
+                              child:
+                                  (item.senderId?.avatar == null ||
+                                      item.senderId!.avatar!.isEmpty)
+                                  ? Icon(
+                                      Icons.person,
+                                      color: appColor(context).silver,
+                                      size: 16,
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEBEBEB),
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  topRight: Radius.circular(16),
+                                  bottomRight: Radius.circular(16),
+                                  bottomLeft: Radius.circular(4),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(
+                                      (item.fileUrl != null &&
+                                              item.fileUrl!.isNotEmpty)
+                                          ? item.fileUrl!
+                                          : 'https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&q=80&w=400',
+                                      width: 200,
+                                      height: 200,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      right: 8,
+                                      bottom: 2,
+                                      top: 2,
+                                    ),
+                                    child: Text(
+                                      '2:20 PM',
+                                      style: fontStyle.clashDisplayRegular12
+                                          .textColor(
+                                            appColor(context).textSecondary,
+                                          )
+                                          .size(9),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  else if (item.messageType == 'audio')
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 42, bottom: 4),
+                          child: Text(
+                            item.senderId?.name ?? 'Sender',
+                            style: fontStyle.clashDisplayMedium12
+                                .textColor(appColor(context).textSecondary)
+                                .size(11),
+                          ),
+                        ),
+                        VoiceMessageBubble(
+                          url: item.fileUrl,
+                          isOutgoing: false,
+                          avatarUrl: item.senderId?.avatar,
+                          time: _formatTime(item.createdAt),
+                        ),
+                      ],
+                    )
+                  else ...[
+                    // 2. Chat bubble for text content
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         CircleAvatar(
                           radius: 16,
-                          backgroundImage: NetworkImage(
-                            item['userImage'] ??
-                                'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100',
-                          ),
+                          backgroundColor: appColor(context).bgGrey,
+                          backgroundImage:
+                              (item.senderId?.avatar != null &&
+                                  item.senderId!.avatar!.isNotEmpty)
+                              ? NetworkImage(item.senderId!.avatar!)
+                              : null,
+                          child:
+                              (item.senderId?.avatar == null ||
+                                  item.senderId!.avatar!.isEmpty)
+                              ? Icon(
+                                  Icons.person,
+                                  color: appColor(context).silver,
+                                  size: 16,
+                                )
+                              : null,
                         ),
                         const SizedBox(width: 10),
                         Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          constraints: const BoxConstraints(maxWidth: 220),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEBEBEB),
                             borderRadius: const BorderRadius.only(
@@ -341,26 +736,20 @@ class ModerationDetailsScreen extends StatelessWidget {
                             ),
                           ),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  'https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&q=80&w=400',
-                                  width: 200,
-                                  height: 200,
-                                  fit: BoxFit.cover,
-                                ),
+                              Text(
+                                item.content ?? '',
+                                style: fontStyle.clashDisplayMedium12
+                                    .textColor(appColor(context).black)
+                                    .size(12)
+                                    .copyWith(height: 1.3),
                               ),
                               const SizedBox(height: 4),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  right: 8,
-                                  bottom: 2,
-                                  top: 2,
-                                ),
+                              Align(
+                                alignment: Alignment.bottomRight,
                                 child: Text(
-                                  '2:20 PM',
+                                  '2:20pm',
                                   style: fontStyle.clashDisplayRegular12
                                       .textColor(
                                         appColor(context).textSecondary,
@@ -374,119 +763,9 @@ class ModerationDetailsScreen extends StatelessWidget {
                       ],
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-
-                // 2. Text message "Hiii"
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 42, bottom: 4),
-                      child: Text(
-                        'Phoenix Baker',
-                        style: fontStyle.clashDisplayMedium12
-                            .textColor(appColor(context).textSecondary)
-                            .size(11),
-                      ),
-                    ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const SizedBox(width: 42),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEBEBEB),
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(16),
-                              topRight: Radius.circular(16),
-                              bottomRight: Radius.circular(16),
-                              bottomLeft: Radius.circular(4),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Hiii',
-                                style: fontStyle.clashDisplayMedium12
-                                    .textColor(appColor(context).black)
-                                    .size(12),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '2:20pm',
-                                style: fontStyle.clashDisplayRegular12
-                                    .textColor(appColor(context).textSecondary)
-                                    .size(9),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // 3. Text message "Let's get lunch soon! When are you free? 🤗"
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundImage: NetworkImage(
-                        item['userImage'] ??
-                            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100',
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEBEBEB),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                          bottomLeft: Radius.circular(4),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Let's get lunch soon! When are you free? 🤗",
-                            style: fontStyle.clashDisplayMedium12
-                                .textColor(appColor(context).black)
-                                .size(12)
-                                .copyWith(height: 1.3),
-                          ),
-                          const SizedBox(height: 4),
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: Text(
-                              '2:20pm',
-                              style: fontStyle.clashDisplayRegular12
-                                  .textColor(appColor(context).textSecondary)
-                                  .size(9),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -522,6 +801,7 @@ class ModerationDetailsScreen extends StatelessWidget {
     required IconData icon,
     required Color color,
     required Color textColor,
+    Color? iconColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -544,7 +824,7 @@ class ModerationDetailsScreen extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: textColor, size: 16),
+            Icon(icon, color: iconColor ?? textColor, size: 16),
             const SizedBox(width: 4),
             Text(
               label,

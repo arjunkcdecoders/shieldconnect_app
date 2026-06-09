@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shieldconnect_app/controller/bottomnav_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/notification_controller.dart';
 import 'package:shieldconnect_app/model/api_response.dart';
@@ -128,6 +129,7 @@ class LoginController extends ChangeNotifier {
           if (context.mounted) {
             // Refresh controllers with new session data AFTER the delay, right before navigating,
             // to ensure the loading syncing spinner is active when ChatlistScreen mounts.
+            context.read<BottomnavController>().checkStatusFeature();
             context.read<HomeScreenController>().init();
             context.read<ProfileController>().init();
             context.read<NotificationController>().init();

@@ -39,6 +39,7 @@ class ProfileController extends ChangeNotifier {
   List<dynamic> _archivedChats = [];
   bool _isModerator = false;
   String _region = "";
+  String _appMode = "user";
 
   // Controllers for editing
   final TextEditingController nameController = TextEditingController();
@@ -75,11 +76,21 @@ class ProfileController extends ChangeNotifier {
   bool get showDeleteFailedText => _showDeleteFailedText;
   bool get isModerator => _isModerator;
   String get region => _region;
+  String get appMode => _appMode;
 
   // Initialize data
   Future<void> init() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    _appMode = prefs.getString('app_mode') ?? 'user';
     await fetchUserDetails();
     await fetchArchivedChats();
+  }
+
+  Future<void> setAppMode(String mode) async {
+    _appMode = mode;
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('app_mode', mode);
+    notifyListeners();
   }
 
   // Fetch user details from session
@@ -88,6 +99,7 @@ class ProfileController extends ChangeNotifier {
       _shouldRemoveAvatar = false;
       _showImageOptions = false;
       final SharedPreferences prefs = await SharedPreferences.getInstance();
+      _appMode = prefs.getString('app_mode') ?? 'user';
       final String? sessionStr = prefs.getString('user_session');
       debugPrint("ProfileController: sessionStr: $sessionStr");
 
@@ -490,11 +502,12 @@ class ProfileController extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
 
-        if (context.mounted) {
+         if (context.mounted) {
           context.read<StatusController>().init();
           context.read<AddNewChatController>().init();
-          // Reset bottom navigation index
+          // Reset bottom navigation index and check status feature
           context.read<BottomnavController>().reset();
+          context.read<BottomnavController>().checkStatusFeature();
           // Navigate to LoginScreen
           Navigator.pushAndRemoveUntil(
             context,
@@ -542,7 +555,7 @@ class ProfileController extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
 
-    if (context.mounted) {
+     if (context.mounted) {
       context.read<StatusController>().init();
       context.read<AddNewChatController>().init();
       Navigator.pushAndRemoveUntil(
@@ -551,9 +564,10 @@ class ProfileController extends ChangeNotifier {
         (route) => false,
       );
     }
-    // Reset bottom navigation index to 0 (Chat List)
+    // Reset bottom navigation index and check status feature
     if (context.mounted) {
       context.read<BottomnavController>().reset();
+      context.read<BottomnavController>().checkStatusFeature();
     }
   }
 

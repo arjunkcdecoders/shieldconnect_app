@@ -21,6 +21,7 @@ class ModerationItem {
 
   // Moderator review details
   final ModeratorDetails? moderatorDetails;
+  final SenderDetails? recipientId;
 
   ModerationItem({
     required this.id,
@@ -38,6 +39,7 @@ class ModerationItem {
     this.pendingBio,
     this.pendingAvatar,
     this.moderatorDetails,
+    this.recipientId,
   });
 
   factory ModerationItem.fromJson(Map<String, dynamic> json) {
@@ -59,6 +61,7 @@ class ModerationItem {
       moderatorDetails: json['moderator_details'] != null
           ? ModeratorDetails.fromJson(json['moderator_details'])
           : null,
+      recipientId: json['recipient_id'] != null ? SenderDetails.fromJson(json['recipient_id']) : null,
     );
   }
 
@@ -79,6 +82,7 @@ class ModerationItem {
       'pending_bio': pendingBio,
       'pending_avatar': pendingAvatar,
       'moderator_details': moderatorDetails?.toJson(),
+      'recipient_id': recipientId?.toJson(),
     };
   }
 }

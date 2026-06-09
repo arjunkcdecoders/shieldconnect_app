@@ -73,6 +73,42 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
         });
       }
     });
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _position = Duration.zero;
+          _isPlaying = false;
+        });
+      }
+    });
+
+    _initAudioSource();
+  }
+
+  Future<void> _initAudioSource() async {
+    if (widget.url != null && widget.url!.isNotEmpty) {
+      try {
+        final absoluteUrl = ApiService.getImageUrl(widget.url);
+        await _audioPlayer.setSource(UrlSource(absoluteUrl));
+        final dur = await _audioPlayer.getDuration();
+        if (dur != null && mounted) {
+          setState(() {
+            _duration = dur;
+          });
+        }
+      } catch (e) {
+        debugPrint("Error preloading audio source duration: $e");
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant VoiceMessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _initAudioSource();
+    }
   }
 
   @override
@@ -108,7 +144,9 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
         ? appColor(context).secondary
         : appColor(context).grey100;
 
-    final subtitleColor = Colors.white60;
+    final subtitleColor = widget.isOutgoing
+        ? Colors.white60
+        : appColor(context).textSecondary;
 
     Widget buildAvatar() {
       final String resolvedAvatar = widget.avatarUrl ?? '';
@@ -205,7 +243,9 @@ class _VoiceMessageBubbleState extends State<VoiceMessageBubble> {
                       ? widget.isOutgoing
                             ? appColor(context).white
                             : appColor(context).black
-                      : Colors.white24,
+                      : widget.isOutgoing
+                            ? Colors.white24
+                            : appColor(context).silver.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(1),
                 ),
               );
