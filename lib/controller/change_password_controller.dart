@@ -66,10 +66,12 @@ class ChangePasswordController extends ChangeNotifier {
 
     // 2. At least one upper case and one lower case
     hasUpperAndLowerCase =
-        password.contains(RegExp(r'[A-Z]')) && password.contains(RegExp(r'[a-z]'));
+        password.contains(RegExp(r'[A-Z]')) &&
+        password.contains(RegExp(r'[a-z]'));
 
     // 3. One number and one special character
-    hasNumberAndSpecialChar = password.contains(RegExp(r'[0-9]')) &&
+    hasNumberAndSpecialChar =
+        password.contains(RegExp(r'[0-9]')) &&
         password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
 
     notifyListeners();
@@ -206,10 +208,7 @@ class ChangePasswordController extends ChangeNotifier {
 
       final response = await ApiService().put(
         '/users/change-password/$userId',
-        data: {
-          "currentPassword": oldPassword,
-          "newPassword": newPassword,
-        },
+        data: {"currentPassword": oldPassword, "newPassword": newPassword},
       );
 
       final responseData = response.data;
@@ -217,7 +216,9 @@ class ChangePasswordController extends ChangeNotifier {
           ? jsonDecode(responseData)
           : responseData as Map<String, dynamic>;
 
-      if (response.statusCode == 200 || response.statusCode == 201 || (json['success'] == true)) {
+      if (response.statusCode == 200 ||
+          response.statusCode == 201 ||
+          (json['success'] == true)) {
         debugPrint("API_FLOW: Password changed successfully");
         if (context.mounted) {
           _feedbackMessage = 'Password changed successfully.';
@@ -277,4 +278,3 @@ class ChangePasswordController extends ChangeNotifier {
     super.dispose();
   }
 }
-

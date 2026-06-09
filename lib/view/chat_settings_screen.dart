@@ -10,115 +10,118 @@ class ChatSettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ChatSettingsController>(
-      builder: (context, controller, child) {
-        if (controller.isLoading) {
+    return ChangeNotifierProvider<ChatSettingsController>(
+      create: (context) => ChatSettingsController(),
+      child: Consumer<ChatSettingsController>(
+        builder: (context, controller, child) {
+          if (controller.isLoading) {
+            return Scaffold(
+              backgroundColor: appColor(context).white,
+              body: Center(
+                child: CircularProgressIndicator(
+                  color: appColor(context).secondary,
+                ),
+              ),
+            );
+          }
+
+          final bool showProfilePic = controller.showProfilePic;
+          final bool showBio = controller.showBio;
+          final bool showLastSeen = controller.showLastSeen;
+          final bool readReceipts = controller.readReceipts;
+          final bool typingIndicators = controller.typingIndicators;
+
           return Scaffold(
             backgroundColor: appColor(context).white,
-            body: Center(
-              child: CircularProgressIndicator(
-                color: appColor(context).secondary,
-              ),
-            ),
-          );
-        }
-
-        final bool showProfilePic = controller.showProfilePic;
-        final bool showBio = controller.showBio;
-        final bool showLastSeen = controller.showLastSeen;
-        final bool readReceipts = controller.readReceipts;
-        final bool typingIndicators = controller.typingIndicators;
-
-        return Scaffold(
-          backgroundColor: appColor(context).white,
-          body: SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 10.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. Navigation Header
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: appColor(context).grey100,
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.chevron_left,
-                                color: appColor(context).secondary,
-                                size: 20,
+            body: SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 10.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. Navigation Header
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: appColor(context).grey100,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.chevron_left,
+                                  color: appColor(context).secondary,
+                                  size: 20,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Text(
-                          "Chat Settings",
-                          style: fontStyle.clashDisplaySemiBold20.textColor(
-                            appColor(context).black,
+                          const SizedBox(width: 16),
+                          Text(
+                            "Chat Settings",
+                            style: fontStyle.clashDisplaySemiBold20.textColor(
+                              appColor(context).black,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 36),
-                    _buildStatusPrivacyCard(context, controller),
+                        ],
+                      ),
+                      const SizedBox(height: 36),
+                      _buildStatusPrivacyCard(context, controller),
 
-                    // 2. Settings Group
-                    _buildToggleCard(
-                      context,
-                      title: "Show Profile Picture",
-                      subtitle: "Allow others to see your profile picture",
-                      value: showProfilePic,
-                      onChanged: (val) => controller.updateToggleSetting("show_profile_pic", val),
-                    ),
-                    _buildToggleCard(
-                      context,
-                      title: "Show Bio",
-                      subtitle: "Display your 'About' information to contacts",
-                      value: showBio,
-                      onChanged: (val) => controller.updateToggleSetting("show_bio", val),
-                    ),
-                    _buildToggleCard(
-                      context,
-                      title: "Last Seen",
-                      subtitle: "Show when you were last active",
-                      value: showLastSeen,
-                      onChanged: (val) => controller.updateToggleSetting("show_last_seen", val),
-                    ),
-                    _buildToggleCard(
-                      context,
-                      title: "Read Receipts",
-                      subtitle: "Send and receive read confirmation (ticks)",
-                      value: readReceipts,
-                      onChanged: (val) => controller.updateToggleSetting("show_read_receipts", val),
-                    ),
-                    _buildToggleCard(
-                      context,
-                      title: "Typing Indicators",
-                      subtitle: "Show when you are typing a message",
-                      value: typingIndicators,
-                      onChanged: (val) => controller.updateToggleSetting("show_typing_indicator", val),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+                      // 2. Settings Group
+                      _buildToggleCard(
+                        context,
+                        title: "Show Profile Picture",
+                        subtitle: "Allow others to see your profile picture",
+                        value: showProfilePic,
+                        onChanged: (val) => controller.updateToggleSetting("show_profile_pic", val),
+                      ),
+                      _buildToggleCard(
+                        context,
+                        title: "Show Bio",
+                        subtitle: "Display your 'About' information to contacts",
+                        value: showBio,
+                        onChanged: (val) => controller.updateToggleSetting("show_bio", val),
+                      ),
+                      _buildToggleCard(
+                        context,
+                        title: "Last Seen",
+                        subtitle: "Show when you were last active",
+                        value: showLastSeen,
+                        onChanged: (val) => controller.updateToggleSetting("show_last_seen", val),
+                      ),
+                      _buildToggleCard(
+                        context,
+                        title: "Read Receipts",
+                        subtitle: "Send and receive read confirmation (ticks)",
+                        value: readReceipts,
+                        onChanged: (val) => controller.updateToggleSetting("show_read_receipts", val),
+                      ),
+                      _buildToggleCard(
+                        context,
+                        title: "Typing Indicators",
+                        subtitle: "Show when you are typing a message",
+                        value: typingIndicators,
+                        onChanged: (val) => controller.updateToggleSetting("show_typing_indicator", val),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

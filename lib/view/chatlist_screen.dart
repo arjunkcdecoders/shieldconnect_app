@@ -592,11 +592,14 @@ class ChatlistScreen extends StatelessWidget {
     final lastMessage = item['last_message'] ?? {};
     final String chatId = (conversation['id'] ?? conversation['_id'] ?? '')
         .toString();
-    final String? typingIndicatorText = homeController.getTypingIndicatorText(
-      chatId,
-    );
-
     final bool isGroup = conversation['type'] == 'group';
+    final bool showTypingIndicator = conversation['show_typing_indicator'] as bool? ?? true;
+    final String? typingIndicatorText = (!isGroup && !showTypingIndicator)
+        ? null
+        : homeController.getTypingIndicatorText(
+            chatId,
+          );
+
     final bool isRequest =
         item['relationship']?['status'] == 'pending' &&
         item['requested_by'] != null;
@@ -676,7 +679,10 @@ class ChatlistScreen extends StatelessWidget {
     }
 
     final bool hasRing = false;
-    final bool hasStatusDot = conversation['is_online'] ?? false;
+    final bool showLastSeen = conversation['show_last_seen'] as bool? ?? true;
+    final bool hasStatusDot = (!isGroup && !showLastSeen)
+        ? false
+        : (conversation['is_online'] ?? false);
     final String? senderId =
         lastMessage['sender_id']?.toString() ??
         lastMessage['sender']?.toString();
@@ -687,7 +693,10 @@ class ChatlistScreen extends StatelessWidget {
         rawType == 'status' ||
         messageContentRaw.startsWith("system_member_") ||
         messageContentRaw.contains("system_group_created");
-    final String? imagePath = conversation['image'];
+    final bool showProfilePic = conversation['show_profile_pic'] as bool? ?? true;
+    final String? imagePath = (!isGroup && !showProfilePic)
+        ? null
+        : conversation['image'];
 
     bool showNewGroupBadge = false;
     if (isGroup &&

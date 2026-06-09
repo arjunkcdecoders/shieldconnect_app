@@ -34,9 +34,10 @@ class ContactInfoScreen extends StatelessWidget {
             }
 
             final String displayName = details?['name'] ?? name;
-            final String avatarPath = details?['avatar'] ?? "";
-            final String bio =
-                details?['bio'] ?? "Hey there! I am using ShieldConnect.";
+            final bool showProfilePic = details?['show_profile_pic'] ?? true;
+            final String avatarPath = showProfilePic ? (details?['avatar'] ?? "") : "";
+            final bool showBio = details?['show_bio'] ?? true;
+            final String bio = showBio ? (details?['bio'] ?? "Hey there! I am using ShieldConnect.") : "";
 
             final List<dynamic> mediaImages = details?['medias'] ?? [];
             final List<dynamic> groupsInCommon =
@@ -51,7 +52,7 @@ class ContactInfoScreen extends StatelessWidget {
                   _buildHeader(context),
 
                   // 2. Big Center Profile block
-                  _buildProfileBlock(context, displayName, avatarPath, bio),
+                  _buildProfileBlock(context, displayName, avatarPath, bio, showBio: showBio),
 
                   // 3. Grid/Row of Action Cards
                   _buildActionRow(context, displayName, avatarPath),
@@ -121,8 +122,9 @@ class ContactInfoScreen extends StatelessWidget {
     BuildContext context,
     String displayName,
     String avatarPath,
-    String bio,
-  ) {
+    String bio, {
+    required bool showBio,
+  }) {
     final avatarUrl = ApiService.getImageUrl(avatarPath);
 
     return Container(
@@ -178,19 +180,21 @@ class ContactInfoScreen extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          if (showBio && bio.isNotEmpty) ...[
+            const SizedBox(height: 12),
 
-          // Status emoji text
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Text(
-              bio,
-              textAlign: TextAlign.center,
-              style: fontStyle.clashDisplayMedium14.textColor(
-                appColor(context).black,
+            // Status emoji text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Text(
+                bio,
+                textAlign: TextAlign.center,
+                style: fontStyle.clashDisplayMedium14.textColor(
+                  appColor(context).black,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -59,7 +59,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => StatusController()),
         ChangeNotifierProvider(create: (_) => HelpSupportController()),
         ChangeNotifierProvider(create: (_) => CallListController()),
-        ChangeNotifierProvider(create: (_) => ChatSettingsController()),
+
         ChangeNotifierProvider(create: (_) => CallManager()),
         ChangeNotifierProvider(create: (_) => CallController()),
         ChangeNotifierProvider(create: (_) => DhsiController()),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
 
 class ChatSettingsController extends ChangeNotifier {
   ChatSettingsController() {
@@ -207,7 +208,12 @@ class ChatSettingsController extends ChangeNotifier {
           : response.data as Map<String, dynamic>;
 
       if (json['success'] == true) {
-        await _updateLocalSession({field: value});
+        if (field == 'show_typing_indicator') {
+          SocketService().showTypingIndicatorCache = value;
+        }
+        if (field == 'show_read_receipts') {
+          SocketService().showReadReceiptsCache = value;
+        }
       } else {
         // Rollback state since API indicated failure
         _rollbackToggle(field, previousValue);

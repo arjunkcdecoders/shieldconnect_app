@@ -67,6 +67,16 @@ class LoginController extends ChangeNotifier {
     }
   }
 
+  void resetFields() {
+    emailController.clear();
+    passwordController.clear();
+    emailFocus.unfocus();
+    passwordFocus.unfocus();
+    _message = "";
+    _isSuccess = false;
+    notifyListeners();
+  }
+
   void togglePasswordVisibility() {
     _isPasswordVisible = !_isPasswordVisible;
     notifyListeners();

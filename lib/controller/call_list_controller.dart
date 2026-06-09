@@ -89,6 +89,12 @@ class CallListController extends ChangeNotifier {
           String name = '';
           String? avatar;
 
+          bool showProfilePic = true;
+          bool showLastSeen = true;
+          bool showBio = true;
+          bool showReadReceipts = true;
+          bool showTypingIndicator = true;
+
           if (isGroup) {
             String tempName = call['group_name'] ?? 'Group Call';
             if (tempName == 'Group Call' || tempName.trim().isEmpty) {
@@ -123,12 +129,17 @@ class CallListController extends ChangeNotifier {
                     : null);
           } else {
             // 1-to-1 call: resolve details of the other participant
-            if (initiatorId == _userId) {
-              name = receiver != null ? (receiver['name'] ?? 'User') : 'User';
-              avatar = receiver != null ? receiver['avatar'] : null;
+            final Map<String, dynamic>? otherParticipant = (initiatorId == _userId) ? receiver : initiator;
+            if (otherParticipant != null) {
+              name = otherParticipant['name'] ?? 'User';
+              avatar = otherParticipant['avatar'];
+              showProfilePic = otherParticipant['show_profile_pic'] as bool? ?? true;
+              showLastSeen = otherParticipant['show_last_seen'] as bool? ?? true;
+              showBio = otherParticipant['show_bio'] as bool? ?? true;
+              showReadReceipts = otherParticipant['show_read_receipts'] as bool? ?? true;
+              showTypingIndicator = otherParticipant['show_typing_indicator'] as bool? ?? true;
             } else {
-              name = initiator != null ? (initiator['name'] ?? 'User') : 'User';
-              avatar = initiator != null ? initiator['avatar'] : null;
+              name = 'User';
             }
           }
 
@@ -191,6 +202,11 @@ class CallListController extends ChangeNotifier {
             'recipientId': recipientIdVal,
             'groupMemberIds': groupMemberIds,
             'rawGroupName': call['group_name']?.toString() ?? '',
+            'show_profile_pic': showProfilePic,
+            'show_last_seen': showLastSeen,
+            'show_bio': showBio,
+            'show_read_receipts': showReadReceipts,
+            'show_typing_indicator': showTypingIndicator,
           });
         }
 
@@ -294,11 +310,18 @@ class CallListController extends ChangeNotifier {
         final List<dynamic> data = json['data'] ?? [];
         _connectedUsers = data.map((item) {
           final Map<String, dynamic> friend = item as Map<String, dynamic>;
+          final bool showBio = friend['show_bio'] as bool? ?? true;
+          final String bio = showBio ? (friend['bio']?.toString() ?? "Hey there!") : "";
           return {
             "id": friend['user_id']?.toString() ?? "",
             "name": friend['name']?.toString() ?? "Unknown",
-            "subtitle": friend['email']?.toString() ?? (friend['bio']?.toString() ?? "Hey there!"),
+            "subtitle": friend['email']?.toString() ?? bio,
             "avatar": friend['avatar']?.toString() ?? "",
+            "show_profile_pic": friend['show_profile_pic'] as bool? ?? true,
+            "show_last_seen": friend['show_last_seen'] as bool? ?? true,
+            "show_bio": showBio,
+            "show_read_receipts": friend['show_read_receipts'] as bool? ?? true,
+            "show_typing_indicator": friend['show_typing_indicator'] as bool? ?? true,
           };
         }).toList();
       }

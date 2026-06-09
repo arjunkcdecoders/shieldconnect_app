@@ -52,7 +52,8 @@ class ProfileController extends ChangeNotifier {
   bool _isPasswordVerified = false;
   bool _isAccountDeleting = false;
   bool _showDeleteFailedText = false;
-  final TextEditingController deletePasswordController = TextEditingController();
+  final TextEditingController deletePasswordController =
+      TextEditingController();
 
   final FocusNode nameFocusNode = FocusNode();
   final FocusNode bioFocusNode = FocusNode();
@@ -110,15 +111,19 @@ class ProfileController extends ChangeNotifier {
         _isModerator = user.isModerator ?? false;
         _region = user.region ?? "";
         regionController.text = _region;
-        debugPrint("ProfileController: userId: $_userId, isModerator: $_isModerator, region: $_region");
+        debugPrint(
+          "ProfileController: userId: $_userId, isModerator: $_isModerator, region: $_region",
+        );
 
         if (_userId.isNotEmpty) {
-          final response = await ApiService().get('/users/$_userId?currentUserId=$_userId');
+          final response = await ApiService().get(
+            '/users/$_userId?currentUserId=$_userId',
+          );
           debugPrint("ProfileController: API Response: ${response.data}");
-          
+
           final dynamic responseData = response.data;
-          final Map<String, dynamic> json = responseData is String 
-              ? jsonDecode(responseData) 
+          final Map<String, dynamic> json = responseData is String
+              ? jsonDecode(responseData)
               : responseData as Map<String, dynamic>;
 
           if (json.containsKey('success') && json['success'] == true) {
@@ -128,7 +133,10 @@ class ProfileController extends ChangeNotifier {
               _email = data['email'] ?? "";
               _imageUrl = data['avatar'] ?? "";
               _bio = data['bio'] ?? "";
-              _isModerator = data['is_moderator'] as bool? ?? data['isModerator'] as bool? ?? false;
+              _isModerator =
+                  data['is_moderator'] as bool? ??
+                  data['isModerator'] as bool? ??
+                  false;
 
               // Safe region parsing
               final dynamic rawRegion = data['region'];
@@ -152,7 +160,10 @@ class ProfileController extends ChangeNotifier {
 
               // Save the fetched user to SharedPreferences to keep session updated with settings
               final UserModel fetchedUser = UserModel.fromJson(data);
-              await prefs.setString('user_session', jsonEncode(fetchedUser.toJson()));
+              await prefs.setString(
+                'user_session',
+                jsonEncode(fetchedUser.toJson()),
+              );
             }
           }
         }
@@ -226,10 +237,7 @@ class ProfileController extends ChangeNotifier {
     try {
       final response = await ApiService().put(
         '/chat/unarchive',
-        data: {
-          "userId": _userId,
-          "chatId": chatId,
-        },
+        data: {"userId": _userId, "chatId": chatId},
       );
       final dynamic responseData = response.data;
       final Map<String, dynamic> json = responseData is String
@@ -252,7 +260,9 @@ class ProfileController extends ChangeNotifier {
     final success = await unarchiveChat(chatId);
     if (success) {
       if (context.mounted) {
-        context.read<HomeScreenController>().fetchRecentChats(updateLoadingState: false);
+        context.read<HomeScreenController>().fetchRecentChats(
+          updateLoadingState: false,
+        );
       }
       return true;
     } else {
@@ -357,8 +367,8 @@ class ProfileController extends ChangeNotifier {
       );
 
       final dynamic responseData = response.data;
-      final Map<String, dynamic> json = responseData is String 
-          ? jsonDecode(responseData) 
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
           : responseData as Map<String, dynamic>;
 
       final apiResponse = ApiResponse<UserModel>.fromJson(
@@ -388,7 +398,7 @@ class ProfileController extends ChangeNotifier {
         _shouldRemoveAvatar = false;
 
         setMessage(apiResponse.message ?? "Profile updated!");
-        
+
         // Return to profile screen after a short delay
         Future.delayed(const Duration(seconds: 1), () {
           if (context.mounted) {
@@ -433,7 +443,7 @@ class ProfileController extends ChangeNotifier {
       final Map<String, dynamic> json = responseData is String
           ? jsonDecode(responseData)
           : responseData as Map<String, dynamic>;
-      
+
       final success = json['success'] == true;
       if (success) {
         _isPasswordVerified = true;
@@ -471,7 +481,7 @@ class ProfileController extends ChangeNotifier {
       final Map<String, dynamic> json = responseData is String
           ? jsonDecode(responseData)
           : responseData as Map<String, dynamic>;
-      
+
       if (json['success'] == true) {
         // Clear session from SharedPreferences
         final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -491,7 +501,7 @@ class ProfileController extends ChangeNotifier {
         _isModerator = false;
         _region = "";
         regionController.clear();
-        
+
         // Reset delete states
         deletePasswordController.clear();
         _isPasswordVerifying = false;
@@ -502,7 +512,7 @@ class ProfileController extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
 
-         if (context.mounted) {
+        if (context.mounted) {
           context.read<StatusController>().init();
           context.read<AddNewChatController>().init();
           // Reset bottom navigation index and check status feature
@@ -555,7 +565,7 @@ class ProfileController extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
 
-     if (context.mounted) {
+    if (context.mounted) {
       context.read<StatusController>().init();
       context.read<AddNewChatController>().init();
       Navigator.pushAndRemoveUntil(

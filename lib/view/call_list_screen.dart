@@ -259,7 +259,8 @@ class CallListScreen extends StatelessWidget {
                   final joinableCalls = activeCalls.entries.where((entry) {
                     final call = entry.value;
                     final callId = (call['_id'] ?? call['id'])?.toString();
-                    return callManager.state == CallState.idle || callManager.currentCallId != callId;
+                    return callManager.state == CallState.idle ||
+                        callManager.currentCallId != callId;
                   }).toList();
 
                   if (joinableCalls.isEmpty) return const SizedBox.shrink();
@@ -269,17 +270,33 @@ class CallListScreen extends StatelessWidget {
                     children: joinableCalls.map((entry) {
                       final call = entry.value;
                       final groupId = entry.key;
-                      final groupName = call['group_name'] ?? call['group_id']?['name'] ?? 'Group Call';
-                      final groupImage = call['group_avatar'] ?? call['group_id']?['group_image'] ?? call['group_id']?['avatar'];
+                      final groupName =
+                          call['group_name'] ??
+                          call['group_id']?['name'] ??
+                          'Group Call';
+                      final groupImage =
+                          call['group_avatar'] ??
+                          call['group_id']?['group_image'] ??
+                          call['group_id']?['avatar'];
                       final isVideo = call['call_type'] == 'video';
-                      final roomId = (call['_id'] ?? call['id'] ?? call['roomId'])?.toString() ?? '';
-                      final String? callerId = (call['initiator_id'] is Map
-                          ? (call['initiator_id']['_id'] ?? call['initiator_id']['id'])?.toString()
-                          : call['initiator_id']?.toString()) ?? call['callerId']?.toString();
+                      final roomId =
+                          (call['_id'] ?? call['id'] ?? call['roomId'])
+                              ?.toString() ??
+                          '';
+                      final String? callerId =
+                          (call['initiator_id'] is Map
+                              ? (call['initiator_id']['_id'] ??
+                                        call['initiator_id']['id'])
+                                    ?.toString()
+                              : call['initiator_id']?.toString()) ??
+                          call['callerId']?.toString();
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16.0),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E1E1E), // Premium dark theme
                           borderRadius: BorderRadius.circular(16),
@@ -313,12 +330,16 @@ class CallListScreen extends StatelessWidget {
                                 children: [
                                   Text(
                                     "$groupName - Live Call",
-                                    style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                    style: fontStyle.clashDisplaySemiBold14
+                                        .textColor(Colors.white),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    isVideo ? "Tap Join Now to join the video call" : "Tap Join Now to join the voice call",
-                                    style: fontStyle.clashDisplayRegular12.textColor(Colors.white60),
+                                    isVideo
+                                        ? "Tap Join Now to join the video call"
+                                        : "Tap Join Now to join the voice call",
+                                    style: fontStyle.clashDisplayRegular12
+                                        .textColor(Colors.white60),
                                   ),
                                 ],
                               ),
@@ -341,12 +362,17 @@ class CallListScreen extends StatelessWidget {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                                 elevation: 0,
                               ),
                               child: Text(
                                 "Join Now",
-                                style: fontStyle.clashDisplayBold12.textColor(Colors.white),
+                                style: fontStyle.clashDisplayBold12.textColor(
+                                  Colors.white,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -421,8 +447,10 @@ class CallListScreen extends StatelessWidget {
     final bool isOutgoing = item["isOutgoing"] ?? false;
     final bool isVideoButton = item["isVideoButton"] ?? false;
     final String name = item["name"] ?? 'User';
-    final String? avatar = item["avatar"];
     final bool isGroup = item["isGroup"] == true;
+    final bool showProfilePic =
+        isGroup || (item['show_profile_pic'] as bool? ?? true);
+    final String? avatar = showProfilePic ? item["avatar"] : null;
 
     final String typeText = isMissed
         ? 'Missed'
@@ -506,7 +534,9 @@ class CallListScreen extends StatelessWidget {
                       ),
                       child: Text(
                         typeText,
-                        style: fontStyle.clashDisplayBold10.textColor(typeColor),
+                        style: fontStyle.clashDisplayBold10.textColor(
+                          typeColor,
+                        ),
                       ),
                     ),
                   ],
@@ -519,11 +549,15 @@ class CallListScreen extends StatelessWidget {
           // Right Side Trigger Button
           GestureDetector(
             onTap: () {
-              final callManager = Provider.of<CallManager>(context, listen: false);
+              final callManager = Provider.of<CallManager>(
+                context,
+                listen: false,
+              );
               if (isGroup) {
                 final String rawName = item['rawGroupName']?.toString() ?? '';
                 final String displayName = item['name']?.toString() ?? '';
-                final String groupName = (rawName.isEmpty ||
+                final String groupName =
+                    (rawName.isEmpty ||
                         rawName == 'Group Call' ||
                         rawName.contains('+') ||
                         displayName.contains('+'))
@@ -534,9 +568,11 @@ class CallListScreen extends StatelessWidget {
                   item['groupId'] ?? '',
                   groupName,
                   isVideo: isVideoButton,
-                  recipientAvatar: item['avatar'],
+                  recipientAvatar: avatar,
                   isGroup: true,
-                  groupMemberIds: List<String>.from(item['groupMemberIds'] ?? []),
+                  groupMemberIds: List<String>.from(
+                    item['groupMemberIds'] ?? [],
+                  ),
                 );
 
                 Navigator.push(
@@ -546,7 +582,7 @@ class CallListScreen extends StatelessWidget {
                         ? VideoCallingScreen(userName: groupName)
                         : VoiceCallingScreen(
                             userName: groupName,
-                            avatarUrl: item['avatar'],
+                            avatarUrl: avatar,
                           ),
                   ),
                 );
@@ -555,7 +591,7 @@ class CallListScreen extends StatelessWidget {
                   item['recipientId'] ?? '',
                   item['name'] ?? 'User',
                   isVideo: isVideoButton,
-                  recipientAvatar: item['avatar'],
+                  recipientAvatar: avatar,
                   isGroup: false,
                 );
 
@@ -566,7 +602,7 @@ class CallListScreen extends StatelessWidget {
                         ? VideoCallingScreen(userName: item['name'] ?? 'User')
                         : VoiceCallingScreen(
                             userName: item['name'] ?? 'User',
-                            avatarUrl: item['avatar'],
+                            avatarUrl: avatar,
                           ),
                   ),
                 );
@@ -610,12 +646,7 @@ class CallListScreen extends StatelessWidget {
     Widget buildUserFallback() {
       return ClipRRect(
         borderRadius: BorderRadius.circular(28),
-        child: Image.asset(
-          ImageAssets.maisieAvatar,
-          width: 56,
-          height: 56,
-          fit: BoxFit.cover,
-        ),
+        child: Icon(Icons.person, size: 30, color: appColor(context).grey500),
       );
     }
 
@@ -631,7 +662,8 @@ class CallListScreen extends StatelessWidget {
         width: 56,
         height: 56,
         fit: BoxFit.cover,
-        placeholder: (context, url) => Container(color: appColor(context).grey100),
+        placeholder: (context, url) =>
+            Container(color: appColor(context).grey100),
         errorWidget: (context, url, error) =>
             isGroup ? buildGroupInitialsFallback() : buildUserFallback(),
       ),
@@ -681,7 +713,10 @@ class CallListScreen extends StatelessWidget {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -712,85 +747,116 @@ class CallListScreen extends StatelessWidget {
                                 ),
                               )
                             : connected.isEmpty
-                                ? Center(
-                                    child: Text(
-                                      "No connections found",
-                                      style: fontStyle.clashDisplayMedium14.textColor(
+                            ? Center(
+                                child: Text(
+                                  "No connections found",
+                                  style: fontStyle.clashDisplayMedium14
+                                      .textColor(
                                         appColor(sheetContext).grey400,
                                       ),
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    physics: const BouncingScrollPhysics(),
-                                    itemCount: connected.length,
-                                    itemBuilder: (listContext, index) {
-                                      final friend = connected[index];
-                                      final String id = friend["id"];
-                                      final String name = friend["name"];
-                                      final String subtitle = friend["subtitle"];
-                                      final String avatar = friend["avatar"];
-                                      final bool isSelected = tempSelectedList.any((e) => e["id"] == id);
+                                ),
+                              )
+                            : ListView.builder(
+                                physics: const BouncingScrollPhysics(),
+                                itemCount: connected.length,
+                                itemBuilder: (listContext, index) {
+                                  final friend = connected[index];
+                                  final String id = friend["id"];
+                                  final String name = friend["name"];
+                                  final String subtitle = friend["subtitle"];
+                                  final bool showProfilePic =
+                                      friend["show_profile_pic"] as bool? ??
+                                      true;
+                                  final String avatar = showProfilePic
+                                      ? (friend["avatar"] ?? "")
+                                      : "";
+                                  final bool isSelected = tempSelectedList.any(
+                                    (e) => e["id"] == id,
+                                  );
 
-                                      return ListTile(
-                                        onTap: () {
-                                          setModalState(() {
-                                            if (isSelected) {
-                                              tempSelectedList.removeWhere((e) => e["id"] == id);
-                                            } else {
-                                              tempSelectedList.add(friend);
-                                            }
-                                          });
-                                        },
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                                        leading: Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: appColor(sheetContext).grey100,
-                                          ),
-                                          child: avatar.isEmpty
-                                              ? Icon(Icons.person, color: appColor(sheetContext).grey400)
-                                              : ClipRRect(
-                                                  borderRadius: BorderRadius.circular(20),
-                                                  child: Image.network(
-                                                    ApiService.getImageUrl(avatar),
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (ctx, err, stack) =>
-                                                        Icon(Icons.person, color: appColor(sheetContext).grey400),
-                                                  ),
-                                                ),
-                                        ),
-                                        title: Text(
-                                          name,
-                                          style: fontStyle.clashDisplaySemiBold14.textColor(
+                                  return ListTile(
+                                    onTap: () {
+                                      setModalState(() {
+                                        if (isSelected) {
+                                          tempSelectedList.removeWhere(
+                                            (e) => e["id"] == id,
+                                          );
+                                        } else {
+                                          tempSelectedList.add(friend);
+                                        }
+                                      });
+                                    },
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 4,
+                                    ),
+                                    leading: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: appColor(sheetContext).grey100,
+                                      ),
+                                      child: avatar.isEmpty
+                                          ? Icon(
+                                              Icons.person,
+                                              color: appColor(
+                                                sheetContext,
+                                              ).grey400,
+                                            )
+                                          : ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              child: Image.network(
+                                                ApiService.getImageUrl(avatar),
+                                                fit: BoxFit.cover,
+                                                errorBuilder:
+                                                    (ctx, err, stack) => Icon(
+                                                      Icons.person,
+                                                      color: appColor(
+                                                        sheetContext,
+                                                      ).grey400,
+                                                    ),
+                                              ),
+                                            ),
+                                    ),
+                                    title: Text(
+                                      name,
+                                      style: fontStyle.clashDisplaySemiBold14
+                                          .textColor(
                                             appColor(sheetContext).black,
                                           ),
-                                        ),
-                                        subtitle: Text(
-                                          subtitle,
-                                          style: fontStyle.clashDisplayRegular12.textColor(
+                                    ),
+                                    subtitle: Text(
+                                      subtitle,
+                                      style: fontStyle.clashDisplayRegular12
+                                          .textColor(
                                             appColor(sheetContext).grey600,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        trailing: Checkbox(
-                                          value: isSelected,
-                                          activeColor: appColor(sheetContext).secondary,
-                                          onChanged: (val) {
-                                            setModalState(() {
-                                              if (val == true) {
-                                                if (!isSelected) tempSelectedList.add(friend);
-                                              } else {
-                                                tempSelectedList.removeWhere((e) => e["id"] == id);
-                                              }
-                                            });
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Checkbox(
+                                      value: isSelected,
+                                      activeColor: appColor(
+                                        sheetContext,
+                                      ).secondary,
+                                      onChanged: (val) {
+                                        setModalState(() {
+                                          if (val == true) {
+                                            if (!isSelected)
+                                              tempSelectedList.add(friend);
+                                          } else {
+                                            tempSelectedList.removeWhere(
+                                              (e) => e["id"] == id,
+                                            );
+                                          }
+                                        });
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
                       ),
 
                       // Action Button
@@ -800,17 +866,29 @@ class CallListScreen extends StatelessWidget {
                           onTap: tempSelectedList.isEmpty
                               ? null
                               : () {
-                                  Navigator.pop(sheetContext); // Close bottom sheet
-                                  final callManager = Provider.of<CallManager>(screenContext, listen: false);
+                                  Navigator.pop(
+                                    sheetContext,
+                                  ); // Close bottom sheet
+                                  final callManager = Provider.of<CallManager>(
+                                    screenContext,
+                                    listen: false,
+                                  );
 
                                   if (tempSelectedList.length == 1) {
                                     // 1-to-1 Call
                                     final friend = tempSelectedList.first;
+                                    final bool showProfilePic =
+                                        friend['show_profile_pic'] as bool? ??
+                                        true;
+                                    final String? resolvedAvatar =
+                                        showProfilePic
+                                        ? friend['avatar']
+                                        : null;
                                     callManager.startCall(
                                       friend['id'] ?? '',
                                       friend['name'] ?? 'User',
                                       isVideo: isVideo,
-                                      recipientAvatar: friend['avatar'],
+                                      recipientAvatar: resolvedAvatar,
                                       isGroup: false,
                                     );
 
@@ -818,18 +896,34 @@ class CallListScreen extends StatelessWidget {
                                       screenContext,
                                       MaterialPageRoute(
                                         builder: (ctx) => isVideo
-                                            ? VideoCallingScreen(userName: friend['name'] ?? 'User')
+                                            ? VideoCallingScreen(
+                                                userName:
+                                                    friend['name'] ?? 'User',
+                                              )
                                             : VoiceCallingScreen(
-                                                userName: friend['name'] ?? 'User',
-                                                avatarUrl: friend['avatar'],
+                                                userName:
+                                                    friend['name'] ?? 'User',
+                                                avatarUrl: resolvedAvatar,
                                               ),
                                       ),
                                     );
                                   } else {
                                     // Group Call
-                                    final List<String> memberIds = tempSelectedList.map((f) => f['id'] as String).toList();
-                                    final String firstFriendId = tempSelectedList.first['id'] ?? '';
-                                    final String firstFriendAvatar = tempSelectedList.first['avatar'];
+                                    final List<String> memberIds =
+                                        tempSelectedList
+                                            .map((f) => f['id'] as String)
+                                            .toList();
+                                    final String firstFriendId =
+                                        tempSelectedList.first['id'] ?? '';
+                                    final bool showProfilePic =
+                                        tempSelectedList
+                                                .first['show_profile_pic']
+                                            as bool? ??
+                                        true;
+                                    final String? firstFriendAvatar =
+                                        showProfilePic
+                                        ? tempSelectedList.first['avatar']
+                                        : null;
 
                                     callManager.startCall(
                                       firstFriendId,
@@ -844,7 +938,9 @@ class CallListScreen extends StatelessWidget {
                                       screenContext,
                                       MaterialPageRoute(
                                         builder: (ctx) => isVideo
-                                            ? const VideoCallingScreen(userName: "Group Call")
+                                            ? const VideoCallingScreen(
+                                                userName: "Group Call",
+                                              )
                                             : VoiceCallingScreen(
                                                 userName: "Group Call",
                                                 avatarUrl: firstFriendAvatar,
@@ -864,7 +960,9 @@ class CallListScreen extends StatelessWidget {
                                   ? null
                                   : [
                                       BoxShadow(
-                                        color: appColor(sheetContext).secondary.withValues(alpha: 0.2),
+                                        color: appColor(
+                                          sheetContext,
+                                        ).secondary.withValues(alpha: 0.2),
                                         blurRadius: 12,
                                         offset: const Offset(0, 4),
                                       ),
@@ -875,8 +973,12 @@ class CallListScreen extends StatelessWidget {
                                 tempSelectedList.isEmpty
                                     ? "Select members"
                                     : (tempSelectedList.length == 1
-                                        ? (isVideo ? "Start Video Call" : "Start Voice Call")
-                                        : (isVideo ? "Start Group Video Call" : "Start Group Voice Call")),
+                                          ? (isVideo
+                                                ? "Start Video Call"
+                                                : "Start Voice Call")
+                                          : (isVideo
+                                                ? "Start Group Video Call"
+                                                : "Start Group Voice Call")),
                                 style: fontStyle.clashDisplayMedium14.textColor(
                                   tempSelectedList.isEmpty
                                       ? appColor(sheetContext).grey500

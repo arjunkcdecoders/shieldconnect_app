@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
+import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +18,14 @@ class SocketService {
 
   sio.Socket? _socket;
   sio.Socket? get socket => _socket;
+
+  bool? _showTypingIndicatorCache;
+  bool? get showTypingIndicatorCache => _showTypingIndicatorCache;
+  set showTypingIndicatorCache(bool? val) => _showTypingIndicatorCache = val;
+
+  bool? _showReadReceiptsCache;
+  bool? get showReadReceiptsCache => _showReadReceiptsCache;
+  set showReadReceiptsCache(bool? val) => _showReadReceiptsCache = val;
 
   /// The ID of the currently active personal chat (recipientId) or group chat (groupId).
   String? activeChatId;
@@ -42,8 +51,9 @@ class SocketService {
       ValueNotifier(null);
 
   /// Fires when friends status sync payload is received.
-  final ValueNotifier<List<dynamic>?> friendsStatusSyncNotifier =
-      ValueNotifier(null);
+  final ValueNotifier<List<dynamic>?> friendsStatusSyncNotifier = ValueNotifier(
+    null,
+  );
 
   /// Fires when messages are read in a chat.
   final ValueNotifier<Map<String, dynamic>?> messagesReadNotifier =
@@ -113,9 +123,13 @@ class SocketService {
       String? realFcmToken;
       try {
         realFcmToken = await FirebaseMessaging.instance.getToken();
-        dev.log('🔌 SOCKET: Successfully fetched real FCM token: $realFcmToken');
+        dev.log(
+          '🔌 SOCKET: Successfully fetched real FCM token: $realFcmToken',
+        );
       } catch (e) {
-        dev.log('⚠️ SOCKET: Error or Firebase not initialized while fetching FCM token: $e');
+        dev.log(
+          '⚠️ SOCKET: Error or Firebase not initialized while fetching FCM token: $e',
+        );
       }
 
       // Register user on connect with their real FCM token
@@ -123,7 +137,9 @@ class SocketService {
         'userId': userId,
         'fcmToken': realFcmToken ?? 'default_fcm_token',
       });
-      dev.log('🔌 SOCKET: Emitted register event for user: $userId with fcmToken: ${realFcmToken ?? "default_fcm_token"}');
+      dev.log(
+        '🔌 SOCKET: Emitted register event for user: $userId with fcmToken: ${realFcmToken ?? "default_fcm_token"}',
+      );
     });
 
     _socket!.onDisconnect((_) {
@@ -193,7 +209,10 @@ class SocketService {
         }
       }
     });
-    _socket!.on('receive-message', (data) => handleIncomingMessage(data, 'receive-message'));
+    _socket!.on(
+      'receive-message',
+      (data) => handleIncomingMessage(data, 'receive-message'),
+    );
 
     _socket!.on('user-status-change', (data) {
       dev.log('🔌 SOCKET: user-status-change event: $data');
@@ -297,8 +316,9 @@ class SocketService {
           payload = data[0];
         }
         if (payload is Map) {
-          moderationViolationNotifier.value =
-              Map<String, dynamic>.from(payload);
+          moderationViolationNotifier.value = Map<String, dynamic>.from(
+            payload,
+          );
         }
       } catch (e) {
         dev.log('🚨 SOCKET moderation_violation error: $e');
@@ -309,33 +329,54 @@ class SocketService {
   /// Listen to a custom event from the server.
   void on(String event, Function(dynamic) callback) {
     if (_socket == null) {
-      dev.log("SocketService: Cannot listen to '$event'. Socket is not initialized.", name: "SocketService");
+      dev.log(
+        "SocketService: Cannot listen to '$event'. Socket is not initialized.",
+        name: "SocketService",
+      );
       return;
     }
-    dev.log("SocketService: Registering listener for event '$event'", name: "SocketService");
+    dev.log(
+      "SocketService: Registering listener for event '$event'",
+      name: "SocketService",
+    );
     _socket!.on(event, callback);
   }
 
   /// Stop listening to a custom event from the server.
   void off(String event) {
     if (_socket == null) {
-      dev.log("SocketService: Cannot remove listener for '$event'. Socket is not initialized.", name: "SocketService");
+      dev.log(
+        "SocketService: Cannot remove listener for '$event'. Socket is not initialized.",
+        name: "SocketService",
+      );
       return;
     }
-    dev.log("SocketService: Removing listener for event '$event'", name: "SocketService");
+    dev.log(
+      "SocketService: Removing listener for event '$event'",
+      name: "SocketService",
+    );
     _socket!.off(event);
   }
 
   /// Emit an event with dynamic payload to the server.
   void emit(String event, [dynamic data]) {
     if (_socket == null) {
-      dev.log("SocketService: Cannot emit '$event'. Socket is not initialized.", name: "SocketService");
+      dev.log(
+        "SocketService: Cannot emit '$event'. Socket is not initialized.",
+        name: "SocketService",
+      );
       return;
     }
     if (!_socket!.connected) {
-      dev.log("SocketService: Warning: Emitting '$event' while socket is not connected.", name: "SocketService");
+      dev.log(
+        "SocketService: Warning: Emitting '$event' while socket is not connected.",
+        name: "SocketService",
+      );
     }
-    dev.log("SocketService: Emitting event '$event' with data: $data", name: "SocketService");
+    dev.log(
+      "SocketService: Emitting event '$event' with data: $data",
+      name: "SocketService",
+    );
     _socket!.emit(event, data);
   }
 
@@ -346,22 +387,39 @@ class SocketService {
     required String otherId,
     required bool isGroup,
   }) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String? sessionStr = prefs.getString('user_session');
     bool showReadReceipts = true;
-
-    if (sessionStr != null) {
-      try {
-        final Map<String, dynamic> userMap = jsonDecode(sessionStr);
-        final UserModel user = UserModel.fromJson(userMap);
-        showReadReceipts = user.showReadReceipts ?? true;
-      } catch (e) {
-        dev.log('Error parsing user session for read receipts: $e');
+    if (_showReadReceiptsCache != null) {
+      showReadReceipts = _showReadReceiptsCache!;
+    } else {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr != null) {
+        try {
+          final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+          final UserModel user = UserModel.fromJson(userMap);
+          final String? uId = user.id;
+          if (uId != null && uId.isNotEmpty) {
+            final response = await ApiService().get('/users/$uId?currentUserId=$uId');
+            final dynamic responseData = response.data;
+            final Map<String, dynamic> json = responseData is String
+                ? jsonDecode(responseData)
+                : responseData as Map<String, dynamic>;
+            if (json['success'] == true && json['data'] != null) {
+              final val = json['data']['show_read_receipts'] as bool? ?? true;
+              _showReadReceiptsCache = val;
+              showReadReceipts = val;
+            }
+          }
+        } catch (e) {
+          dev.log('Error fetching user profile for read receipts: $e');
+        }
       }
     }
 
     if (showReadReceipts == false) {
-      dev.log('🔌 SOCKET: Suppression of mark-as-read since show_read_receipts is false');
+      dev.log(
+        '🔌 SOCKET: Suppression of mark-as-read since show_read_receipts is false',
+      );
       return;
     }
 
@@ -376,15 +434,32 @@ class SocketService {
 
   /// Fetch user setting to see if typing indicators are enabled
   Future<bool> getShowTypingIndicatorSetting() async {
+    if (_showTypingIndicatorCache != null) {
+      return _showTypingIndicatorCache!;
+    }
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? sessionStr = prefs.getString('user_session');
     if (sessionStr != null) {
       try {
         final Map<String, dynamic> userMap = jsonDecode(sessionStr);
         final UserModel user = UserModel.fromJson(userMap);
-        return user.showTypingIndicator ?? true;
+        final String? userId = user.id;
+        if (userId != null && userId.isNotEmpty) {
+          final response = await ApiService().get(
+            '/users/$userId?currentUserId=$userId',
+          );
+          final dynamic responseData = response.data;
+          final Map<String, dynamic> json = responseData is String
+              ? jsonDecode(responseData)
+              : responseData as Map<String, dynamic>;
+          if (json['success'] == true && json['data'] != null) {
+            final val = json['data']['show_typing_indicator'] as bool? ?? true;
+            _showTypingIndicatorCache = val;
+            return val;
+          }
+        }
       } catch (e) {
-        dev.log('Error parsing user session for typing indicator: $e');
+        dev.log('Error fetching user profile for typing indicator: $e');
       }
     }
     return true;
@@ -400,7 +475,9 @@ class SocketService {
   }) async {
     final bool showTyping = await getShowTypingIndicatorSetting();
     if (!showTyping) {
-      dev.log('🔌 SOCKET: Suppression of typing indicator emission since show_typing_indicator is false');
+      dev.log(
+        '🔌 SOCKET: Suppression of typing indicator emission since show_typing_indicator is false',
+      );
       return;
     }
 
@@ -416,6 +493,8 @@ class SocketService {
 
   /// Disconnects the socket and disposes resources.
   void disconnect() {
+    _showTypingIndicatorCache = null;
+    _showReadReceiptsCache = null;
     if (_socket == null) return;
     dev.log("SocketService: Disconnecting socket...", name: "SocketService");
     _socket!.disconnect();

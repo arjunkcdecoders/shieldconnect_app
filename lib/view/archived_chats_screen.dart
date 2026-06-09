@@ -200,12 +200,18 @@ class ArchivedChatsScreen extends StatelessWidget {
     }
 
     final bool hasRing = false;
-    final bool hasStatusDot = conversation['is_online'] ?? false;
+    final bool showLastSeen = conversation['show_last_seen'] as bool? ?? true;
+    final bool hasStatusDot = (!isGroup && !showLastSeen)
+        ? false
+        : (conversation['is_online'] ?? false);
     final String msgStatus = lastMessage['status'] ?? 'none';
     final String status = msgStatus == 'read'
         ? 'read_filled'
         : (msgStatus == 'sent' ? 'read_empty' : 'none');
-    final String? imagePath = conversation['image'];
+    final bool showProfilePic = conversation['show_profile_pic'] as bool? ?? true;
+    final String? imagePath = (!isGroup && !showProfilePic)
+        ? null
+        : conversation['image'];
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

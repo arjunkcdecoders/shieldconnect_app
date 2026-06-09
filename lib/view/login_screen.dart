@@ -85,6 +85,7 @@ class LoginScreen extends StatelessWidget {
               // Forgot Password link
               GestureDetector(
                 onTap: () {
+                  controller.resetFields();
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -179,7 +180,7 @@ class LoginScreen extends StatelessWidget {
                   ),
                   GestureDetector(
                     onTap: () {
-                      controller.clearError();
+                      controller.resetFields();
                       Provider.of<SignupController>(context, listen: false)
                           .resetFields();
                       Navigator.push(

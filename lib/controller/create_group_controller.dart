@@ -29,7 +29,8 @@ class CreateGroupController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  bool get hasSelectedUsers => _searchResults.any((p) => p['isSelected'] == true);
+  bool get hasSelectedUsers =>
+      _searchResults.any((p) => p['isSelected'] == true);
 
   String? _pickedImagePath;
   String? get pickedImagePath => _pickedImagePath;
@@ -74,7 +75,9 @@ class CreateGroupController extends ChangeNotifier {
           return {
             "id": friend['user_id']?.toString() ?? "",
             "name": friend['name']?.toString() ?? "Unknown",
-            "subtitle": friend['email']?.toString() ?? (friend['bio']?.toString() ?? "Hey there!"),
+            "subtitle":
+                friend['email']?.toString() ??
+                (friend['bio']?.toString() ?? "Hey there!"),
             "avatar": friend['avatar']?.toString() ?? "",
             "isSelected": false,
           };
@@ -93,8 +96,11 @@ class CreateGroupController extends ChangeNotifier {
       _searchResults = List.from(_connectedUsers);
     } else {
       _searchResults = _connectedUsers
-          .where((user) =>
-              user['name'].toString().toLowerCase().contains(query.toLowerCase()))
+          .where(
+            (user) => user['name'].toString().toLowerCase().contains(
+              query.toLowerCase(),
+            ),
+          )
           .toList();
     }
     notifyListeners();
@@ -102,7 +108,8 @@ class CreateGroupController extends ChangeNotifier {
 
   void toggleUserSelection(int index) {
     if (index >= 0 && index < _searchResults.length) {
-      _searchResults[index]['isSelected'] = !(_searchResults[index]['isSelected'] ?? false);
+      _searchResults[index]['isSelected'] =
+          !(_searchResults[index]['isSelected'] ?? false);
       notifyListeners();
     }
   }
@@ -162,7 +169,10 @@ class CreateGroupController extends ChangeNotifier {
         memberIds.add(userId);
       }
 
-      final homeScreenController = Provider.of<HomeScreenController>(context, listen: false);
+      final homeScreenController = Provider.of<HomeScreenController>(
+        context,
+        listen: false,
+      );
       final int userGroupCount = homeScreenController.recentChats.where((chat) {
         if (chat is Map) {
           final conversation = chat['conversation'];
@@ -183,7 +193,7 @@ class CreateGroupController extends ChangeNotifier {
           ToastHelper.showWarningDialog(
             context,
             "Group Limit Reached",
-            "You cannot be in or create more than $maxGroup groups. Currently, you are in $userGroupCount groups."
+            "You cannot be in or create more than $maxGroup groups. Currently, you are in $userGroupCount groups.",
           );
         }
         return;
@@ -197,7 +207,7 @@ class CreateGroupController extends ChangeNotifier {
           ToastHelper.showWarningDialog(
             context,
             "Group Member Limit Exceeded",
-            "This group cannot have more than $maxMembers members (including you). Currently, you have selected ${memberIds.length} members."
+            "This group cannot have more than $maxMembers members (including you). Currently, you have selected ${memberIds.length} members.",
           );
         }
         return;
@@ -213,15 +223,15 @@ class CreateGroupController extends ChangeNotifier {
 
       final FormData formData = FormData.fromMap(fields);
 
-      if (_pickedImagePath != null && !_pickedImagePath!.startsWith('assets/')) {
+      if (_pickedImagePath != null &&
+          !_pickedImagePath!.startsWith('assets/')) {
         final String filename = _pickedImagePath!.split('/').last;
-        formData.files.add(MapEntry(
-          "group_image",
-          await MultipartFile.fromFile(
-            _pickedImagePath!,
-            filename: filename,
+        formData.files.add(
+          MapEntry(
+            "group_image",
+            await MultipartFile.fromFile(_pickedImagePath!, filename: filename),
           ),
-        ));
+        );
       }
 
       final response = await ApiService().post('/groups', data: formData);
@@ -233,13 +243,18 @@ class CreateGroupController extends ChangeNotifier {
       if (json['success'] == true) {
         // Map response using GroupModel
         final GroupModel createdGroup = GroupModel.fromJson(json['data']);
-        
-        ToastHelper.showToast(context, json['message']?.toString() ?? "Group created successfully!");
+
+        ToastHelper.showToast(
+          context,
+          json['message']?.toString() ?? "Group created successfully!",
+        );
 
         // Refresh recent chats so it shows in the chat list screen immediately
         if (context.mounted) {
-          Provider.of<HomeScreenController>(context, listen: false)
-              .fetchRecentChats(updateLoadingState: false);
+          Provider.of<HomeScreenController>(
+            context,
+            listen: false,
+          ).fetchRecentChats(updateLoadingState: false);
         }
 
         if (context.mounted) {
@@ -255,13 +270,19 @@ class CreateGroupController extends ChangeNotifier {
         }
       } else {
         if (context.mounted) {
-          ToastHelper.showToast(context, json['message']?.toString() ?? "Failed to create group");
+          ToastHelper.showToast(
+            context,
+            json['message']?.toString() ?? "Failed to create group",
+          );
         }
       }
     } catch (e) {
       debugPrint("Error creating group: $e");
       if (context.mounted) {
-        ToastHelper.showToast(context, "An error occurred while creating group");
+        ToastHelper.showToast(
+          context,
+          "An error occurred while creating group",
+        );
       }
     } finally {
       _isLoading = false;

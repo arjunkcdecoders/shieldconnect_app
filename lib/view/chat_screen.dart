@@ -114,9 +114,11 @@ class ChatScreen extends StatelessWidget {
         builder: (context, controller, child) {
           final String titleName =
               controller.headerDetails?['name'] ?? userName;
-          final String? avatarUrl = controller.headerDetails?['avatar'];
+          final bool showProfilePic = isGroup || (controller.headerDetails?['show_profile_pic'] as bool? ?? true);
+          final String? avatarUrl = showProfilePic ? (controller.headerDetails?['avatar'] as String?) : null;
+          final bool showLastSeen = isGroup || (controller.headerDetails?['show_last_seen'] as bool? ?? true);
           final String statusText =
-              (isGroup || controller.relationshipStatus == 'accepted')
+              (showLastSeen && (isGroup || controller.relationshipStatus == 'accepted'))
               ? (controller.headerDetails?['status'] ??
                     (isGroup ? '' : 'Offline'))
               : '';
@@ -317,10 +319,9 @@ class ChatScreen extends StatelessWidget {
                                                       msg['type'] ?? 'text';
                                                   final String? fileUrl =
                                                       msg['url'];
-                                                  final String? avatarPath =
-                                                      msg['avatar']
-                                                          ?.toString() ??
-                                                      avatarUrl;
+                                                  final String? avatarPath = showProfilePic
+                                                      ? (msg['avatar']?.toString() ?? avatarUrl)
+                                                      : null;
 
                                                   messageWidget = Padding(
                                                     padding:
@@ -443,9 +444,9 @@ class ChatScreen extends StatelessWidget {
                                                     msg['type'] ?? 'text';
                                                 final String? fileUrl =
                                                     msg['url'];
-                                                final String? avatarPath =
-                                                    msg['avatar']?.toString() ??
-                                                    avatarUrl;
+                                                final String? avatarPath = showProfilePic
+                                                    ? (msg['avatar']?.toString() ?? avatarUrl)
+                                                    : null;
 
                                                 messageWidget = Padding(
                                                   padding:

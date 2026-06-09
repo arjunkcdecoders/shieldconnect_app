@@ -628,6 +628,8 @@ class PersonalChatController extends ChangeNotifier {
           "avatar": data['avatar'] ?? "",
           "medias": parsedMedias,
           "groupsInCommon": parsedGroups,
+          "show_profile_pic": data['show_profile_pic'] ?? true,
+          "show_bio": data['show_bio'] ?? true,
         };
       }
     } catch (e) {
@@ -681,6 +683,10 @@ class PersonalChatController extends ChangeNotifier {
             "status": isOnline ? "Online" : DateHelper.formatLastSeen(lastSeen),
             "avatar": data['avatar'] ?? "",
             "isGroup": false,
+            "show_profile_pic": data['show_profile_pic'] ?? true,
+            "show_last_seen": data['show_last_seen'] ?? true,
+            "show_bio": data['show_bio'] ?? true,
+            "show_typing_indicator": data['show_typing_indicator'] ?? true,
           };
         }
       } catch (e) {
@@ -2159,10 +2165,11 @@ class PersonalChatController extends ChangeNotifier {
     final data = SocketService().typingIndicatorNotifier.value;
     if (data == null) return;
 
-    // Enforce reciprocal privacy: if local user disabled typing indicators, ignore incoming typing statuses
-    final bool showTyping = await SocketService()
-        .getShowTypingIndicatorSetting();
-    if (!showTyping) {
+
+
+    // Also enforce recipient's privacy setting: if recipient disabled typing indicators, ignore their typing status
+    final bool showTypingRecipient = _headerDetails?['show_typing_indicator'] ?? true;
+    if (!showTypingRecipient) {
       if (_isRecipientTyping) {
         _isRecipientTyping = false;
         notifyListeners();

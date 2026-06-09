@@ -667,19 +667,7 @@ class HomeScreenController extends ChangeNotifier {
     final data = SocketService().typingIndicatorNotifier.value;
     if (data == null) return;
 
-    // Enforce reciprocal privacy: if local user disabled typing indicators, ignore incoming typing statuses
-    final bool showTyping = await SocketService()
-        .getShowTypingIndicatorSetting();
-    if (!showTyping) {
-      debugPrint(
-        "HomeScreenController: Typing indicator ignored due to reciprocal privacy settings.",
-      );
-      if (_typingUsers.isNotEmpty) {
-        _typingUsers.clear();
-        notifyListeners();
-      }
-      return;
-    }
+
 
     final String? chatId = data['chatId']?.toString();
     final String? eventUserId = data['userId']?.toString();

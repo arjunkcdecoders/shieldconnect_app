@@ -825,7 +825,21 @@ class CallGridView extends StatelessWidget {
     final callController = Provider.of<CallController>(context);
     final callManager = Provider.of<CallManager>(context);
     final total = members.length;
-    final int numPages = total <= 4 ? 1 : 1 + ((total - 4) / 3.0).ceil();
+
+    // Calculate number of pages (max 6 grids per page)
+    int numPages = 1;
+    if (total > 6) {
+      int tempTotal = total;
+      numPages = 1;
+      tempTotal -= 5;
+      while (tempTotal > 6) {
+        numPages++;
+        tempTotal -= 5;
+      }
+      if (tempTotal > 0) {
+        numPages++;
+      }
+    }
     final int currentPage = callController.currentPage;
 
     return Container(
@@ -841,22 +855,30 @@ class CallGridView extends StatelessWidget {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 20),
           child: Column(
             children: [
               const SizedBox(height: 10),
               if (callManager.isGroup) ...[
-                Text(
-                  callManager.receiverName ?? 'Group',
-                  style: fontStyle.clashDisplayBold18.textColor(Colors.white),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    callManager.receiverName ?? 'Group',
+                    style: fontStyle.clashDisplayBold18.textColor(Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: 6),
               ],
               // Top timer display
-              Text(
-                callDuration,
-                style: fontStyle.clashDisplaySemiBold16.textColor(
-                  Colors.white70,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  callDuration,
+                  style: fontStyle.clashDisplaySemiBold16.textColor(
+                    Colors.white70,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
               const SizedBox(height: 24),
@@ -867,482 +889,81 @@ class CallGridView extends StatelessWidget {
                   itemCount: numPages,
                   onPageChanged: callController.setCurrentPage,
                   itemBuilder: (context, pageIndex) {
-                    // Extract items for this page index
                     List<Map<String, dynamic>> pageMembers = [];
                     bool showIndicatorCard = false;
-                    List<Map<String, dynamic>> remainingMembersForIndicator =
-                        [];
+                    List<Map<String, dynamic>> remainingMembersForIndicator = [];
 
-                    if (total <= 4) {
-                      pageMembers = members;
+                    final int startIndex = pageIndex * 5;
+                    final int remainingFromStart = total - startIndex;
+
+                    if (remainingFromStart <= 6) {
+                      pageMembers = members.sublist(startIndex);
+                      showIndicatorCard = false;
                     } else {
-                      final int startIndex = pageIndex * 3;
-                      if (pageIndex < numPages - 1) {
-                        // Non-last page: show 3 members + 1 indicator card
-                        final int endIndex = startIndex + 3;
-                        pageMembers = members.sublist(startIndex, endIndex);
-                        showIndicatorCard = true;
-                        remainingMembersForIndicator = members.sublist(
-                          endIndex,
-                        );
+                      pageMembers = members.sublist(startIndex, startIndex + 5);
+                      showIndicatorCard = true;
+                      remainingMembersForIndicator = members.sublist(startIndex + 5);
+                    }
+
+                    final int gridItemCount = pageMembers.length + (showIndicatorCard ? 1 : 0);
+
+                    // Build the grid widgets for this page
+                    final List<Widget> gridWidgets = [];
+                    for (int index = 0; index < gridItemCount; index++) {
+                      if (showIndicatorCard && index == 5) {
+                        gridWidgets.add(_buildIndicatorCard(context, remainingMembersForIndicator));
                       } else {
-                        // Last page: show remaining members
-                        pageMembers = members.sublist(startIndex);
+                        gridWidgets.add(_buildMemberCard(context, pageMembers[index], callManager, callController));
                       }
                     }
 
-                    final int gridItemCount =
-                        pageMembers.length + (showIndicatorCard ? 1 : 0);
-
-                    return GridView.builder(
-                      physics:
-                          const NeverScrollableScrollPhysics(), // Scroll managed by PageView
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 0.82,
-                          ),
-                      itemCount: gridItemCount,
-                      itemBuilder: (context, index) {
-                        if (showIndicatorCard && index == 3) {
-                          final remaining = remainingMembersForIndicator;
-                          final visibleCount = remaining.length > 4
-                              ? 4
-                              : remaining.length;
-
-                          // Layout details for overlapping avatars
-                          const double avatarSize = 44.0;
-                          const double overlap = 14.0;
-                          const double itemWidth = avatarSize - overlap;
-                          final double stackWidth =
-                              avatarSize + (visibleCount - 1) * itemWidth;
-
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.04),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Positioned.fill(
-                                    child: Container(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                    ),
-                                  ),
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      // Overlapping stack of remaining members
-                                      SizedBox(
-                                        width: stackWidth,
-                                        height: avatarSize,
-                                        child: Stack(
-                                          children: List.generate(visibleCount, (
-                                            vIndex,
-                                          ) {
-                                            // Reverse generation so leftmost is top-most
-                                            final i = visibleCount - 1 - vIndex;
-                                            final m = remaining[i];
-                                            final String? mAvatar = m['avatar'];
-
-                                            return Positioned(
-                                              left: i * itemWidth,
-                                              child: Container(
-                                                width: avatarSize,
-                                                height: avatarSize,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                    color: Colors.white,
-                                                    width: 2,
-                                                  ),
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.1),
-                                                ),
-                                                child: ClipRRect(
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                        avatarSize / 2,
-                                                      ),
-                                                  child:
-                                                      (mAvatar != null &&
-                                                          mAvatar.isNotEmpty)
-                                                      ? CachedNetworkImage(
-                                                          imageUrl:
-                                                              ApiService.getImageUrl(
-                                                                mAvatar,
-                                                              ),
-                                                          cacheKey:
-                                                              _normalizeAvatarUrl(
-                                                                mAvatar,
-                                                              ),
-                                                          fit: BoxFit.cover,
-                                                          placeholder:
-                                                              (
-                                                                context,
-                                                                url,
-                                                              ) => Container(
-                                                                color: Colors
-                                                                    .white
-                                                                    .withValues(
-                                                                      alpha:
-                                                                          0.05,
-                                                                    ),
-                                                              ),
-                                                          errorWidget:
-                                                              (
-                                                                context,
-                                                                url,
-                                                                error,
-                                                              ) => const Icon(
-                                                                Icons.person,
-                                                                color: Colors
-                                                                    .white70,
-                                                                size: 20,
-                                                              ),
-                                                        )
-                                                      : const Icon(
-                                                          Icons.person,
-                                                          color: Colors.white70,
-                                                          size: 20,
-                                                        ),
-                                                ),
-                                              ),
-                                            );
-                                          }),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 14),
-                                      // Count text
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        child: Text(
-                                          "+${remaining.length} others",
-                                          textAlign: TextAlign.center,
-                                          style: fontStyle
-                                              .clashDisplaySemiBold14
-                                              .textColor(Colors.white),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        final member = pageMembers[index];
-                        final String userId =
-                            member['user_id']?.toString() ?? '';
-                        final String name = member['name'] ?? 'User';
-                        final String? avatar = member['avatar'];
-                        final bool isMe = member['isMe'] == true;
-                        final String? status = member['status']
-                            ?.toString()
-                            .toLowerCase();
-                        final bool isRemoteConnected =
-                            callManager
-                                .roomManager
-                                .room
-                                ?.remoteParticipants
-                                .values
-                                .any((rp) => rp.identity == userId) ??
-                            false;
-                        final bool isCalling =
-                            !isMe &&
-                            !isRemoteConnected &&
-                            (status == 'ringing' ||
-                                status == 'dialing' ||
-                                status == 'invited' ||
-                                status == null);
-                        final bool isSpeaking = isMe
-                            ? (callManager
-                                      .roomManager
-                                      .room
-                                      ?.localParticipant
-                                      ?.isSpeaking ??
-                                  false)
-                            : (callManager
-                                      .roomManager
-                                      .room
-                                      ?.remoteParticipants[userId]
-                                      ?.isSpeaking ??
-                                  false);
-
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: isMe
-                                ? const Color(
-                                    0xFF6B1D2F,
-                                  ).withValues(alpha: 0.25)
-                                : Colors.white.withValues(alpha: 0.04),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: isSpeaking
-                                  ? const Color(0xFF23C123)
-                                  : (isMe
-                                        ? const Color(
-                                            0xFF8B263E,
-                                          ).withValues(alpha: 0.5)
-                                        : Colors.white.withValues(alpha: 0.08)),
-                              width: isSpeaking ? 3.0 : 1.5,
-                            ),
-                            boxShadow: isSpeaking
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(
-                                        0xFF23C123,
-                                      ).withValues(alpha: 0.3),
-                                      blurRadius: 12,
-                                      spreadRadius: 2,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: Stack(
-                              alignment: Alignment.center,
+                    // Lay them out in Rows (max 2 per Row)
+                    final List<Widget> rows = [];
+                    int idx = 0;
+                    while (idx < gridWidgets.length) {
+                      final int remaining = gridWidgets.length - idx;
+                      if (remaining == 1) {
+                        // Last single item takes full width
+                        rows.add(
+                          Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // 1. Large background avatar shadow/silhouette
-                                if (avatar != null && avatar.isNotEmpty)
-                                  Positioned.fill(
-                                    child: Opacity(
-                                      opacity: 0.22, // Subtle and deep
-                                      child: CachedNetworkImage(
-                                        imageUrl: ApiService.getImageUrl(
-                                          avatar,
-                                        ),
-                                        cacheKey: _normalizeAvatarUrl(avatar),
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            const Center(
-                                              child: SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: Colors.white24,
-                                                    ),
-                                              ),
-                                            ),
-                                        errorWidget: (context, url, error) =>
-                                            const Opacity(
-                                              opacity: 0.04,
-                                              child: Icon(
-                                                Icons.person,
-                                                size: 140,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Positioned.fill(
-                                    child: Opacity(
-                                      opacity: 0.04,
-                                      child: Icon(
-                                        Icons.person,
-                                        size: 140,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-
-                                // Shading colored filter overlay to blend beautifully with plum/wine background
-                                Positioned.fill(
-                                  child: Container(
-                                    color: isMe
-                                        ? const Color(
-                                            0xFF2D141E,
-                                          ).withValues(alpha: 0.35)
-                                        : Colors.black.withValues(alpha: 0.15),
-                                  ),
-                                ),
-
-                                // 2. Avatar & Name Column
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // Rounded Avatar with thin border
-                                    Container(
-                                      width: 86,
-                                      height: 86,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.12,
-                                          ),
-                                          width: 2,
-                                        ),
-                                        color: Colors.white.withValues(
-                                          alpha: 0.06,
-                                        ),
-                                      ),
-                                      child:
-                                          (avatar != null && avatar.isNotEmpty)
-                                          ? ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(43),
-                                              child: CachedNetworkImage(
-                                                imageUrl:
-                                                    ApiService.getImageUrl(
-                                                      avatar,
-                                                    ),
-                                                cacheKey: _normalizeAvatarUrl(
-                                                  avatar,
-                                                ),
-                                                fit: BoxFit.cover,
-                                                placeholder: (context, url) =>
-                                                    const Center(
-                                                      child: SizedBox(
-                                                        width: 24,
-                                                        height: 24,
-                                                        child:
-                                                            CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                              color: Colors
-                                                                  .white30,
-                                                            ),
-                                                      ),
-                                                    ),
-                                                errorWidget:
-                                                    (context, url, error) =>
-                                                        const Icon(
-                                                          Icons.person,
-                                                          color: Colors.white70,
-                                                          size: 40,
-                                                        ),
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.person,
-                                              color: Colors.white70,
-                                              size: 40,
-                                            ),
-                                    ),
-                                    const SizedBox(height: 14),
-                                    // Name Text
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Text(
-                                        name,
-                                        textAlign: TextAlign.center,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: fontStyle.clashDisplaySemiBold14
-                                            .textColor(Colors.white),
-                                      ),
-                                    ),
-                                    if (isCalling) ...[
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        "Calling..",
-                                        style: fontStyle.clashDisplayMedium10
-                                            .textColor(Colors.white70),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-
-                                // 3. "Me" pill badge at top right
-                                if (isMe)
-                                  Positioned(
-                                    top: 12,
-                                    right: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF8B263E,
-                                        ), // Deep wine pill color
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.15,
-                                          ),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        "Me",
-                                        style: fontStyle.clashDisplayBold10
-                                            .textColor(Colors.white),
-                                      ),
-                                    ),
-                                  ),
-
-                                // 4. Mute indicator badge at top left
-                                Builder(
-                                  builder: (context) {
-                                    final callManager = context
-                                        .watch<CallManager>();
-                                    final String memberId =
-                                        member['user_id']?.toString() ?? '';
-                                    final bool isMuted = isMe
-                                        ? callManager.roomManager.isMuted
-                                        : (callManager
-                                                  .mutedParticipants[memberId] ??
-                                              (member['is_muted'] == true ||
-                                                  member['isMuted'] == true));
-
-                                    if (isMuted) {
-                                      return Positioned(
-                                        top: 12,
-                                        left: 12,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFD32F2F)
-                                                .withValues(
-                                                  alpha: 0.95,
-                                                ), // Premium crimson mute badge
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.15,
-                                              ),
-                                              width: 1,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.mic_off,
-                                            color: Colors.white,
-                                            size: 12,
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    return const SizedBox.shrink();
-                                  },
-                                ),
+                                Expanded(child: gridWidgets[idx]),
                               ],
                             ),
                           ),
                         );
-                      },
+                        idx += 1;
+                      } else {
+                        // Two items side-by-side with a small 4px space between them
+                        rows.add(
+                          Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: gridWidgets[idx]),
+                                const SizedBox(width: 4),
+                                Expanded(child: gridWidgets[idx + 1]),
+                              ],
+                            ),
+                          ),
+                        );
+                        idx += 2;
+                      }
+                    }
+
+                    final List<Widget> columnChildren = [];
+                    for (int i = 0; i < rows.length; i++) {
+                      columnChildren.add(rows[i]);
+                      if (i < rows.length - 1) {
+                        columnChildren.add(const SizedBox(height: 4));
+                      }
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: columnChildren,
                     );
                   },
                 ),
@@ -1373,6 +994,342 @@ class CallGridView extends StatelessWidget {
               const SizedBox(height: 110), // Space for bottom action bar
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIndicatorCard(
+    BuildContext context,
+    List<Map<String, dynamic>> remaining,
+  ) {
+    final visibleCount = remaining.length > 4 ? 4 : remaining.length;
+
+    // Layout details for overlapping avatars
+    const double avatarSize = 44.0;
+    const double overlap = 14.0;
+    const double itemWidth = avatarSize - overlap;
+    final double stackWidth = avatarSize + (visibleCount - 1) * itemWidth;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1.5,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.15),
+              ),
+            ),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Overlapping stack of remaining members
+                SizedBox(
+                  width: stackWidth,
+                  height: avatarSize,
+                  child: Stack(
+                    children: List.generate(visibleCount, (vIndex) {
+                      // Reverse generation so leftmost is top-most
+                      final i = visibleCount - 1 - vIndex;
+                      final m = remaining[i];
+                      final String? mAvatar = m['avatar'];
+
+                      return Positioned(
+                        left: i * itemWidth,
+                        child: Container(
+                          width: avatarSize,
+                          height: avatarSize,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 2,
+                            ),
+                            color: Colors.white.withValues(alpha: 0.1),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(avatarSize / 2),
+                            child: (mAvatar != null && mAvatar.isNotEmpty)
+                                ? CachedNetworkImage(
+                                    imageUrl: ApiService.getImageUrl(mAvatar),
+                                    cacheKey: _normalizeAvatarUrl(mAvatar),
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      color: Colors.white.withValues(alpha: 0.05),
+                                    ),
+                                    errorWidget: (context, url, error) =>
+                                        const Icon(
+                                      Icons.person,
+                                      color: Colors.white70,
+                                      size: 20,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.person,
+                                    color: Colors.white70,
+                                    size: 20,
+                                  ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // Count text
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    "+${remaining.length} others",
+                    textAlign: TextAlign.center,
+                    style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberCard(
+    BuildContext context,
+    Map<String, dynamic> member,
+    CallManager callManager,
+    CallController callController,
+  ) {
+    final String userId = member['user_id']?.toString() ?? '';
+    final String name = member['name'] ?? 'User';
+    final String? avatar = member['avatar'];
+    final bool isMe = member['isMe'] == true;
+    final String? status = member['status']?.toString().toLowerCase();
+    final bool isRemoteConnected = callManager.roomManager.room?.remoteParticipants.values
+            .any((rp) => rp.identity == userId) ??
+        false;
+    final bool isCalling = !isMe &&
+        !isRemoteConnected &&
+        (status == 'ringing' || status == 'dialing' || status == 'invited' || status == null);
+    final bool isSpeaking = isMe
+        ? (callManager.roomManager.room?.localParticipant?.isSpeaking ?? false)
+        : (callManager.roomManager.room?.remoteParticipants[userId]?.isSpeaking ?? false);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isMe
+            ? const Color(0xFF6B1D2F).withValues(alpha: 0.25)
+            : Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isSpeaking
+              ? const Color(0xFF23C123)
+              : (isMe
+                  ? const Color(0xFF8B263E).withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.08)),
+          width: isSpeaking ? 3.0 : 1.5,
+        ),
+        boxShadow: isSpeaking
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF23C123).withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 1. Large background avatar shadow/silhouette
+            if (avatar != null && avatar.isNotEmpty)
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.22, // Subtle and deep
+                  child: CachedNetworkImage(
+                    imageUrl: ApiService.getImageUrl(avatar),
+                    cacheKey: _normalizeAvatarUrl(avatar),
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white24,
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => const Opacity(
+                      opacity: 0.04,
+                      child: Icon(
+                        Icons.person,
+                        size: 140,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              const Positioned.fill(
+                child: Opacity(
+                  opacity: 0.04,
+                  child: Icon(
+                    Icons.person,
+                    size: 140,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+
+            // Shading colored filter overlay to blend beautifully with plum/wine background
+            Positioned.fill(
+              child: Container(
+                color: isMe
+                    ? const Color(0xFF2D141E).withValues(alpha: 0.35)
+                    : Colors.black.withValues(alpha: 0.15),
+              ),
+            ),
+
+            // 2. Avatar & Name Column
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Rounded Avatar with thin border
+                Container(
+                  width: 86,
+                  height: 86,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      width: 2,
+                    ),
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                  child: (avatar != null && avatar.isNotEmpty)
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(43),
+                          child: CachedNetworkImage(
+                            imageUrl: ApiService.getImageUrl(avatar),
+                            cacheKey: _normalizeAvatarUrl(avatar),
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white30,
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => const Icon(
+                              Icons.person,
+                              color: Colors.white70,
+                              size: 40,
+                            ),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.person,
+                          color: Colors.white70,
+                          size: 40,
+                        ),
+                ),
+                const SizedBox(height: 14),
+                // Name Text
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                  ),
+                ),
+                if (isCalling) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    "Calling..",
+                    style: fontStyle.clashDisplayMedium10.textColor(Colors.white70),
+                  ),
+                ],
+              ],
+            ),
+
+            // 3. "Me" pill badge at top right
+            if (isMe)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B263E), // Deep wine pill color
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    "Me",
+                    style: fontStyle.clashDisplayBold10.textColor(Colors.white),
+                  ),
+                ),
+              ),
+
+            // 4. Mute indicator badge at top left
+            Builder(
+              builder: (context) {
+                final callManagerWatch = context.watch<CallManager>();
+                final String memberId = member['user_id']?.toString() ?? '';
+                final bool isMuted = isMe
+                    ? callManagerWatch.roomManager.isMuted
+                    : (callManagerWatch.mutedParticipants[memberId] ??
+                        (member['is_muted'] == true || member['isMuted'] == true));
+
+                if (isMuted) {
+                  return Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD32F2F).withValues(alpha: 0.95), // Premium crimson mute badge
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.mic_off,
+                        color: Colors.white,
+                        size: 12,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
         ),
       ),
     );
