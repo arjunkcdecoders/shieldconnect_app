@@ -280,7 +280,7 @@ class CallManager extends ChangeNotifier {
 
       switch (event) {
         case ck_event.CallEventActionCallAccept():
-          final callId = event.id;
+          final callId = event.callKitParams.id;
           if (_incomingWaitingCall != null &&
               _incomingWaitingCall!['callId'] == callId) {
             await acceptWaitingCall();
@@ -344,7 +344,7 @@ class CallManager extends ChangeNotifier {
           break;
 
         case ck_event.CallEventActionCallDecline():
-          final callId = event.id;
+          final callId = event.callKitParams.id;
           if (_incomingWaitingCall != null &&
               _incomingWaitingCall!['callId'] == callId) {
             await declineWaitingCall();

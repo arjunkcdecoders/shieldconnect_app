@@ -14,6 +14,7 @@ import 'package:shieldconnect_app/controller/personal_chat_controller.dart';
 import 'package:shieldconnect_app/controller/group_chat_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/media_cache_service.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/date_helper.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
@@ -114,11 +115,18 @@ class ChatScreen extends StatelessWidget {
         builder: (context, controller, child) {
           final String titleName =
               controller.headerDetails?['name'] ?? userName;
-          final bool showProfilePic = isGroup || (controller.headerDetails?['show_profile_pic'] as bool? ?? true);
-          final String? avatarUrl = showProfilePic ? (controller.headerDetails?['avatar'] as String?) : null;
-          final bool showLastSeen = isGroup || (controller.headerDetails?['show_last_seen'] as bool? ?? true);
+          final bool showProfilePic =
+              isGroup ||
+              (controller.headerDetails?['show_profile_pic'] as bool? ?? true);
+          final String? avatarUrl = showProfilePic
+              ? (controller.headerDetails?['avatar'] as String?)
+              : null;
+          final bool showLastSeen =
+              isGroup ||
+              (controller.headerDetails?['show_last_seen'] as bool? ?? true);
           final String statusText =
-              (showLastSeen && (isGroup || controller.relationshipStatus == 'accepted'))
+              (showLastSeen &&
+                  (isGroup || controller.relationshipStatus == 'accepted'))
               ? (controller.headerDetails?['status'] ??
                     (isGroup ? '' : 'Offline'))
               : '';
@@ -319,8 +327,11 @@ class ChatScreen extends StatelessWidget {
                                                       msg['type'] ?? 'text';
                                                   final String? fileUrl =
                                                       msg['url'];
-                                                  final String? avatarPath = showProfilePic
-                                                      ? (msg['avatar']?.toString() ?? avatarUrl)
+                                                  final String? avatarPath =
+                                                      showProfilePic
+                                                      ? (msg['avatar']
+                                                                ?.toString() ??
+                                                            avatarUrl)
                                                       : null;
 
                                                   messageWidget = Padding(
@@ -444,8 +455,11 @@ class ChatScreen extends StatelessWidget {
                                                     msg['type'] ?? 'text';
                                                 final String? fileUrl =
                                                     msg['url'];
-                                                final String? avatarPath = showProfilePic
-                                                    ? (msg['avatar']?.toString() ?? avatarUrl)
+                                                final String? avatarPath =
+                                                    showProfilePic
+                                                    ? (msg['avatar']
+                                                              ?.toString() ??
+                                                          avatarUrl)
                                                     : null;
 
                                                 messageWidget = Padding(
@@ -1110,11 +1124,10 @@ class ChatScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        VoiceCallingScreen(
-                          userName: titleName,
-                          avatarUrl: avatarUrl,
-                        ),
+                    builder: (context) => VoiceCallingScreen(
+                      userName: titleName,
+                      avatarUrl: avatarUrl,
+                    ),
                   ),
                 );
               },
@@ -3258,29 +3271,42 @@ class ChatScreen extends StatelessWidget {
                   ),
                 ],
                 if (url != null && url.isNotEmpty)
-                  Image.network(
-                    url,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 110,
-                        color: appColor(context).grey200,
-                        child: const Center(child: CircularProgressIndicator()),
+                  FutureBuilder<File?>(
+                    future: MediaCacheService().getCachedMedia(url),
+                    builder: (context, snapshot) {
+                      final file = snapshot.data;
+                      if (file != null) {
+                        return Image.file(
+                          file,
+                          fit: BoxFit.cover,
+                          height: 120,
+                        );
+                      }
+                      return Image.network(
+                        url,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            height: 110,
+                            color: appColor(context).grey200,
+                            child: const Center(child: CircularProgressIndicator()),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          height: 110,
+                          color: appColor(context).grey200,
+                          child: Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: appColor(context).grey400,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                        fit: BoxFit.cover,
+                        height: 120,
                       );
                     },
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 110,
-                      color: appColor(context).grey200,
-                      child: Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          color: appColor(context).grey400,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                    fit: BoxFit.cover,
-                    height: 120,
                   )
                 else
                   Container(
@@ -4312,10 +4338,10 @@ class ChatScreen extends StatelessWidget {
                                                   .withValues(alpha: 0.15),
                                               valueColor:
                                                   AlwaysStoppedAnimation<Color>(
-                                                isOutgoing
-                                                    ? Colors.white
-                                                    : Colors.black,
-                                              ),
+                                                    isOutgoing
+                                                        ? Colors.white
+                                                        : Colors.black,
+                                                  ),
                                             ),
                                             Icon(
                                               Icons.close,

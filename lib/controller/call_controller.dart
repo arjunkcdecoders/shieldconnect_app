@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/services/call_manager.dart';
+import 'package:shieldconnect_app/services/socket_service.dart';
 import 'dart:developer' as dev;
 
 class CallController extends ChangeNotifier {
@@ -31,6 +32,7 @@ class CallController extends ChangeNotifier {
   String? _pollingCallId;
 
   bool _hasFetchedParticipants = false;
+  final Map<String, DateTime> _callingStartTimes = {};
   bool get hasFetchedParticipants => _hasFetchedParticipants;
 
   int _currentPage = 0;
@@ -223,8 +225,46 @@ class CallController extends ChangeNotifier {
               status != 'rejected';
         }).toList();
 
+        // Handle invitation timeouts (30 seconds) for all calling participants
+        final callManager = CallManager();
+        final String? myId = callManager.myUserId;
+        for (final p in newParticipants) {
+          final pId = p['user_id'] ?? p['id'] ?? p['_id'];
+          if (pId != null) {
+            final String pIdStr = pId.toString();
+            if (pIdStr == myId) continue;
+
+            final String? status = p['status']?.toString().toLowerCase();
+            final bool isCalling = status == 'ringing' ||
+                status == 'dialing' ||
+                status == 'invited' ||
+                status == null;
+
+            if (isCalling) {
+              if (!_callingStartTimes.containsKey(pIdStr)) {
+                _callingStartTimes[pIdStr] = DateTime.now();
+              } else {
+                final startTime = _callingStartTimes[pIdStr]!;
+                final diff = DateTime.now().difference(startTime);
+                if (diff.inSeconds >= 30) {
+                  // Prevent duplicate triggers
+                  _callingStartTimes[pIdStr] = DateTime.now().add(const Duration(minutes: 5));
+                  removeTimedOutParticipant(callId, pIdStr);
+                }
+              }
+            } else {
+              _callingStartTimes.remove(pIdStr);
+            }
+          }
+        }
+
+        // Clean up tracking for participants no longer in the new list
+        final activeUserIds = newParticipants
+            .map((p) => (p['user_id'] ?? p['id'] ?? p['_id'])?.toString())
+            .toSet();
+        _callingStartTimes.removeWhere((key, value) => !activeUserIds.contains(key));
+
         // Check if there is any active participant other than Me
-        final String? myId = CallManager().myUserId;
         final bool hasOtherActiveParticipant = newParticipants.any((p) {
           final pId = p['user_id'] ?? p['id'] ?? p['_id'];
           return pId != null && pId.toString() != myId;
@@ -361,10 +401,44 @@ class CallController extends ChangeNotifier {
     }
   }
 
+  Future<void> removeTimedOutParticipant(String callId, String userId) async {
+    try {
+      dev.log(
+        '👥 CallController: Removing timed out participant $userId from call $callId',
+        name: 'CallController',
+      );
+
+      // REST /call/decline endpoint to update status
+      await _apiService.post(
+        '/call/decline',
+        data: {'call_id': callId, 'user_id': userId},
+      );
+
+      // Emit call_rejected socket event
+      final callManager = CallManager();
+      SocketService().emit('call_rejected', {
+        'to': userId,
+        'callId': callId,
+        'roomId': callManager.currentRoomId,
+        'callerId': callManager.callerId,
+        'receiverId': userId,
+      });
+
+      _callingStartTimes.remove(userId);
+      await fetchParticipants(callId);
+    } catch (e) {
+      dev.log(
+        '🚨 CallController: Error removing timed out participant: $e',
+        name: 'CallController',
+      );
+    }
+  }
+
   void startParticipantsPolling(String callId) {
     if (_pollingCallId == callId) return;
     _pollingCallId = callId;
     _participantsTimer?.cancel();
+    _callingStartTimes.clear();
     fetchParticipants(callId); // initial load
     _participantsTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       fetchParticipants(callId);
@@ -380,6 +454,7 @@ class CallController extends ChangeNotifier {
     _currentPage = 0;
     _pageController?.dispose();
     _pageController = null;
+    _callingStartTimes.clear();
     notifyListeners();
   }
 }

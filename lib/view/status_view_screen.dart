@@ -8,7 +8,6 @@ import 'package:shieldconnect_app/model/user_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
-import 'package:shieldconnect_app/utils/image_assets.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
@@ -170,12 +169,24 @@ class _StatusViewBodyState extends State<_StatusViewBody>
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 1.5),
             ),
-            child: CircleAvatar(
-              radius: 11,
-              backgroundImage: avatarUrl.isNotEmpty
-                  ? CachedNetworkImageProvider(avatarUrl) as ImageProvider
-                  : const AssetImage(ImageAssets.userAvatar),
-            ),
+            child: avatarUrl.isNotEmpty
+                ? CircleAvatar(
+                    radius: 11,
+                    backgroundImage: CachedNetworkImageProvider(avatarUrl),
+                  )
+                : Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                  ),
           ),
         );
       }).toList(),
@@ -627,13 +638,25 @@ class _StatusViewBodyState extends State<_StatusViewBody>
                           ),
                         ),
                         const SizedBox(width: 4),
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundImage: userAvatarUrl.isNotEmpty
-                              ? CachedNetworkImageProvider(userAvatarUrl)
-                                    as ImageProvider
-                              : const AssetImage(ImageAssets.userAvatar),
-                        ),
+                        userAvatarUrl.isNotEmpty
+                            ? CircleAvatar(
+                                radius: 20,
+                                backgroundImage:
+                                    CachedNetworkImageProvider(userAvatarUrl),
+                              )
+                            : Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -1098,12 +1121,25 @@ class _StatusViewBodyState extends State<_StatusViewBody>
             alignment: Alignment.bottomRight,
             clipBehavior: Clip.none,
             children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundImage: avatarUrl.isNotEmpty
-                    ? CachedNetworkImageProvider(avatarUrl) as ImageProvider
-                    : const AssetImage(ImageAssets.userAvatar),
-              ),
+              avatarUrl.isNotEmpty
+                  ? CircleAvatar(
+                      radius: 26,
+                      backgroundImage: CachedNetworkImageProvider(avatarUrl),
+                    )
+                  : Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color:
+                            appColor(context).secondary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.person,
+                        color: appColor(context).secondary,
+                        size: 28,
+                      ),
+                    ),
             ],
           ),
           const SizedBox(width: 14),

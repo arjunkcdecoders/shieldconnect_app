@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shieldconnect_app/controller/announcement_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
@@ -11,6 +13,12 @@ class AnnouncementDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        context.read<AnnouncementController>().markAllAsRead();
+      }
+    });
+
     return Scaffold(
       backgroundColor: appColor(context).white,
       appBar: AppBar(
@@ -40,6 +48,7 @@ class AnnouncementDetailsScreen extends StatelessWidget {
                 ),
               )
             : ListView.separated(
+                reverse: true,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24.0,
                   vertical: 20.0,

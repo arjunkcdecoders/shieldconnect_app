@@ -66,6 +66,12 @@ class FontStyle {
     fontWeight: FontWeight.w600,
   );
 
+  TextStyle get clashDisplaySemiBold28 => const TextStyle(
+    fontFamily: clashDisplay,
+    fontSize: 28,
+    fontWeight: FontWeight.w600,
+  );
+
   TextStyle get clashDisplaySemiBold24 => const TextStyle(
     fontFamily: clashDisplay,
     fontSize: 24,

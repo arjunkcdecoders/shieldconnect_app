@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+﻿import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/dhsi_controller.dart';
@@ -194,68 +194,20 @@ class DhsiScreen extends StatelessWidget {
   }
 
   // Header Component
-  Widget _buildHeader(BuildContext context, String userName, String userAvatar) {
+  Widget _buildHeader(
+    BuildContext context,
+    String userName,
+    String userAvatar,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Avatar + Check badge
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            GestureDetector(
-              onTap: () {
-                // Tapping avatar goes to profile
-              },
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(9.33),
-                  color: appColor(context).grey100,
-                  boxShadow: [
-                    BoxShadow(
-                      color: appColor(context).black.withValues(alpha: 0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(9.33),
-                  child: userAvatar.isNotEmpty
-                      ? Image.network(
-                          ApiService.getImageUrl(userAvatar),
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, o, s) => Container(
-                            color: appColor(context).secondary.withValues(alpha: 0.1),
-                            alignment: Alignment.center,
-                            child: Text(
-                              userName.isNotEmpty ? userName[0].toUpperCase() : "U",
-                              style: fontStyle.clashDisplayBold16.textColor(
-                                appColor(context).secondary,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Container(
-                          color: appColor(context).secondary.withValues(alpha: 0.1),
-                          alignment: Alignment.center,
-                          child: Text(
-                            userName.isNotEmpty ? userName[0].toUpperCase() : "U",
-                            style: fontStyle.clashDisplayBold16.textColor(
-                              appColor(context).secondary,
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              right: -4,
-              child: Image.asset(ImageAssets.tick, width: 16, height: 16),
-            ),
-          ],
+        // Header Title
+        Text(
+          "DHSI",
+          style: fontStyle.clashDisplayBold24.textColor(
+            appColor(context).black,
+          ),
         ),
         // Bell and Menu Circular Badges
         Row(
@@ -401,10 +353,14 @@ class DhsiScreen extends StatelessWidget {
                           ApiService.getImageUrl(userAvatar),
                           fit: BoxFit.cover,
                           errorBuilder: (c, o, s) => Container(
-                            color: appColor(context).secondary.withValues(alpha: 0.1),
+                            color: appColor(
+                              context,
+                            ).secondary.withValues(alpha: 0.1),
                             alignment: Alignment.center,
                             child: Text(
-                              userName.isNotEmpty ? userName[0].toUpperCase() : "U",
+                              userName.isNotEmpty
+                                  ? userName[0].toUpperCase()
+                                  : "U",
                               style: fontStyle.clashDisplayBold24.textColor(
                                 appColor(context).secondary,
                               ),
@@ -412,10 +368,14 @@ class DhsiScreen extends StatelessWidget {
                           ),
                         )
                       : Container(
-                          color: appColor(context).secondary.withValues(alpha: 0.1),
+                          color: appColor(
+                            context,
+                          ).secondary.withValues(alpha: 0.1),
                           alignment: Alignment.center,
                           child: Text(
-                            userName.isNotEmpty ? userName[0].toUpperCase() : "U",
+                            userName.isNotEmpty
+                                ? userName[0].toUpperCase()
+                                : "U",
                             style: fontStyle.clashDisplayBold24.textColor(
                               appColor(context).secondary,
                             ),
@@ -899,7 +859,7 @@ class DhsiScreen extends StatelessWidget {
 
     return SizedBox(
       width: 100,
-      height: 95,
+      height: 100,
       child: Stack(
         alignment: Alignment.topCenter,
         clipBehavior: Clip.none,
@@ -908,8 +868,8 @@ class DhsiScreen extends StatelessWidget {
           Positioned(
             top: 24,
             child: Container(
-              width: 100,
-              height: 68,
+              width: 120,
+              height: 76,
               padding: const EdgeInsets.only(
                 top: 24,
                 bottom: 4,
@@ -934,7 +894,7 @@ class DhsiScreen extends StatelessWidget {
                   Text(
                     subtitle,
                     textAlign: TextAlign.center,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: fontStyle.clashDisplayMedium10
                         .copyWith(fontSize: 9)
@@ -971,7 +931,9 @@ class DhsiScreen extends StatelessWidget {
                               ApiService.getImageUrl(userAvatar),
                               fit: BoxFit.cover,
                               errorBuilder: (c, o, s) => Container(
-                                color: appColor(context).secondary.withValues(alpha: 0.1),
+                                color: appColor(
+                                  context,
+                                ).secondary.withValues(alpha: 0.1),
                                 alignment: Alignment.center,
                                 child: Text(
                                   (userName ?? "User").isNotEmpty
@@ -984,7 +946,9 @@ class DhsiScreen extends StatelessWidget {
                               ),
                             )
                           : Container(
-                              color: appColor(context).secondary.withValues(alpha: 0.1),
+                              color: appColor(
+                                context,
+                              ).secondary.withValues(alpha: 0.1),
                               alignment: Alignment.center,
                               child: Text(
                                 (userName ?? "User").isNotEmpty

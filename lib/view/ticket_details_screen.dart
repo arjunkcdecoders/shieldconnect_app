@@ -39,9 +39,14 @@ class TicketDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final controller = Provider.of<HelpSupportController>(context, listen: false);
+      final controller = Provider.of<HelpSupportController>(
+        context,
+        listen: false,
+      );
       final ticket = controller.selectedTicket;
-      final isDifferentTicket = ticket == null || (ticket.id != ticketId && ticket.ticketId != ticketId);
+      final isDifferentTicket =
+          ticket == null ||
+          (ticket.id != ticketId && ticket.ticketId != ticketId);
 
       if (isDifferentTicket && !controller.isLoading) {
         controller.fetchTicketDetails(ticketId);
@@ -249,39 +254,48 @@ class TicketDetailsScreen extends StatelessWidget {
                       color: appColor(context).grey100,
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: controller.ticketChats.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    "No messages yet. Send a message to start.",
-                                    style: fontStyle.clashDisplayMedium12.textColor(
-                                      appColor(context).grey600,
+                    child: GestureDetector(
+                      onTap: () =>
+                          FocusManager.instance.primaryFocus?.unfocus(),
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: controller.ticketChats.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      "No messages yet. Send a message to start.",
+                                      style: fontStyle.clashDisplayMedium12
+                                          .textColor(appColor(context).grey600),
                                     ),
+                                  )
+                                : ListView.builder(
+                                    reverse: true,
+                                    itemCount: controller.ticketChats.length,
+                                    itemBuilder: (context, index) {
+                                      // Since list is reversed, index 0 is the newest message
+                                      final chat =
+                                          controller.ticketChats[controller
+                                                  .ticketChats
+                                                  .length -
+                                              1 -
+                                              index];
+                                      final isMe = chat.adminUserId == null;
+                                      return _buildChatMessage(
+                                        context,
+                                        chat,
+                                        isMe,
+                                      );
+                                    },
                                   ),
-                                )
-                              : ListView.builder(
-                                  reverse: true,
-                                  itemCount: controller.ticketChats.length,
-                                  itemBuilder: (context, index) {
-                                    // Since list is reversed, index 0 is the newest message
-                                    final chat = controller.ticketChats[controller.ticketChats.length - 1 - index];
-                                    final isMe = chat.adminUserId == null;
-                                    return _buildChatMessage(
-                                      context,
-                                      chat,
-                                      isMe,
-                                    );
-                                  },
-                                ),
-                        ),
-                        const SizedBox(height: 16),
-                        _ChatInputWidget(
-                          ticketId: ticketId,
-                          controller: controller,
-                        ),
-                      ],
+                          ),
+                          const SizedBox(height: 16),
+                          _ChatInputWidget(
+                            ticketId: ticketId,
+                            controller: controller,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -315,7 +329,11 @@ class TicketDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildChatMessage(BuildContext context, TicketChatModel chat, bool isMe) {
+  Widget _buildChatMessage(
+    BuildContext context,
+    TicketChatModel chat,
+    bool isMe,
+  ) {
     final timeStr = chat.createdAt != null
         ? DateFormat('hh:mm a').format(chat.createdAt!.toLocal())
         : '';
@@ -325,7 +343,9 @@ class TicketDetailsScreen extends StatelessWidget {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
-        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 4, right: 4, left: 4),
@@ -339,7 +359,9 @@ class TicketDetailsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isMe ? appColor(context).secondary : appColor(context).white,
+              color: isMe
+                  ? appColor(context).secondary
+                  : appColor(context).white,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
@@ -354,82 +376,95 @@ class TicketDetailsScreen extends StatelessWidget {
             ),
             child: hasAttachment
                 ? (isImg
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: CachedNetworkImage(
-                              imageUrl: chat.fileUrl!,
-                              width: 150,
-                              height: 120,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: CachedNetworkImage(
+                                imageUrl: chat.fileUrl!,
                                 width: 150,
                                 height: 120,
-                                color: Colors.grey[200],
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  width: 150,
+                                  height: 120,
+                                  color: Colors.grey[200],
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  width: 150,
+                                  height: 120,
+                                  color: Colors.grey[200],
+                                  child: const Icon(
+                                    Icons.broken_image,
+                                    color: Colors.grey,
                                   ),
                                 ),
                               ),
-                              errorWidget: (context, url, error) => Container(
-                                width: 150,
-                                height: 120,
-                                color: Colors.grey[200],
-                                child: const Icon(Icons.broken_image, color: Colors.grey),
-                              ),
                             ),
-                          ),
-                          if (chat.message != null &&
-                              chat.message!.isNotEmpty &&
-                              !chat.message!.startsWith('Attachment:')) ...[
-                            const SizedBox(height: 6),
-                            LinkifiedText(
-                              text: chat.message!,
-                              style: fontStyle.clashDisplayMedium12.textColor(
-                                isMe ? Colors.white : appColor(context).black,
+                            if (chat.message != null &&
+                                chat.message!.isNotEmpty &&
+                                !chat.message!.startsWith('Attachment:')) ...[
+                              const SizedBox(height: 6),
+                              LinkifiedText(
+                                text: chat.message!,
+                                style: fontStyle.clashDisplayMedium12.textColor(
+                                  isMe ? Colors.white : appColor(context).black,
+                                ),
+                              ),
+                            ],
+                          ],
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.insert_drive_file,
+                              color: isMe
+                                  ? Colors.white
+                                  : appColor(context).secondary,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    chat.fileName ?? "File Attachment",
+                                    style: fontStyle.clashDisplaySemiBold12
+                                        .textColor(
+                                          isMe
+                                              ? Colors.white
+                                              : appColor(context).black,
+                                        ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (chat.fileSize != null)
+                                    Text(
+                                      "${(chat.fileSize! / 1024).toStringAsFixed(1)} KB",
+                                      style: fontStyle.clashDisplayMedium10
+                                          .textColor(
+                                            isMe
+                                                ? Colors.white70
+                                                : appColor(context).grey400,
+                                          ),
+                                    ),
+                                ],
                               ),
                             ),
                           ],
-                        ],
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.insert_drive_file,
-                            color: isMe ? Colors.white : appColor(context).secondary,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  chat.fileName ?? "File Attachment",
-                                  style: fontStyle.clashDisplaySemiBold12.textColor(
-                                    isMe ? Colors.white : appColor(context).black,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (chat.fileSize != null)
-                                  Text(
-                                    "${(chat.fileSize! / 1024).toStringAsFixed(1)} KB",
-                                    style: fontStyle.clashDisplayMedium10.textColor(
-                                      isMe ? Colors.white70 : appColor(context).grey400,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ))
+                        ))
                 : LinkifiedText(
                     text: chat.message ?? "",
                     style: fontStyle.clashDisplayMedium12.textColor(
@@ -458,10 +493,7 @@ class _ChatInputWidget extends StatefulWidget {
   final String ticketId;
   final HelpSupportController controller;
 
-  const _ChatInputWidget({
-    required this.ticketId,
-    required this.controller,
-  });
+  const _ChatInputWidget({required this.ticketId, required this.controller});
 
   @override
   State<_ChatInputWidget> createState() => _ChatInputWidgetState();
@@ -512,9 +544,9 @@ class _ChatInputWidgetState extends State<_ChatInputWidget> {
     } catch (e) {
       debugPrint("Error picking file: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error picking file: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error picking file: $e")));
       }
     }
   }
@@ -533,11 +565,7 @@ class _ChatInputWidgetState extends State<_ChatInputWidget> {
               color: appColor(context).white,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.add,
-              color: appColor(context).grey400,
-              size: 20,
-            ),
+            child: Icon(Icons.add, color: appColor(context).grey400, size: 20),
           ),
         ),
         const SizedBox(width: 12),
@@ -580,11 +608,7 @@ class _ChatInputWidgetState extends State<_ChatInputWidget> {
                       strokeWidth: 2,
                     ),
                   )
-                : const Icon(
-                    Icons.send,
-                    color: Colors.white,
-                    size: 18,
-                  ),
+                : const Icon(Icons.send, color: Colors.white, size: 18),
           ),
         ),
       ],

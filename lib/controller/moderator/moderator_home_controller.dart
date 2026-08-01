@@ -2,13 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
-import 'package:shieldconnect_app/services/moderation_api_client.dart';
 import 'package:shieldconnect_app/model/moderator/moderation_stats_response.dart';
 import 'package:shieldconnect_app/model/moderator/moderation_item.dart';
+import 'package:shieldconnect_app/controller/moderator/moderation_controller.dart';
 
 class ModeratorHomeController extends ChangeNotifier {
-  final ModerationApiClient _apiClient = ModerationApiClient();
-
   bool isLoadingStats = false;
   bool hasError = false;
   ModerationStats? stats;
@@ -55,7 +53,7 @@ class ModeratorHomeController extends ChangeNotifier {
         return;
       }
 
-      final response = await _apiClient.fetchStats(moderatorId);
+      final response = await ModerationController.apiFetchStats(moderatorId);
       if (response.success && response.data != null) {
         stats = response.data;
         hasError = false;
@@ -107,7 +105,7 @@ class ModeratorHomeController extends ChangeNotifier {
         return;
       }
 
-      final response = await _apiClient.fetchHistory(
+      final response = await ModerationController.apiFetchHistory(
         page: 1,
         limit: 5,
         moderatorId: moderatorId,
@@ -146,7 +144,7 @@ class ModeratorHomeController extends ChangeNotifier {
       final String? moderatorId = user.id;
       if (moderatorId == null || moderatorId.isEmpty) return false;
 
-      final response = await _apiClient.updateItemStatus(
+      final response = await ModerationController.apiUpdateItemStatus(
         itemId: itemId,
         status: status,
         moderatorId: moderatorId,
@@ -191,74 +189,5 @@ class ModeratorHomeController extends ChangeNotifier {
       "color": const Color(0xFFC61D1D),
     },
     {"title": "Escalations", "value": "02", "color": const Color(0xFFD42554)},
-  ];
-
-  final List<Map<String, dynamic>> moderationItems = [
-    {
-      "postId": "post-007",
-      "userName": "SkyRunner",
-      "riskScore": "0.87",
-      "tags": ["GROOMING", "TRUST_BUILDING"],
-      "content":
-          "You seem so mature for your age. I've never met anyone who underst...",
-      "timestamp": "1/15/2025  8:45:00 PM",
-    },
-    {
-      "postId": "post-007",
-      "userName": "SkyRunner",
-      "riskScore": "0.87",
-      "tags": ["GROOMING", "TRUST_BUILDING"],
-      "content":
-          "You seem so mature for your age. I've never met anyone who underst...",
-      "timestamp": "1/15/2025  8:45:00 PM",
-    },
-    {
-      "postId": "post-007",
-      "userName": "SkyRunner",
-      "riskScore": "0.87",
-      "tags": ["GROOMING", "TRUST_BUILDING"],
-      "content":
-          "You seem so mature for your age. I've never met anyone who underst...",
-      "timestamp": "1/15/2025  8:45:00 PM",
-    },
-    {
-      "postId": "post-007",
-      "userName": "SkyRunner",
-      "riskScore": "0.87",
-      "tags": ["GROOMING", "TRUST_BUILDING"],
-      "content":
-          "You seem so mature for your age. I've never met anyone who underst...",
-      "timestamp": "1/15/2025  8:45:00 PM",
-    },
-  ];
-
-  final List<Map<String, dynamic>> recentRegistrations = [
-    {
-      "name": "Maisie williams",
-      "email": "maisiewilliams@gmail.com",
-      "phone": "9898989898",
-      "country": "USA",
-      "flag": "🇺🇸",
-      "image":
-          "https://images.pexels.com/photos/1520760/pexels-photo-1520760.jpeg?auto=compress&cs=tinysrgb&h=200",
-    },
-    {
-      "name": "Maisie williams",
-      "email": "maisiewilliams@gmail.com",
-      "phone": "9898989898",
-      "country": "USA",
-      "flag": "🇺🇸",
-      "image":
-          "https://images.pexels.com/photos/1520760/pexels-photo-1520760.jpeg?auto=compress&cs=tinysrgb&h=200",
-    },
-    {
-      "name": "Maisie williams",
-      "email": "maisiewilliams@gmail.com",
-      "phone": "9898989898",
-      "country": "USA",
-      "flag": "🇺🇸",
-      "image":
-          "https://images.pexels.com/photos/1520760/pexels-photo-1520760.jpeg?auto=compress&cs=tinysrgb&h=200",
-    },
   ];
 }

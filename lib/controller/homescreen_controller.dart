@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
+import 'package:shieldconnect_app/services/local_db_service.dart';
+import 'package:shieldconnect_app/model/conversation_model.dart';
 
 class HomeScreenController extends ChangeNotifier {
   HomeScreenController() {
@@ -34,8 +37,46 @@ class HomeScreenController extends ChangeNotifier {
   }
 
   List<dynamic> _recentChats = [];
+  
+  // In-memory caches for unread counts and online status (omitted from local SQLite db per requirements)
+  final Map<String, int> _inMemoryUnreadCounts = {};
+  final Map<String, bool> _inMemoryOnlineStatus = {};
+
+  void _updateInMemoryCache(List<dynamic> chats) {
+    for (final chat in chats) {
+      if (chat is Map) {
+        final conversation = chat['conversation'];
+        if (conversation is Map) {
+          final String cid = (conversation['id'] ?? conversation['_id'] ?? '').toString();
+          if (cid.isNotEmpty) {
+            _inMemoryUnreadCounts[cid] = chat['unread_count'] as int? ?? 0;
+            _inMemoryOnlineStatus[cid] = conversation['is_online'] as bool? ?? false;
+          }
+        }
+      }
+    }
+  }
+
   List<dynamic> get recentChats {
-    List<dynamic> chats = _recentChats;
+    // Inject dynamic unread counts and online status from in-memory caches
+    List<dynamic> chats = _recentChats.map((chat) {
+      if (chat is Map) {
+        final conversation = chat['conversation'];
+        if (conversation is Map) {
+          final String cid = (conversation['id'] ?? conversation['_id'] ?? '').toString();
+          
+          final Map<String, dynamic> updatedConversation = Map<String, dynamic>.from(conversation);
+          updatedConversation['is_online'] = _inMemoryOnlineStatus[cid] ?? conversation['is_online'] ?? false;
+          
+          final Map<String, dynamic> updatedChat = Map<String, dynamic>.from(chat);
+          updatedChat['conversation'] = updatedConversation;
+          updatedChat['unread_count'] = _inMemoryUnreadCounts[cid] ?? chat['unread_count'] ?? 0;
+          
+          return updatedChat;
+        }
+      }
+      return chat;
+    }).toList();
 
     if (_userId != null) {
       chats = chats.where((chat) {
@@ -56,11 +97,49 @@ class HomeScreenController extends ChangeNotifier {
       }).toList();
     }
 
+    // Filter based on active tab locally
     if (_activeTab == 'Unread') {
       chats = chats.where((chat) {
         if (chat is Map) {
           final int unread = chat['unread_count'] ?? 0;
           return unread > 0;
+        }
+        return false;
+      }).toList();
+    } else if (_activeTab == 'Groups') {
+      chats = chats.where((chat) {
+        if (chat is Map) {
+          final conversation = chat['conversation'];
+          return conversation is Map && conversation['type'] == 'group';
+        }
+        return false;
+      }).toList();
+    } else if (_activeTab == 'Favourite') {
+      chats = chats.where((chat) {
+        if (chat is Map) {
+          return chat['is_favorite'] == true;
+        }
+        return false;
+      }).toList();
+    } else if (_activeTab == 'Requests') {
+      chats = chats.where((chat) {
+        if (chat is Map) {
+          final relationship = chat['relationship'];
+          final String relStatus = relationship != null
+              ? (relationship['status']?.toString() ?? '')
+              : '';
+          return relStatus == 'pending';
+        }
+        return false;
+      }).toList();
+    } else if (_activeTab == 'All') {
+      chats = chats.where((chat) {
+        if (chat is Map) {
+          final relationship = chat['relationship'];
+          final String relStatus = relationship != null
+              ? (relationship['status']?.toString() ?? '')
+              : '';
+          return relStatus != 'pending';
         }
         return false;
       }).toList();
@@ -82,14 +161,11 @@ class HomeScreenController extends ChangeNotifier {
 
   int get totalUnreadCount {
     int total = 0;
-    for (final chat in _recentChats) {
-      if (chat is Map) {
-        final int unread = chat['unread_count'] as int? ?? 0;
-        if (unread > 0) {
-          total++;
-        }
+    _inMemoryUnreadCounts.forEach((chatKey, unread) {
+      if (unread > 0) {
+        total++;
       }
-    }
+    });
     return total;
   }
 
@@ -115,25 +191,51 @@ class HomeScreenController extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  String? _selectedChatId;
+  String? get selectedChatId => _selectedChatId;
+
+  void setSelectedChatId(String? chatId) {
+    if (_selectedChatId == chatId) return;
+    _selectedChatId = chatId;
+    notifyListeners();
+  }
+
   String _activeTab = 'All';
   String get activeTab => _activeTab;
 
-  void setActiveTab(String tab) {
+  void setActiveTab(String tab) async {
     if (_activeTab == tab) return;
     _activeTab = tab;
+    
+    // Load cached recent chats first so we have the full list
+    final List<ConversationModel> cached = await LocalDbService().getConversations();
+    if (cached.isNotEmpty) {
+      _recentChats = cached.map((m) => m.toJson()).toList();
+    }
     notifyListeners();
-    fetchRecentChats(tab: tab);
+    
+    // Fetch from API in background. Never show loader.
+    fetchRecentChats(tab: tab, updateLoadingState: false);
   }
 
   Future<void> init() async {
-    _isLoading = true;
-    notifyListeners();
+    // Resolve userId first to make sure UI filtering is correct
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? sessionStr = prefs.getString('user_session');
+    if (sessionStr != null) {
+      final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+      final UserModel user = UserModel.fromJson(userMap);
+      _userId = user.id;
+    }
 
-    await fetchRecentChats(updateLoadingState: false);
-    await fetchRequestCount();
-    await fetchProfileImage();
-    await fetchAdminAnnouncement();
-    await fetchNotificationCount();
+    // Load cached recent chats from SQLite
+    await loadCachedRecentChats();
+
+    // Show app icon loader if cache is empty (e.g. on first login/launch)
+    if (_recentChats.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     // Setup global real-time listener to refresh recent chats list
     SocketService().lastReceivedMessageNotifier.removeListener(
@@ -166,7 +268,29 @@ class HomeScreenController extends ChangeNotifier {
       _onTypingIndicatorChanged,
     );
 
-    _isLoading = false;
+    // Trigger API updates in background concurrently with a minimum 500ms duration
+    Future.wait([
+      fetchRequestCount(),
+      fetchProfileImage(),
+      fetchAdminAnnouncement(),
+      fetchNotificationCount(),
+      fetchRecentChats(updateLoadingState: false),
+      Future.delayed(const Duration(milliseconds: 500)),
+    ]).then((_) {
+      _isLoading = false;
+      notifyListeners();
+    }).catchError((e) {
+      debugPrint("Error during background sync: $e");
+      _isLoading = false;
+      notifyListeners();
+    });
+  }
+
+  Future<void> loadCachedRecentChats() async {
+    final List<ConversationModel> cached = await LocalDbService().getConversations();
+    if (cached.isNotEmpty) {
+      _recentChats = cached.map((m) => m.toJson()).toList();
+    }
     notifyListeners();
   }
 
@@ -192,7 +316,7 @@ class HomeScreenController extends ChangeNotifier {
 
   Future<void> fetchRecentChats({
     String? tab,
-    bool updateLoadingState = true,
+    bool updateLoadingState = false,
   }) async {
     try {
       if (updateLoadingState) {
@@ -229,16 +353,35 @@ class HomeScreenController extends ChangeNotifier {
             : responseData as Map<String, dynamic>;
 
         if (json['success'] == true) {
-          _recentChats = json['data'] ?? [];
+          final List<dynamic> data = json['data'] ?? [];
+          
+          // Map dynamic list to ConversationModel list
+          final List<ConversationModel> models = data.map((item) => ConversationModel.fromJson(item as Map<String, dynamic>)).toList();
+
+          // Update in-memory status and unread counts
+          _updateInMemoryCache(data);
+
+          // Save recent chats to SQLite local cache using models
+          await LocalDbService().saveConversations(models);
+          unawaited(_preFetchChatsHistory(models));
+
+          if (currentTab == _activeTab) {
+            _recentChats = data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+          }
         } else {
-          _recentChats = [];
+          if (currentTab == _activeTab) {
+            _recentChats = [];
+          }
         }
 
         await fetchRequestCount();
       }
     } catch (e) {
       debugPrint("Error fetching recent chats: $e");
-      _recentChats = [];
+      // Do not clear the existing cache if we already have it populated
+      if (tab == _activeTab && _recentChats.isEmpty) {
+        _recentChats = [];
+      }
     } finally {
       if (updateLoadingState) {
         _isLoading = false;
@@ -385,11 +528,14 @@ class HomeScreenController extends ChangeNotifier {
 
         // Increment unread count locally if not open
         if (!isOpen) {
-          chatItem['unread_count'] = (chatItem['unread_count'] ?? 0) + 1;
+          final int newUnread = (_inMemoryUnreadCounts[chatKey] ?? 0) + 1;
+          _inMemoryUnreadCounts[chatKey] = newUnread;
+          chatItem['unread_count'] = newUnread;
           debugPrint(
-            "HomeScreenController: Chat is closed. Incremented unread_count locally to: ${chatItem['unread_count']}",
+            "HomeScreenController: Chat is closed. Incremented unread_count locally to: $newUnread",
           );
         } else {
+          _inMemoryUnreadCounts[chatKey] = 0;
           chatItem['unread_count'] = 0;
           debugPrint(
             "HomeScreenController: Chat is open. Kept unread_count at 0.",
@@ -399,6 +545,10 @@ class HomeScreenController extends ChangeNotifier {
         // Move to the top of the list
         _recentChats.removeAt(chatIndex);
         _recentChats.insert(0, chatItem);
+
+        // Save updated conversation details (except unread_count/is_online) in SQLite database cache
+        final updatedModel = ConversationModel.fromJson(chatItem);
+        LocalDbService().saveSingleConversation(updatedModel);
 
         notifyListeners();
       } else {
@@ -419,6 +569,7 @@ class HomeScreenController extends ChangeNotifier {
 
   void markChatAsReadLocally(String chatId) {
     bool updated = false;
+    _inMemoryUnreadCounts[chatId] = 0;
     for (int i = 0; i < _recentChats.length; i++) {
       final chat = _recentChats[i];
       if (chat is Map) {
@@ -448,6 +599,8 @@ class HomeScreenController extends ChangeNotifier {
     final String? status = data['status']?.toString();
     final String? lastSeen = data['lastSeen']?.toString();
     if (userId == null) return;
+
+    _inMemoryOnlineStatus[userId] = (status == 'online');
 
     debugPrint(
       "HomeScreenController: user-status-change real-time event for $userId: status=$status",
@@ -491,6 +644,8 @@ class HomeScreenController extends ChangeNotifier {
         final String? status = item['status']?.toString();
         final String? lastSeen = item['lastSeen']?.toString();
         if (userId == null) continue;
+
+        _inMemoryOnlineStatus[userId] = (status == 'online');
 
         for (int i = 0; i < _recentChats.length; i++) {
           final chat = _recentChats[i];
@@ -544,6 +699,7 @@ class HomeScreenController extends ChangeNotifier {
 
             // 1. Clear unread count ONLY if the reader was the user themselves
             if (readerId == myUserId) {
+              _inMemoryUnreadCounts[eventChatId] = 0;
               if (updatedChat['unread_count'] != 0) {
                 updatedChat['unread_count'] = 0;
                 chatUpdated = true;
@@ -568,6 +724,9 @@ class HomeScreenController extends ChangeNotifier {
 
             if (chatUpdated) {
               _recentChats[i] = updatedChat;
+              // Save updated preview to SQLite cache using model
+              final updatedModel = ConversationModel.fromJson(updatedChat);
+              LocalDbService().saveSingleConversation(updatedModel);
               updated = true;
             }
           }
@@ -619,6 +778,9 @@ class HomeScreenController extends ChangeNotifier {
 
             if (chatUpdated) {
               _recentChats[i] = updatedChat;
+              // Save updated preview to SQLite cache using model
+              final updatedModel = ConversationModel.fromJson(updatedChat);
+              LocalDbService().saveSingleConversation(updatedModel);
               updated = true;
             }
           }
@@ -715,6 +877,59 @@ class HomeScreenController extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  Future<void> _preFetchChatsHistory(List<ConversationModel> conversations) async {
+    final String? currentUserId = _userId;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+
+    for (final chat in conversations) {
+      final String chatId = (chat.conversation?.id).toString();
+      if (chatId.isEmpty || chatId == 'null') continue;
+
+      try {
+        // Only pre-fetch if we don't already have cached messages in the local SQLite DB
+        final List<Map<String, dynamic>> localMessages = await LocalDbService().getMessages(
+          chatId,
+          limit: 1,
+          offset: 0,
+        );
+
+        if (localMessages.isEmpty) {
+          final String chatType = chat.conversation?.type?.toString() ?? 'personal';
+          
+          if (chatType == 'group') {
+            final response = await ApiService().get(
+              '/chat/history?group_id=$chatId&requesterId=$currentUserId&page=1&limit=20',
+            );
+            final dynamic responseData = response.data;
+            final Map<String, dynamic> json = responseData is String
+                ? jsonDecode(responseData)
+                : responseData as Map<String, dynamic>;
+
+            if (json['success'] == true) {
+              final List<dynamic> data = json['data'] ?? [];
+              await LocalDbService().saveMessages(chatId, data);
+            }
+          } else {
+            final response = await ApiService().get(
+              '/chat/history?user1=$currentUserId&user2=$chatId&page=1&limit=50',
+            );
+            final dynamic responseData = response.data;
+            final Map<String, dynamic> json = responseData is String
+                ? jsonDecode(responseData)
+                : responseData as Map<String, dynamic>;
+
+            if (json['success'] == true) {
+              final List<dynamic> data = json['data'] ?? [];
+              await LocalDbService().saveMessages(chatId, data);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Error pre-fetching history for chat $chatId: $e");
+      }
+    }
   }
 
   @override

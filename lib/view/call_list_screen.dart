@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/image_assets.dart';
@@ -26,390 +26,402 @@ class CallListScreen extends StatelessWidget {
       }
     });
 
-    return Scaffold(
-      backgroundColor: appColor(context).white,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Header row (matches chat list design)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Profile avatar stack
-                  Consumer<CallListController>(
-                    builder: (context, callListController, child) {
-                      final profileImageUrl = ApiService.getImageUrl(
-                        callListController.profileImage,
-                      );
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              color: appColor(context).grey100,
-                              image: profileImageUrl.isNotEmpty
-                                  ? DecorationImage(
-                                      image: NetworkImage(profileImageUrl),
-                                      fit: BoxFit.cover,
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: appColor(context).white,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 10.0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header row (matches chat list design)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Profile avatar stack
+                    Consumer<CallListController>(
+                      builder: (context, callListController, child) {
+                        final profileImageUrl = ApiService.getImageUrl(
+                          callListController.profileImage,
+                        );
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                color: appColor(context).grey100,
+                                image: profileImageUrl.isNotEmpty
+                                    ? DecorationImage(
+                                        image: NetworkImage(profileImageUrl),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: profileImageUrl.isEmpty
+                                  ? Icon(
+                                      Icons.person,
+                                      color: appColor(context).grey400,
+                                      size: 24,
                                     )
                                   : null,
                             ),
-                            child: profileImageUrl.isEmpty
-                                ? Icon(
-                                    Icons.person,
-                                    color: appColor(context).grey400,
-                                    size: 24,
-                                  )
-                                : null,
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: -4,
-                            child: Image.asset(
-                              ImageAssets.tick,
-                              width: 16,
-                              height: 16,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  // Actions (Notification bell, Plus)
-                  Row(
-                    children: [
-                      _buildHeaderAction(
-                        context,
-                        assetPath: ImageAssets.notification,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const NotificationScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Page Title
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Calls",
-                    style: fontStyle.clashDisplayBold30.textColor(
-                      appColor(context).black,
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    icon: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: appColor(context).silver.withValues(alpha: 0.1),
-                      ),
-                      child: Icon(
-                        Icons.add,
-                        color: appColor(context).secondary,
-                        size: 22,
-                      ),
-                    ),
-                    color: appColor(context).white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    onSelected: (value) {
-                      if (value == 'voice') {
-                        _showConnectedMembersBottomSheet(
-                          context,
-                          isVideo: false,
-                          callListController: callListController,
-                        );
-                      } else if (value == 'video') {
-                        _showConnectedMembersBottomSheet(
-                          context,
-                          isVideo: true,
-                          callListController: callListController,
-                        );
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'voice',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.phone_outlined,
-                              color: appColor(context).secondary,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              "Voice Call",
-                              style: fontStyle.clashDisplayMedium14.textColor(
-                                appColor(context).black,
+                            Positioned(
+                              bottom: 0,
+                              right: -4,
+                              child: Image.asset(
+                                ImageAssets.tick,
+                                width: 16,
+                                height: 16,
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'video',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.videocam_outlined,
-                              color: appColor(context).secondary,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              "Video Call",
-                              style: fontStyle.clashDisplayMedium14.textColor(
-                                appColor(context).black,
+                        );
+                      },
+                    ),
+                    // Actions (Notification bell, Plus)
+                    Row(
+                      children: [
+                        _buildHeaderAction(
+                          context,
+                          assetPath: ImageAssets.notification,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const NotificationScreen(),
                               ),
-                            ),
-                          ],
+                            );
+                          },
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Search Bar (matches chat list design dimensions)
-              Container(
-                decoration: BoxDecoration(
-                  color: appColor(context).white,
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow: [
-                    BoxShadow(
-                      color: appColor(context).black.withValues(alpha: 0.04),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
+                        const SizedBox(width: 12),
+                      ],
                     ),
                   ],
                 ),
-                child: TextField(
-                  cursorColor: appColor(context).primary,
-                  onChanged: (val) {
-                    callListController.searchCalls(val);
-                  },
-                  decoration: InputDecoration(
-                    hintText: "Search...",
-                    hintStyle: fontStyle.clashDisplayRegular12.textColor(
-                      appColor(context).grey400,
-                    ),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 16.0, right: 10.0),
-                      child: Image.asset(
-                        ImageAssets.searchIcon,
-                        width: 18,
-                        height: 18,
-                        color: appColor(context).secondary,
+                const SizedBox(height: 20),
+
+                // Page Title
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Calls",
+                      style: fontStyle.clashDisplayBold30.textColor(
+                        appColor(context).black,
                       ),
                     ),
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 38,
-                      minHeight: 12,
+                    PopupMenuButton<String>(
+                      icon: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: appColor(
+                            context,
+                          ).silver.withValues(alpha: 0.1),
+                        ),
+                        child: Icon(
+                          Icons.add,
+                          color: appColor(context).secondary,
+                          size: 22,
+                        ),
+                      ),
+                      color: appColor(context).white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      onSelected: (value) {
+                        if (value == 'voice') {
+                          _showConnectedMembersBottomSheet(
+                            context,
+                            isVideo: false,
+                            callListController: callListController,
+                          );
+                        } else if (value == 'video') {
+                          _showConnectedMembersBottomSheet(
+                            context,
+                            isVideo: true,
+                            callListController: callListController,
+                          );
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'voice',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.phone_outlined,
+                                color: appColor(context).secondary,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                "Voice Call",
+                                style: fontStyle.clashDisplayMedium14.textColor(
+                                  appColor(context).black,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'video',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.videocam_outlined,
+                                color: appColor(context).secondary,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                "Video Call",
+                                style: fontStyle.clashDisplayMedium14.textColor(
+                                  appColor(context).black,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(25),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 10,
-                      horizontal: 16,
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Search Bar (matches chat list design dimensions)
+                Container(
+                  decoration: BoxDecoration(
+                    color: appColor(context).white,
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: appColor(context).black.withValues(alpha: 0.04),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    cursorColor: appColor(context).primary,
+                    onChanged: (val) {
+                      callListController.searchCalls(val);
+                    },
+                    decoration: InputDecoration(
+                      hintText: "Search...",
+                      hintStyle: fontStyle.clashDisplayRegular12.textColor(
+                        appColor(context).grey400,
+                      ),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 16.0, right: 10.0),
+                        child: Image.asset(
+                          ImageAssets.searchIcon,
+                          width: 18,
+                          height: 18,
+                          color: appColor(context).secondary,
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 38,
+                        minHeight: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(25),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 16,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Subheading "Recent"
-              Text(
-                "Recent",
-                style: fontStyle.clashDisplaySemiBold14.textColor(
-                  appColor(context).black,
+                // Subheading "Recent"
+                Text(
+                  "Recent",
+                  style: fontStyle.clashDisplaySemiBold14.textColor(
+                    appColor(context).black,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-              // Active ongoing group call banner(s)
-              Consumer<CallManager>(
-                builder: (context, callManager, child) {
-                  final activeCalls = callManager.activeGroupCalls;
-                  if (activeCalls.isEmpty) return const SizedBox.shrink();
+                // Active ongoing group call banner(s)
+                Consumer<CallManager>(
+                  builder: (context, callManager, child) {
+                    final activeCalls = callManager.activeGroupCalls;
+                    if (activeCalls.isEmpty) return const SizedBox.shrink();
 
-                  // Filter out calls that the user is currently actively in
-                  final joinableCalls = activeCalls.entries.where((entry) {
-                    final call = entry.value;
-                    final callId = (call['_id'] ?? call['id'])?.toString();
-                    return callManager.state == CallState.idle ||
-                        callManager.currentCallId != callId;
-                  }).toList();
-
-                  if (joinableCalls.isEmpty) return const SizedBox.shrink();
-
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: joinableCalls.map((entry) {
+                    // Filter out calls that the user is currently actively in
+                    final joinableCalls = activeCalls.entries.where((entry) {
                       final call = entry.value;
-                      final groupId = entry.key;
-                      final groupName =
-                          call['group_name'] ??
-                          call['group_id']?['name'] ??
-                          'Group Call';
-                      final groupImage =
-                          call['group_avatar'] ??
-                          call['group_id']?['group_image'] ??
-                          call['group_id']?['avatar'];
-                      final isVideo = call['call_type'] == 'video';
-                      final roomId =
-                          (call['_id'] ?? call['id'] ?? call['roomId'])
-                              ?.toString() ??
-                          '';
-                      final String? callerId =
-                          (call['initiator_id'] is Map
-                              ? (call['initiator_id']['_id'] ??
-                                        call['initiator_id']['id'])
-                                    ?.toString()
-                              : call['initiator_id']?.toString()) ??
-                          call['callerId']?.toString();
+                      final callId = (call['_id'] ?? call['id'])?.toString();
+                      return callManager.state == CallState.idle ||
+                          callManager.currentCallId != callId;
+                    }).toList();
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16.0),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E1E), // Premium dark theme
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            width: 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF25D366),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    "$groupName - Live Call",
-                                    style: fontStyle.clashDisplaySemiBold14
-                                        .textColor(Colors.white),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    isVideo
-                                        ? "Tap Join Now to join the video call"
-                                        : "Tap Join Now to join the voice call",
-                                    style: fontStyle.clashDisplayRegular12
-                                        .textColor(Colors.white60),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton(
-                              onPressed: () {
-                                callManager.joinCall(
-                                  roomId,
-                                  isVideo,
-                                  groupId: groupId,
-                                  groupName: groupName,
-                                  groupAvatar: groupImage,
-                                  callerId: callerId,
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF25D366),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                "Join Now",
-                                style: fontStyle.clashDisplayBold12.textColor(
-                                  Colors.white,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
-              ),
+                    if (joinableCalls.isEmpty) return const SizedBox.shrink();
 
-              // Calls dynamic list
-              Expanded(
-                child: isLoading && callItems.isEmpty
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          color: appColor(context).primary,
-                        ),
-                      )
-                    : callItems.isEmpty
-                    ? Center(
-                        child: Text(
-                          "No call logs found",
-                          style: fontStyle.clashDisplayMedium14.textColor(
-                            appColor(context).textMediumGrey,
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: joinableCalls.map((entry) {
+                        final call = entry.value;
+                        final groupId = entry.key;
+                        final groupName =
+                            call['group_name'] ??
+                            call['group_id']?['name'] ??
+                            'Group Call';
+                        final groupImage =
+                            call['group_avatar'] ??
+                            call['group_id']?['group_image'] ??
+                            call['group_id']?['avatar'];
+                        final isVideo = call['call_type'] == 'video';
+                        final roomId =
+                            (call['_id'] ?? call['id'] ?? call['roomId'])
+                                ?.toString() ??
+                            '';
+                        final String? callerId =
+                            (call['initiator_id'] is Map
+                                ? (call['initiator_id']['_id'] ??
+                                          call['initiator_id']['id'])
+                                      ?.toString()
+                                : call['initiator_id']?.toString()) ??
+                            call['callerId']?.toString();
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16.0),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF1E1E1E,
+                            ), // Premium dark theme
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF25D366),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      "$groupName - Live Call",
+                                      style: fontStyle.clashDisplaySemiBold14
+                                          .textColor(Colors.white),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      isVideo
+                                          ? "Tap Join Now to join the video call"
+                                          : "Tap Join Now to join the voice call",
+                                      style: fontStyle.clashDisplayRegular12
+                                          .textColor(Colors.white60),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              ElevatedButton(
+                                onPressed: () {
+                                  callManager.joinCall(
+                                    roomId,
+                                    isVideo,
+                                    groupId: groupId,
+                                    groupName: groupName,
+                                    groupAvatar: groupImage,
+                                    callerId: callerId,
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  "Join Now",
+                                  style: fontStyle.clashDisplayBold12.textColor(
+                                    Colors.white,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+
+                // Calls dynamic list
+                Expanded(
+                  child: isLoading && callItems.isEmpty
+                      ? Center(
+                          child: CircularProgressIndicator(
+                            color: appColor(context).primary,
+                          ),
+                        )
+                      : callItems.isEmpty
+                      ? Center(
+                          child: Text(
+                            "No call logs found",
+                            style: fontStyle.clashDisplayMedium14.textColor(
+                              appColor(context).textMediumGrey,
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: callItems.length,
+                          itemBuilder: (context, index) {
+                            return _buildCallItem(context, callItems[index]);
+                          },
                         ),
-                      )
-                    : ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: callItems.length,
-                        itemBuilder: (context, index) {
-                          return _buildCallItem(context, callItems[index]);
-                        },
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/group_chat_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/media_cache_service.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/date_helper.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
@@ -117,29 +118,53 @@ class GroupChatScreen extends StatelessWidget {
                   // Ongoing active call banner for this group chat
                   Consumer<CallManager>(
                     builder: (context, callManager, child) {
-                      final String? resolvedGroupId = groupId ?? controller.groupId;
-                      if (resolvedGroupId == null) return const SizedBox.shrink();
+                      final String? resolvedGroupId =
+                          groupId ?? controller.groupId;
+                      if (resolvedGroupId == null)
+                        return const SizedBox.shrink();
 
-                      final activeCall = callManager.activeGroupCalls[resolvedGroupId];
+                      final activeCall =
+                          callManager.activeGroupCalls[resolvedGroupId];
                       if (activeCall == null) return const SizedBox.shrink();
 
                       // If user is already active in this call, don't show the join banner
-                      final String? callId = (activeCall['_id'] ?? activeCall['id'])?.toString();
-                      if (callManager.state != CallState.idle && callManager.currentCallId == callId) {
+                      final String? callId =
+                          (activeCall['_id'] ?? activeCall['id'])?.toString();
+                      if (callManager.state != CallState.idle &&
+                          callManager.currentCallId == callId) {
                         return const SizedBox.shrink();
                       }
 
                       final isVideo = activeCall['call_type'] == 'video';
-                      final String roomId = (activeCall['_id'] ?? activeCall['id'] ?? activeCall['roomId'])?.toString() ?? '';
-                      final String name = controller.groupDetails?['name']?.toString() ?? groupName;
-                      final String? image = controller.groupDetails?['group_image'] ?? controller.groupDetails?['avatar'];
-                      final String? callerId = (activeCall['initiator_id'] is Map
-                          ? (activeCall['initiator_id']['_id'] ?? activeCall['initiator_id']['id'])?.toString()
-                          : activeCall['initiator_id']?.toString()) ?? activeCall['callerId']?.toString();
+                      final String roomId =
+                          (activeCall['_id'] ??
+                                  activeCall['id'] ??
+                                  activeCall['roomId'])
+                              ?.toString() ??
+                          '';
+                      final String name =
+                          controller.groupDetails?['name']?.toString() ??
+                          groupName;
+                      final String? image =
+                          controller.groupDetails?['group_image'] ??
+                          controller.groupDetails?['avatar'];
+                      final String? callerId =
+                          (activeCall['initiator_id'] is Map
+                              ? (activeCall['initiator_id']['_id'] ??
+                                        activeCall['initiator_id']['id'])
+                                    ?.toString()
+                              : activeCall['initiator_id']?.toString()) ??
+                          activeCall['callerId']?.toString();
 
                       return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E1E1E),
                           borderRadius: BorderRadius.circular(16),
@@ -173,12 +198,16 @@ class GroupChatScreen extends StatelessWidget {
                                 children: [
                                   Text(
                                     "Ongoing Group Call",
-                                    style: fontStyle.clashDisplaySemiBold14.textColor(Colors.white),
+                                    style: fontStyle.clashDisplaySemiBold14
+                                        .textColor(Colors.white),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    isVideo ? "Tap Join Now to join the video call" : "Tap Join Now to join the voice call",
-                                    style: fontStyle.clashDisplayRegular12.textColor(Colors.white60),
+                                    isVideo
+                                        ? "Tap Join Now to join the video call"
+                                        : "Tap Join Now to join the voice call",
+                                    style: fontStyle.clashDisplayRegular12
+                                        .textColor(Colors.white60),
                                   ),
                                 ],
                               ),
@@ -201,12 +230,17 @@ class GroupChatScreen extends StatelessWidget {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                                 elevation: 0,
                               ),
                               child: Text(
                                 "Join Now",
-                                style: fontStyle.clashDisplayBold12.textColor(Colors.white),
+                                style: fontStyle.clashDisplayBold12.textColor(
+                                  Colors.white,
+                                ),
                               ),
                             ),
                           ],
@@ -838,7 +872,8 @@ class GroupChatScreen extends StatelessWidget {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
-                if (!controller.isUserMemberOfGroup) return;
+                if (!controller.isUserMemberOfGroup || controller.isSuspended)
+                  return;
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -903,11 +938,39 @@ class GroupChatScreen extends StatelessWidget {
           const SizedBox(width: 8),
 
           // Call shortcuts
-          if (controller.isUserMemberOfGroup) ...[
+          if (controller.isUserMemberOfGroup && !controller.isSuspended) ...[
             GestureDetector(
               onTap: () {
                 final List<String> memberIds = [];
                 final gDetails = controller.groupDetails;
+                final List<String> previousMemberIds = [];
+                if (gDetails != null && gDetails['previous_members'] != null) {
+                  final prevList = gDetails['previous_members'];
+                  if (prevList is List) {
+                    for (var pm in prevList) {
+                      if (pm is Map) {
+                        final userIdData = pm['user_id'];
+                        String? pmId;
+                        if (userIdData is Map) {
+                          pmId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                        } else if (userIdData != null) {
+                          pmId = userIdData.toString();
+                        } else {
+                          pmId = (pm['_id'] ?? pm['id'])?.toString();
+                        }
+                        if (pmId != null && pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      } else if (pm != null) {
+                        final pmId = pm.toString();
+                        if (pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      }
+                    }
+                  }
+                }
+
                 if (gDetails != null && gDetails['members'] != null) {
                   final membersList = gDetails['members'];
                   if (membersList is List) {
@@ -917,13 +980,17 @@ class GroupChatScreen extends StatelessWidget {
                         final userIdData = m['user_id'];
                         String? mId;
                         if (userIdData is Map) {
-                          mId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                          mId = (userIdData['_id'] ?? userIdData['id'])
+                              ?.toString();
                         } else if (userIdData != null) {
                           mId = userIdData.toString();
                         } else {
                           mId = (m['_id'] ?? m['id'])?.toString();
                         }
-                        if (mId != null && mId.isNotEmpty && mId != myId) {
+                        if (mId != null &&
+                            mId.isNotEmpty &&
+                            mId != myId &&
+                            !previousMemberIds.contains(mId)) {
                           memberIds.add(mId);
                         }
                       }
@@ -962,6 +1029,34 @@ class GroupChatScreen extends StatelessWidget {
               onTap: () {
                 final List<String> memberIds = [];
                 final gDetails = controller.groupDetails;
+                final List<String> previousMemberIds = [];
+                if (gDetails != null && gDetails['previous_members'] != null) {
+                  final prevList = gDetails['previous_members'];
+                  if (prevList is List) {
+                    for (var pm in prevList) {
+                      if (pm is Map) {
+                        final userIdData = pm['user_id'];
+                        String? pmId;
+                        if (userIdData is Map) {
+                          pmId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                        } else if (userIdData != null) {
+                          pmId = userIdData.toString();
+                        } else {
+                          pmId = (pm['_id'] ?? pm['id'])?.toString();
+                        }
+                        if (pmId != null && pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      } else if (pm != null) {
+                        final pmId = pm.toString();
+                        if (pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      }
+                    }
+                  }
+                }
+
                 if (gDetails != null && gDetails['members'] != null) {
                   final membersList = gDetails['members'];
                   if (membersList is List) {
@@ -971,13 +1066,17 @@ class GroupChatScreen extends StatelessWidget {
                         final userIdData = m['user_id'];
                         String? mId;
                         if (userIdData is Map) {
-                          mId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                          mId = (userIdData['_id'] ?? userIdData['id'])
+                              ?.toString();
                         } else if (userIdData != null) {
                           mId = userIdData.toString();
                         } else {
                           mId = (m['_id'] ?? m['id'])?.toString();
                         }
-                        if (mId != null && mId.isNotEmpty && mId != myId) {
+                        if (mId != null &&
+                            mId.isNotEmpty &&
+                            mId != myId &&
+                            !previousMemberIds.contains(mId)) {
                           memberIds.add(mId);
                         }
                       }
@@ -1011,7 +1110,7 @@ class GroupChatScreen extends StatelessWidget {
               ),
             ),
           ],
-          if (controller.isUserMemberOfGroup) ...[
+          if (controller.isUserMemberOfGroup && !controller.isSuspended) ...[
             const SizedBox(width: 4),
 
             // Three-dot popup menu
@@ -1073,6 +1172,8 @@ class GroupChatScreen extends StatelessWidget {
                   _showClearChatConfirmation(context, controller);
                 } else if (value == "Delete Chat") {
                   _showDeleteChatConfirmation(context, controller);
+                } else if (value == "Report Group") {
+                  _showReportDialog(context, controller, groupName);
                 }
               },
               itemBuilder: (BuildContext context) {
@@ -1102,6 +1203,11 @@ class GroupChatScreen extends StatelessWidget {
                     context,
                     controller.isFavorite ? "Unfavorite" : "Favorite",
                     ImageAssets.favorite,
+                  ),
+                  _buildPopupMenuItem(
+                    context,
+                    "Report Group",
+                    ImageAssets.report,
                   ),
                 ];
               },
@@ -1928,29 +2034,42 @@ class GroupChatScreen extends StatelessWidget {
                     ),
                   ),
                 if (url != null && url.isNotEmpty)
-                  Image.network(
-                    url,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 110,
-                        color: appColor(context).grey200,
-                        child: const Center(child: CircularProgressIndicator()),
+                  FutureBuilder<File?>(
+                    future: MediaCacheService().getCachedMedia(url),
+                    builder: (context, snapshot) {
+                      final file = snapshot.data;
+                      if (file != null) {
+                        return Image.file(
+                          file,
+                          fit: BoxFit.cover,
+                          height: 120,
+                        );
+                      }
+                      return Image.network(
+                        url,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            height: 110,
+                            color: appColor(context).grey200,
+                            child: const Center(child: CircularProgressIndicator()),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          height: 110,
+                          color: appColor(context).grey200,
+                          child: Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: appColor(context).grey400,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                        fit: BoxFit.cover,
+                        height: 120,
                       );
                     },
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 110,
-                      color: appColor(context).grey200,
-                      child: Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          color: appColor(context).grey400,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                    fit: BoxFit.cover,
-                    height: 120,
                   )
                 else
                   Container(
@@ -2774,6 +2893,36 @@ class GroupChatScreen extends StatelessWidget {
     if (controller.isLoading || controller.userId == null) {
       return const SizedBox.shrink();
     }
+    if (controller.isSuspended) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          color: appColor(context).white,
+          border: Border(
+            top: BorderSide(color: appColor(context).grey100, width: 1),
+          ),
+        ),
+        child: Center(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade200, width: 1),
+            ),
+            child: Center(
+              child: Text(
+                "This group has been suspended by admin",
+                style: fontStyle.clashDisplayMedium14.textColor(
+                  Colors.red.shade800,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (!controller.isUserMemberOfGroup) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -2784,10 +2933,21 @@ class GroupChatScreen extends StatelessWidget {
           ),
         ),
         child: Center(
-          child: Text(
-            "You are no longer a member of this group",
-            style: fontStyle.clashDisplayMedium14.textColor(
-              appColor(context).grey400,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade200, width: 1),
+            ),
+            child: Center(
+              child: Text(
+                "You are no longer a member of this group",
+                style: fontStyle.clashDisplayMedium14.textColor(
+                  Colors.red.shade800,
+                ),
+              ),
             ),
           ),
         ),
@@ -3185,7 +3345,7 @@ class GroupChatScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (!isNewChat) ...[
+                if (!isNewChat && !controller.isSuspended) ...[
                   const SizedBox(height: 10),
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -3787,6 +3947,283 @@ class GroupChatScreen extends StatelessWidget {
                         ),
                 ),
               ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showReportDialog(
+    BuildContext outerContext,
+    GroupChatController controller,
+    String groupName,
+  ) {
+    String selectedReason = "Select a reason";
+    final TextEditingController descriptionController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: outerContext,
+      barrierDismissible: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              backgroundColor: appColor(context).white,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Report Group",
+                            style: fontStyle.clashDisplayBold20.textColor(
+                              appColor(context).darkText,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: isSubmitting
+                                ? null
+                                : () => Navigator.pop(context),
+                            child: Icon(
+                              Icons.close,
+                              color: appColor(context).textSecondary,
+                              size: 22,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Subtitle
+                      RichText(
+                        text: TextSpan(
+                          style: fontStyle.clashDisplayRegular14.textColor(
+                            appColor(context).textSecondary,
+                          ),
+                          children: [
+                            const TextSpan(text: "You are reporting "),
+                            TextSpan(
+                              text: groupName,
+                              style: fontStyle.clashDisplayBold14.textColor(
+                                appColor(context).black,
+                              ),
+                            ),
+                            const TextSpan(
+                              text:
+                                  ". Please tell us why you are reporting this group.",
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Reason Dropdown Label
+                      Text(
+                        "Reason for reporting",
+                        style: fontStyle.clashDisplaySemiBold14.textColor(
+                          appColor(context).textMediumGrey,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Dropdown Container
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: appColor(context).white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: appColor(context).grey300,
+                            width: 1,
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedReason,
+                            isExpanded: true,
+                            icon: Icon(
+                              Icons.keyboard_arrow_down,
+                              color: appColor(context).secondary,
+                            ),
+                            style: fontStyle.clashDisplayMedium14.textColor(
+                              selectedReason == "Select a reason"
+                                  ? appColor(context).textGrey
+                                  : appColor(context).black,
+                            ),
+                            dropdownColor: appColor(context).white,
+                            onChanged: isSubmitting
+                                ? null
+                                : (String? newValue) {
+                                    if (newValue != null) {
+                                      setState(() {
+                                        selectedReason = newValue;
+                                      });
+                                    }
+                                  },
+                            items:
+                                <String>[
+                                  "Select a reason",
+                                  "Spam",
+                                  "Harassment",
+                                  "Inappropriate Content",
+                                  "Other",
+                                ].map<DropdownMenuItem<String>>((String value) {
+                                  return DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(value),
+                                  );
+                                }).toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Description Label
+                      Text(
+                        "Description (Optional)",
+                        style: fontStyle.clashDisplaySemiBold14.textColor(
+                          appColor(context).textMediumGrey,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Description Textarea Container
+                      Container(
+                        decoration: BoxDecoration(
+                          color: appColor(context).white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: appColor(context).grey300,
+                            width: 1,
+                          ),
+                        ),
+                        child: TextField(
+                          controller: descriptionController,
+                          enabled: !isSubmitting,
+                          maxLines: 4,
+                          minLines: 4,
+                          style: fontStyle.clashDisplayRegular14.textColor(
+                            appColor(context).black,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: "Provide more details...",
+                            hintStyle: fontStyle.clashDisplayRegular14
+                                .textColor(appColor(context).textGrey),
+                            contentPadding: const EdgeInsets.all(12),
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Button Actions Row
+                      Row(
+                        children: [
+                          // Cancel Button
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: appColor(context).grey100,
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () => Navigator.pop(context),
+                              child: Text(
+                                "Cancel",
+                                style: fontStyle.clashDisplayBold14.textColor(
+                                  appColor(context).textMediumGrey,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Submit Button
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: appColor(context).secondary,
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () async {
+                                      if (selectedReason == "Select a reason") {
+                                        ToastHelper.showToast(
+                                          context,
+                                          "Please select a reason for reporting",
+                                        );
+                                        return;
+                                      }
+                                      setState(() {
+                                        isSubmitting = true;
+                                      });
+                                      final success = await controller
+                                          .reportGroup(
+                                            reason: selectedReason,
+                                            description: descriptionController
+                                                .text
+                                                .trim(),
+                                          );
+                                      if (context.mounted) {
+                                        setState(() {
+                                          isSubmitting = false;
+                                        });
+                                        if (success) {
+                                          ToastHelper.showToast(
+                                            context,
+                                            "Report submitted successfully",
+                                          );
+                                          Navigator.pop(context);
+                                        } else {
+                                          ToastHelper.showToast(
+                                            context,
+                                            "Failed to submit report",
+                                          );
+                                        }
+                                      }
+                                    },
+                              child: isSubmitting
+                                  ? const SizedBox(
+                                      height: 18,
+                                      width: 18,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      "Submit Report",
+                                      style: fontStyle.clashDisplayBold14
+                                          .textColor(appColor(context).white),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             );
           },
         );

@@ -174,8 +174,8 @@ class ArchivedChatsScreen extends StatelessWidget {
         item['requested_by'] != null;
     final String name = conversation['name'] ?? 'Unknown';
     final String messageContent = lastMessage['content'] ?? 'No messages yet';
-    final String time = lastMessage['created_at'] != null
-        ? DateHelper.formatTime(lastMessage['created_at'])
+    final String time = (lastMessage['created_at'] ?? lastMessage['createdAt']) != null
+        ? DateHelper.formatTime((lastMessage['created_at'] ?? lastMessage['createdAt']).toString())
         : '';
     final int unread = item['unread_count'] ?? 0;
 

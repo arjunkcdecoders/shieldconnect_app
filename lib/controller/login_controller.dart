@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shieldconnect_app/controller/announcement_controller.dart';
 import 'package:shieldconnect_app/controller/bottomnav_controller.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/notification_controller.dart';
@@ -11,6 +12,7 @@ import 'package:shieldconnect_app/services/api_services.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/view/bottomnav_screen.dart';
+import 'package:shieldconnect_app/view/launch_loading_screen.dart';
 import 'package:shieldconnect_app/controller/status_controller.dart';
 import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
@@ -141,11 +143,12 @@ class LoginController extends ChangeNotifier {
             // to ensure the loading syncing spinner is active when ChatlistScreen mounts.
             context.read<BottomnavController>().checkStatusFeature();
             context.read<HomeScreenController>().init();
-            context.read<ProfileController>().init();
+            context.read<ProfileController>().init(context: context);
             context.read<NotificationController>().init();
             context.read<CallListController>().init();
             context.read<StatusController>().init();
             context.read<AddNewChatController>().init();
+            context.read<AnnouncementController>().fetchAnnouncements();
 
             emailController.clear();
             passwordController.clear();
@@ -155,7 +158,7 @@ class LoginController extends ChangeNotifier {
 
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const BottomnavScreen()),
+              MaterialPageRoute(builder: (context) => const LaunchLoadingScreen()),
             );
           }
         } else {

@@ -25,7 +25,7 @@ class VideoCallReceivingScreen extends StatelessWidget {
         return PopScope(
           canPop: true,
           onPopInvokedWithResult: (didPop, result) {
-            if (didPop && callManager.state == CallState.connected) {
+            if (didPop) {
               callManager.setMinimized(true);
             }
           },

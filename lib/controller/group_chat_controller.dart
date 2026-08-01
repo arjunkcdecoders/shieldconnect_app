@@ -18,6 +18,8 @@ import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
 import 'package:shieldconnect_app/view/media_caption_screen.dart';
+import 'package:shieldconnect_app/services/local_db_service.dart';
+import 'package:shieldconnect_app/services/media_cache_service.dart';
 
 class GroupChatController extends ChangeNotifier {
   bool _isDisposed = false;
@@ -145,6 +147,14 @@ class GroupChatController extends ChangeNotifier {
 
   final TextEditingController messageController = TextEditingController();
   final ScrollController scrollController = ScrollController();
+
+  int _currentPage = 1;
+  bool _hasMoreMessages = true;
+  bool _isFetchingMore = false;
+
+  int get currentPage => _currentPage;
+  bool get hasMoreMessages => _hasMoreMessages;
+  bool get isFetchingMore => _isFetchingMore;
 
   Map<String, dynamic>? _selectedReplyMessage;
   Map<String, dynamic>? get selectedReplyMessage => _selectedReplyMessage;
@@ -291,6 +301,9 @@ class GroupChatController extends ChangeNotifier {
       final msgGroupId = messageModel.groupId;
 
       if (msgGroupId != null && msgGroupId == _groupId) {
+        // Save to SQLite
+        LocalDbService().saveSingleMessage(_groupId!, unwrapped);
+        MediaCacheService().precacheMediaFromMessages([unwrapped]);
         final String senderIdVal = messageModel.senderId ?? "";
         final bool isOutgoing = senderIdVal == _userId;
 
@@ -469,6 +482,15 @@ class GroupChatController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  void _scrollListener() {
+    if (scrollController.hasClients &&
+        scrollController.position.pixels == 0 &&
+        !_isFetchingMore &&
+        _hasMoreMessages) {
+      fetchNextPage();
+    }
+  }
+
   Future<void> init(String groupId, {bool isFavorite = false}) async {
     SocketService().messageQueueNotifier.removeListener(_onMessageQueueChanged);
     SocketService().messageQueueNotifier.addListener(_onMessageQueueChanged);
@@ -485,9 +507,17 @@ class GroupChatController extends ChangeNotifier {
     _searchMatchMessageIds = [];
     _currentSearchMatchIndex = -1;
 
+    // Reset pagination states
+    _currentPage = 1;
+    _hasMoreMessages = true;
+    _isFetchingMore = false;
+
     // Set active chat ID globally
     SocketService().activeChatId = groupId;
     SocketService().isActiveChatGroup = true;
+
+    scrollController.removeListener(_scrollListener);
+    scrollController.addListener(_scrollListener);
 
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -501,9 +531,18 @@ class GroupChatController extends ChangeNotifier {
     } catch (_) {}
 
     if (_userId != null) {
-      // Fetch current user details from API directly to read the live chat_wallpaper field with wallpaperid
-      try {
-        final userRes = await ApiService().get('/users/$_userId?currentUserId=$_userId');
+      // Load cached wallpaper immediately from SQLite to avoid lag
+      LocalDbService().getUserWallpaper(_userId!).then((cached) {
+        if (cached != null && !_isDisposed) {
+          _wallpaperUrl = cached['wallpaper_image'];
+          notifyListeners();
+        }
+      }).catchError((e) {
+        debugPrint("Error loading cached wallpaper from local DB: $e");
+      });
+
+      // Fetch current user details from API directly to read the live chat_wallpaper field in background
+      ApiService().get('/users/$_userId?currentUserId=$_userId').then((userRes) {
         final dynamic userResData = userRes.data;
         final Map<String, dynamic> userJson = userResData is String
             ? jsonDecode(userResData)
@@ -512,34 +551,63 @@ class GroupChatController extends ChangeNotifier {
           final userData = userJson['data'];
           final String? wallpaperId = userData['chat_wallpaper']?.toString();
           if (wallpaperId != null && wallpaperId.isNotEmpty) {
-            await fetchSelectedWallpaper(wallpaperId);
+            LocalDbService().getUserWallpaper(_userId!).then((cached) {
+              if (cached != null && cached['wallpaper_id'] == wallpaperId) {
+                if (_wallpaperUrl != cached['wallpaper_image'] && !_isDisposed) {
+                  _wallpaperUrl = cached['wallpaper_image'];
+                  notifyListeners();
+                }
+              } else {
+                fetchSelectedWallpaper(wallpaperId);
+              }
+            });
           } else {
             _wallpaperUrl = null;
+            LocalDbService().saveUserWallpaper(_userId!, '', '');
+            notifyListeners();
           }
         }
-      } catch (e) {
+      }).catchError((e) {
         debugPrint("Error fetching current user details for wallpaper: $e");
-      }
+      });
     }
 
     _isLoading = true;
-    notifyListeners();
 
-    await fetchGroupDetails(groupId);
-    await fetchChatHistory(groupId);
+    // Load local SQLite cached group chat history first
+    await loadCachedChatHistory(groupId);
 
-    _isLoading = false;
-    notifyListeners();
-    scrollToBottom(immediate: true);
+    if (_messages.isNotEmpty) {
+      _isLoading = false;
+      notifyListeners();
+      scrollToBottom(immediate: true);
 
-    // Mark as read immediately on open
-    if (_userId != null) {
-      SocketService().markAsRead(
-        chatId: groupId,
-        userId: _userId!,
-        otherId: '',
-        isGroup: true,
-      );
+      // Fetch group details and fresh group chat history in background (without blocking the UI)
+      fetchGroupDetails(groupId, silent: true);
+      fetchChatHistory(groupId, silent: false, updateLoadingState: false);
+      if (_userId != null) {
+        SocketService().markAsRead(
+          chatId: groupId,
+          userId: _userId!,
+          otherId: '',
+          isGroup: true,
+        );
+      }
+    } else {
+      // No cache: Show loading spinner and wait for API calls
+      await fetchGroupDetails(groupId, silent: false);
+      await fetchChatHistory(groupId, silent: false, updateLoadingState: true);
+      _isLoading = false;
+      notifyListeners();
+      scrollToBottom(immediate: true);
+      if (_userId != null) {
+        SocketService().markAsRead(
+          chatId: groupId,
+          userId: _userId!,
+          otherId: '',
+          isGroup: true,
+        );
+      }
     }
   }
 
@@ -555,6 +623,9 @@ class GroupChatController extends ChangeNotifier {
         final data = json['data'];
         _wallpaperUrl = data['wallpaper_image'] as String?;
         notifyListeners();
+        if (_userId != null && _wallpaperUrl != null) {
+          await LocalDbService().saveUserWallpaper(_userId!, id, _wallpaperUrl!);
+        }
       }
     } catch (e) {
       debugPrint("Error fetching selected wallpaper: $e");
@@ -691,7 +762,7 @@ class GroupChatController extends ChangeNotifier {
 
       if (json['success'] == true) {
         await fetchGroupDetails(groupId);
-        await fetchChatHistory(groupId);
+        await fetchChatHistory(groupId, silent: false, updateLoadingState: false);
         return true;
       }
       return false;
@@ -750,7 +821,7 @@ class GroupChatController extends ChangeNotifier {
           debugPrint("Error sending system removal message: $e");
         }
         await fetchGroupDetails(_groupId!);
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
         success = true;
       }
     } catch (e) {
@@ -795,7 +866,7 @@ class GroupChatController extends ChangeNotifier {
         notifyListeners();
 
         await fetchGroupDetails(_groupId!);
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
         success = true;
       }
     } catch (e) {
@@ -848,7 +919,7 @@ class GroupChatController extends ChangeNotifier {
         notifyListeners();
 
         await fetchGroupDetails(_groupId!);
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
         success = true;
       }
     } catch (e) {
@@ -917,7 +988,7 @@ class GroupChatController extends ChangeNotifier {
 
       if (json['success'] == true) {
         await fetchGroupDetails(_groupId!);
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
         return true;
       }
       return false;
@@ -1037,7 +1108,281 @@ class GroupChatController extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchChatHistory(String groupId, {bool silent = false}) async {
+  List<Map<String, dynamic>> _mapRawMessages(List<dynamic> data, String userId) {
+    return data.map<Map<String, dynamic>>((item) {
+      if (item is! Map) return {};
+      final msgMap = Map<String, dynamic>.from(item);
+      final dynamic senderObj = msgMap['sender_id'];
+      String senderName = "Unknown";
+      String? senderAvatar;
+      String senderIdVal = "";
+
+      if (senderObj is Map<String, dynamic>) {
+        senderName = senderObj['name']?.toString() ?? "Unknown";
+        senderAvatar = senderObj['avatar']?.toString();
+        senderIdVal = senderObj['_id']?.toString() ?? senderObj['id']?.toString() ?? "";
+      } else if (senderObj is String) {
+        senderIdVal = senderObj;
+        if (senderIdVal == userId) {
+          senderName = "You";
+        }
+      }
+
+      final bool isOutgoing = senderIdVal == userId;
+
+      String timeStr = "";
+      final dynamic msgCreatedAt = msgMap['created_at'] ?? msgMap['createdAt'];
+      if (msgCreatedAt != null) {
+        try {
+          final DateTime dt = DateTime.parse(msgCreatedAt.toString()).toLocal();
+          final int hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+          final String ampm = dt.hour >= 12 ? "pm" : "am";
+          final String minuteStr = dt.minute < 10 ? "0${dt.minute}" : "${dt.minute}";
+          timeStr = "$hour:$minuteStr $ampm";
+        } catch (_) {}
+      }
+
+      final String? parentMessageId = msgMap['parent_message_id'] is Map
+          ? msgMap['parent_message_id']['_id']?.toString()
+          : msgMap['parent_message_id']?.toString();
+      String? replyTo;
+      String? replyToSender;
+      String? replyToType;
+      String? replyToUrl;
+
+      if (msgMap['parent_message_id'] is Map) {
+        replyTo = msgMap['parent_message_id']['content']?.toString();
+        replyToType = msgMap['parent_message_id']['message_type']?.toString();
+        replyToUrl = msgMap['parent_message_id']['file_url'] != null
+            ? ApiService.getImageUrl(msgMap['parent_message_id']['file_url'].toString())
+            : null;
+        final dynamic pSender = msgMap['parent_message_id']['sender_id'];
+        if (pSender is Map) {
+          replyToSender = pSender['name']?.toString();
+        } else if (pSender?.toString() == userId) {
+          replyToSender = "You";
+        } else if (pSender != null) {
+          replyToSender = (_groupDetails?['members'] as List?)
+              ?.firstWhere(
+                (m) => (m['user_id'] is Map ? m['user_id']['_id'] : m['user_id'])?.toString() == pSender.toString(),
+                orElse: () => null,
+              )?['name']?.toString() ?? "Sender";
+        }
+      }
+
+      if (parentMessageId != null && replyTo == null) {
+        final parentMsg = data.firstWhere(
+          (item) => (item is Map && ((item['_id']?.toString() ?? item['id']?.toString()) == parentMessageId)),
+          orElse: () => null,
+        );
+        if (parentMsg != null && parentMsg is Map) {
+          replyTo = parentMsg['content']?.toString() ?? parentMsg['text']?.toString();
+          replyToType = parentMsg['message_type']?.toString() ?? parentMsg['type']?.toString();
+          replyToUrl = parentMsg['file_url'] != null
+              ? ApiService.getImageUrl(parentMsg['file_url'].toString())
+              : (parentMsg['url'] != null ? parentMsg['url']?.toString() : null);
+          final pSender = parentMsg['sender_id'];
+          if (pSender is Map) {
+            replyToSender = pSender['name']?.toString();
+          } else if (pSender?.toString() == userId) {
+            replyToSender = "You";
+          } else if (pSender != null) {
+            replyToSender = (_groupDetails?['members'] as List?)
+                ?.firstWhere(
+                  (m) => (m['user_id'] is Map ? m['user_id']['_id'] : m['user_id'])?.toString() == pSender.toString(),
+                  orElse: () => null,
+                )?['name']?.toString() ?? "Sender";
+          }
+        }
+      }
+
+      final bool isDeleted = msgMap['is_deleted_for_everyone'] as bool? ?? false;
+      return {
+        "id": msgMap['_id']?.toString() ?? msgMap['id']?.toString() ?? "",
+        "sender": isOutgoing ? "You" : senderName,
+        "text": isDeleted ? "This message was deleted" : (msgMap['content']?.toString() ?? ""),
+        "time": timeStr,
+        "isOutgoing": isOutgoing,
+        "type": isDeleted ? "text" : (msgMap['message_type']?.toString() ?? "text"),
+        "file_name": isDeleted ? null : msgMap['file_name']?.toString(),
+        "url": (isDeleted || msgMap['file_url'] == null)
+            ? null
+            : ApiService.getImageUrl(msgMap['file_url'].toString()),
+        "avatar": senderAvatar ?? "",
+        "moderation_status": msgMap['moderation_status']?.toString() ?? "Approved",
+        "moderated_by": msgMap['moderated_by'],
+        "createdAt": (msgMap['created_at'] ?? msgMap['createdAt'])?.toString(),
+        "parent_message_id": parentMessageId,
+        "replyTo": replyTo,
+        "replyToSender": replyToSender,
+        "replyToType": replyToType,
+        "replyToUrl": replyToUrl,
+        "is_forwarded": msgMap['is_forwarded'] as bool? ?? false,
+        "isDeleted": isDeleted,
+        "isEdited": msgMap['is_edited'] as bool? ?? false,
+      };
+    }).toList();
+  }
+
+  void _synthesizeAndSortMessages(SharedPreferences prefs, String userId) {
+    if (_groupDetails != null && _groupDetails!['members'] != null) {
+      final dynamic groupMembers = _groupDetails!['members'];
+      if (groupMembers is List) {
+        final dynamic adminVal = _groupDetails!['admin_id'];
+        final String? adminIdStr = adminVal is Map
+            ? (adminVal['_id']?.toString() ?? adminVal['id']?.toString())
+            : adminVal?.toString();
+
+        DateTime? clearDateTime;
+        try {
+          final String? localClearStr = prefs.getString(
+            'group_clear_${_groupId}_$userId',
+          );
+          if (localClearStr != null) {
+            clearDateTime = DateTime.parse(localClearStr);
+          }
+        } catch (_) {}
+
+        final currentUserMember = groupMembers.firstWhere(
+          (m) =>
+              m is Map &&
+              (m['user_id'] is Map ? m['user_id']['_id'] : m['user_id'])
+                      ?.toString() ==
+                  userId,
+          orElse: () => null,
+        );
+        if (currentUserMember != null && currentUserMember is Map) {
+          final String? serverClearStr =
+              currentUserMember['cleared_at']?.toString() ??
+              currentUserMember['clearedAt']?.toString() ??
+              currentUserMember['clear_time']?.toString();
+          if (serverClearStr != null) {
+            try {
+              clearDateTime = DateTime.parse(serverClearStr);
+            } catch (_) {}
+          }
+        }
+
+        for (final dynamic memberItem in groupMembers) {
+          if (memberItem is Map) {
+            final String role =
+                memberItem['role']?.toString().toLowerCase() ?? "member";
+            if (role == 'creator') continue;
+
+            final dynamic userVal = memberItem['user_id'];
+            String memberId = "";
+            String memberName = "A member";
+
+            if (userVal is Map) {
+              memberId =
+                  userVal['_id']?.toString() ??
+                  userVal['id']?.toString() ??
+                  "";
+              memberName = userVal['name']?.toString() ?? "A member";
+            } else if (userVal is String) {
+              memberId = userVal;
+              memberName = memberItem['name']?.toString() ?? "A member";
+            }
+
+            if (memberId.isEmpty) continue;
+            if (adminIdStr != null && memberId == adminIdStr) continue;
+
+            bool alreadyHasMessage = false;
+            for (final msg in _messages) {
+              final String msgType = msg['type']?.toString() ?? "";
+              final String msgText = msg['text']?.toString() ?? "";
+              if ((msgType == 'system' || msgType == 'status') &&
+                  msgText.startsWith("system_member_added:") &&
+                  (msgText.contains(memberId) ||
+                      msgText.contains(memberName))) {
+                alreadyHasMessage = true;
+                break;
+              }
+            }
+
+            if (!alreadyHasMessage) {
+              final String? joinedAtStr =
+                  memberItem['joined_at']?.toString() ??
+                  memberItem['joinedAt']?.toString();
+              if (joinedAtStr != null) {
+                try {
+                  final DateTime joinedAtDt = DateTime.parse(joinedAtStr);
+                  if (clearDateTime != null &&
+                      joinedAtDt.isBefore(clearDateTime)) {
+                    continue;
+                  }
+
+                  final DateTime joinedAtLocal = joinedAtDt.toLocal();
+                  final int hour = joinedAtLocal.hour > 12
+                      ? joinedAtLocal.hour - 12
+                      : (joinedAtLocal.hour == 0 ? 12 : joinedAtLocal.hour);
+                  final String ampm = joinedAtLocal.hour >= 12
+                      ? "pm"
+                      : "am";
+                  final String minuteStr = joinedAtLocal.minute < 10
+                      ? "0${joinedAtLocal.minute}"
+                      : "${joinedAtLocal.minute}";
+                  final String timeStr = "$hour:$minuteStr $ampm";
+
+                  _messages.add({
+                    "id": "virtual_added_$memberId",
+                    "sender": "System",
+                    "text": "system_member_added:$memberId:$memberName",
+                    "time": timeStr,
+                    "isOutgoing": false,
+                    "type": "system",
+                    "avatar": "",
+                    "moderation_status": "Approved",
+                    "createdAt": joinedAtStr,
+                    "parent_message_id": null,
+                    "replyTo": null,
+                    "replyToSender": null,
+                    "is_forwarded": false,
+                  });
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+    }
+
+    _deduplicateSystemMessages();
+    _messages.sort((a, b) {
+      final String textA = a['text']?.toString().toLowerCase() ?? "";
+      final String textB = b['text']?.toString().toLowerCase() ?? "";
+      final bool isGroupCreatedA = textA.contains("created") || textA.contains("system_group_created");
+      final bool isGroupCreatedB = textB.contains("created") || textB.contains("system_group_created");
+
+      if (isGroupCreatedA && !isGroupCreatedB) return -1;
+      if (isGroupCreatedB && !isGroupCreatedA) return 1;
+
+      final String? ca = a['createdAt'];
+      final String? cb = b['createdAt'];
+      if (ca == null && cb == null) return 0;
+      if (ca == null) return -1;
+      if (cb == null) return 1;
+      return ca.compareTo(cb);
+    });
+  }
+
+  Future<void> loadCachedChatHistory(String groupId) async {
+    final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+      groupId,
+      limit: 20,
+      offset: 0,
+    );
+    if (cached.isNotEmpty && _userId != null) {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      _messages = _mapRawMessages(cached, _userId!).reversed.toList();
+      _synthesizeAndSortMessages(prefs, _userId!);
+      _isLoading = false; // Hide loader immediately
+      notifyListeners();
+      scrollToBottom(immediate: true);
+    }
+  }
+
+  Future<void> fetchChatHistory(String groupId, {bool silent = false, bool updateLoadingState = true}) async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       final String? sessionStr = prefs.getString('user_session');
@@ -1047,6 +1392,11 @@ class GroupChatController extends ChangeNotifier {
       final UserModel user = UserModel.fromJson(userMap);
       final String? userId = user.id;
       if (userId == null) return;
+
+      if (updateLoadingState && !silent) {
+        _isLoading = true;
+        notifyListeners();
+      }
 
       final response = await ApiService().get(
         '/chat/history?group_id=$groupId&requesterId=$userId&page=1&limit=20',
@@ -1058,308 +1408,149 @@ class GroupChatController extends ChangeNotifier {
 
       if (json['success'] == true) {
         final List<dynamic> data = json['data'] ?? [];
-        _messages = data
-            .map((item) {
-              final Map<String, dynamic> msgMap = item as Map<String, dynamic>;
-              final dynamic senderObj = msgMap['sender_id'];
-              String senderName = "Unknown";
-              String? senderAvatar;
-              String senderIdVal = "";
 
-              if (senderObj is Map<String, dynamic>) {
-                senderName = senderObj['name']?.toString() ?? "Unknown";
-                senderAvatar = senderObj['avatar']?.toString();
-                senderIdVal =
-                    senderObj['_id']?.toString() ??
-                    senderObj['id']?.toString() ??
-                    "";
-              } else if (senderObj is String) {
-                senderIdVal = senderObj;
-                if (senderIdVal == userId) {
-                  senderName = "You";
-                }
-              }
+        // Save fresh page 1 history to SQLite database cache
+        await LocalDbService().saveMessages(groupId, data);
+        MediaCacheService().precacheMediaFromMessages(data);
 
-              final bool isOutgoing = senderIdVal == userId;
+        // Fetch back merged/sorted list from SQLite
+        final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+          groupId,
+          limit: _currentPage * 20,
+          offset: 0,
+        );
 
-              // Convert backend date to dynamic time string e.g. "10:00 am"
-              String timeStr = "";
-              if (msgMap['created_at'] != null) {
-                try {
-                  final DateTime dt = DateTime.parse(
-                    msgMap['created_at'].toString(),
-                  ).toLocal();
-                  final int hour = dt.hour > 12
-                      ? dt.hour - 12
-                      : (dt.hour == 0 ? 12 : dt.hour);
-                  final String ampm = dt.hour >= 12 ? "pm" : "am";
-                  final String minuteStr = dt.minute < 10
-                      ? "0${dt.minute}"
-                      : "${dt.minute}";
-                  timeStr = "$hour:$minuteStr $ampm";
-                } catch (_) {}
-              }
+        _messages = _mapRawMessages(cached, userId).reversed.toList();
+        _synthesizeAndSortMessages(prefs, userId);
 
-              final String? parentMessageId = msgMap['parent_message_id'] is Map
-                  ? msgMap['parent_message_id']['_id']?.toString()
-                  : msgMap['parent_message_id']?.toString();
-              String? replyTo;
-              String? replyToSender;
-              String? replyToType;
-              String? replyToUrl;
-
-              if (msgMap['parent_message_id'] is Map) {
-                replyTo = msgMap['parent_message_id']['content']?.toString();
-                replyToType = msgMap['parent_message_id']['message_type']?.toString();
-                replyToUrl = msgMap['parent_message_id']['file_url'] != null
-                    ? ApiService.getImageUrl(msgMap['parent_message_id']['file_url'].toString())
-                    : null;
-                final dynamic pSender =
-                    msgMap['parent_message_id']['sender_id'];
-                if (pSender is Map) {
-                  replyToSender = pSender['name']?.toString();
-                } else if (pSender?.toString() == userId) {
-                  replyToSender = "You";
-                } else if (pSender != null) {
-                  replyToSender = (_groupDetails?['members'] as List?)
-                      ?.firstWhere(
-                        (m) =>
-                            (m['user_id'] is Map ? m['user_id']['_id'] : m['user_id'])
-                                ?.toString() ==
-                            pSender.toString(),
-                        orElse: () => null,
-                      )?['name']
-                      ?.toString() ?? "Sender";
-                }
-              }
-
-              if (parentMessageId != null && replyTo == null) {
-                // Self-healing lookup in current list of messages
-                final parentMsg = data.firstWhere(
-                  (item) =>
-                      (item['_id']?.toString() ?? item['id']?.toString()) ==
-                      parentMessageId,
-                  orElse: () => null,
-                );
-                if (parentMsg != null) {
-                  replyTo =
-                      parentMsg['content']?.toString() ??
-                      parentMsg['text']?.toString();
-                  replyToType = parentMsg['message_type']?.toString() ?? parentMsg['type']?.toString();
-                  replyToUrl = parentMsg['file_url'] != null
-                      ? ApiService.getImageUrl(parentMsg['file_url'].toString())
-                      : (parentMsg['url'] != null ? parentMsg['url']?.toString() : null);
-                  final pSender = parentMsg['sender_id'];
-                  if (pSender is Map) {
-                    replyToSender = pSender['name']?.toString();
-                  } else if (pSender?.toString() == userId) {
-                    replyToSender = "You";
-                  } else if (pSender != null) {
-                    replyToSender = (_groupDetails?['members'] as List?)
-                        ?.firstWhere(
-                          (m) =>
-                              (m['user_id'] is Map ? m['user_id']['_id'] : m['user_id'])
-                                  ?.toString() ==
-                              pSender.toString(),
-                          orElse: () => null,
-                        )?['name']
-                        ?.toString() ?? "Sender";
-                  }
-                }
-              }
-
-              final bool isDeleted = msgMap['is_deleted_for_everyone'] as bool? ?? false;
-              return {
-                "id":
-                    msgMap['_id']?.toString() ?? msgMap['id']?.toString() ?? "",
-                "sender": isOutgoing ? "You" : senderName,
-                "text": isDeleted ? "This message was deleted" : (msgMap['content']?.toString() ?? ""),
-                "time": timeStr,
-                "isOutgoing": isOutgoing,
-                "type": isDeleted ? "text" : (msgMap['message_type']?.toString() ?? "text"),
-                "file_name": isDeleted ? null : msgMap['file_name']?.toString(),
-                "url": (isDeleted || msgMap['file_url'] == null)
-                    ? null
-                    : ApiService.getImageUrl(msgMap['file_url'].toString()),
-                "avatar": senderAvatar ?? "",
-                "moderation_status":
-                    msgMap['moderation_status']?.toString() ?? "Approved",
-                "moderated_by": msgMap['moderated_by'],
-                "createdAt": msgMap['created_at']?.toString(),
-                "parent_message_id": parentMessageId,
-                "replyTo": replyTo,
-                "replyToSender": replyToSender,
-                "replyToType": replyToType,
-                "replyToUrl": replyToUrl,
-                "is_forwarded": msgMap['is_forwarded'] as bool? ?? false,
-                "isDeleted": isDeleted,
-                "isEdited": msgMap['is_edited'] as bool? ?? false,
-              };
-            })
-            .toList()
-            .reversed
-            .toList();
-
-        // Synthesize missing system_member_added messages for other members
-        if (_groupDetails != null && _groupDetails!['members'] != null) {
-          final dynamic groupMembers = _groupDetails!['members'];
-          if (groupMembers is List) {
-            final dynamic adminVal = _groupDetails!['admin_id'];
-            final String? adminIdStr = adminVal is Map
-                ? (adminVal['_id']?.toString() ?? adminVal['id']?.toString())
-                : adminVal?.toString();
-
-            // Try to find the chat clear timestamp for this group/user
-            DateTime? clearDateTime;
-            try {
-              final String? localClearStr = prefs.getString(
-                'group_clear_${_groupId}_${_userId}',
-              );
-              if (localClearStr != null) {
-                clearDateTime = DateTime.parse(localClearStr);
-              }
-            } catch (_) {}
-
-            final currentUserMember = groupMembers.firstWhere(
-              (m) =>
-                  m is Map &&
-                  (m['user_id'] is Map ? m['user_id']['_id'] : m['user_id'])
-                          ?.toString() ==
-                      _userId,
-              orElse: () => null,
-            );
-            if (currentUserMember != null && currentUserMember is Map) {
-              final String? serverClearStr =
-                  currentUserMember['cleared_at']?.toString() ??
-                  currentUserMember['clearedAt']?.toString() ??
-                  currentUserMember['clear_time']?.toString();
-              if (serverClearStr != null) {
-                try {
-                  clearDateTime = DateTime.parse(serverClearStr);
-                } catch (_) {}
-              }
-            }
-
-            for (final dynamic memberItem in groupMembers) {
-              if (memberItem is Map) {
-                final String role =
-                    memberItem['role']?.toString().toLowerCase() ?? "member";
-                // Skip creator/admin who created the group (they didn't get "added" later)
-                if (role == 'creator') continue;
-
-                final dynamic userVal = memberItem['user_id'];
-                String memberId = "";
-                String memberName = "A member";
-
-                if (userVal is Map) {
-                  memberId =
-                      userVal['_id']?.toString() ??
-                      userVal['id']?.toString() ??
-                      "";
-                  memberName = userVal['name']?.toString() ?? "A member";
-                } else if (userVal is String) {
-                  memberId = userVal;
-                  memberName = memberItem['name']?.toString() ?? "A member";
-                }
-
-                if (memberId.isEmpty) continue;
-                // Also skip creator based on admin_id comparison
-                if (adminIdStr != null && memberId == adminIdStr) continue;
-
-                // Check if we already have a system_member_added message in the list
-                bool alreadyHasMessage = false;
-                for (final msg in _messages) {
-                  final String msgType = msg['type']?.toString() ?? "";
-                  final String msgText = msg['text']?.toString() ?? "";
-                  if ((msgType == 'system' || msgType == 'status') &&
-                      msgText.startsWith("system_member_added:") &&
-                      (msgText.contains(memberId) ||
-                          msgText.contains(memberName))) {
-                    alreadyHasMessage = true;
-                    break;
-                  }
-                }
-
-                if (!alreadyHasMessage) {
-                  final String? joinedAtStr =
-                      memberItem['joined_at']?.toString() ??
-                      memberItem['joinedAt']?.toString();
-                  if (joinedAtStr != null) {
-                    try {
-                      final DateTime joinedAtDt = DateTime.parse(joinedAtStr);
-
-                      // Skip if this event happened before the clear timestamp
-                      if (clearDateTime != null &&
-                          joinedAtDt.isBefore(clearDateTime)) {
-                        continue;
-                      }
-
-                      final DateTime joinedAtLocal = joinedAtDt.toLocal();
-                      final int hour = joinedAtLocal.hour > 12
-                          ? joinedAtLocal.hour - 12
-                          : (joinedAtLocal.hour == 0 ? 12 : joinedAtLocal.hour);
-                      final String ampm = joinedAtLocal.hour >= 12
-                          ? "pm"
-                          : "am";
-                      final String minuteStr = joinedAtLocal.minute < 10
-                          ? "0${joinedAtLocal.minute}"
-                          : "${joinedAtLocal.minute}";
-                      final String timeStr = "$hour:$minuteStr $ampm";
-
-                      _messages.add({
-                        "id": "virtual_added_$memberId",
-                        "sender": "System",
-                        "text": "system_member_added:$memberId:$memberName",
-                        "time": timeStr,
-                        "isOutgoing": false,
-                        "type": "system",
-                        "avatar": "",
-                        "moderation_status": "Approved",
-                        "createdAt": joinedAtStr,
-                        "parent_message_id": null,
-                        "replyTo": null,
-                        "replyToSender": null,
-                        "is_forwarded": false,
-                      });
-                    } catch (_) {}
-                  }
-                }
-              }
-            }
-          }
-
-          _messages.sort((a, b) {
-            final String textA = a['text']?.toString().toLowerCase() ?? "";
-            final String textB = b['text']?.toString().toLowerCase() ?? "";
-            final bool isGroupCreatedA = textA.contains("created") || textA.contains("system_group_created");
-            final bool isGroupCreatedB = textB.contains("created") || textB.contains("system_group_created");
-            
-            if (isGroupCreatedA && !isGroupCreatedB) return -1;
-            if (isGroupCreatedB && !isGroupCreatedA) return 1;
-
-            final String? ca = a['createdAt'];
-            final String? cb = b['createdAt'];
-            if (ca == null && cb == null) return 0;
-            if (ca == null) return -1;
-            if (cb == null) return 1;
-            return ca.compareTo(cb);
-          });
+        if (data.length < 20) {
+          _hasMoreMessages = false;
+        } else {
+          _hasMoreMessages = true;
         }
       }
     } catch (e) {
       debugPrint("Error fetching group chat history: $e");
-    }
-    notifyListeners();
-    if (!silent) {
-      scrollToBottom(immediate: true);
-    } else {
-      if (scrollController.hasClients) {
-        final double maxScroll = scrollController.position.maxScrollExtent;
-        final double currentScroll = scrollController.position.pixels;
-        if (maxScroll - currentScroll < 100) {
-          scrollToBottom();
+    } finally {
+      if (updateLoadingState && !silent) {
+        _isLoading = false;
+      }
+      notifyListeners();
+      if (!silent) {
+        scrollToBottom(immediate: true);
+      } else {
+        if (scrollController.hasClients) {
+          final double maxScroll = scrollController.position.maxScrollExtent;
+          final double currentScroll = scrollController.position.pixels;
+          if (maxScroll - currentScroll < 100) {
+            scrollToBottom();
+          }
         }
       }
+    }
+  }
+
+  Future<void> fetchNextPage() async {
+    if (_userId == null || _groupId == null || _isFetchingMore || !_hasMoreMessages) return;
+    _isFetchingMore = true;
+    notifyListeners();
+
+    final int nextPage = _currentPage + 1;
+    final String groupId = _groupId!;
+
+    try {
+      // 1. Fetch from SQLite local cache first
+      final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+        groupId,
+        limit: 20,
+        offset: (nextPage - 1) * 20,
+      );
+
+      final List<Map<String, dynamic>> mappedCached = _mapRawMessages(cached, _userId!).reversed.toList();
+
+      if (mappedCached.isNotEmpty) {
+        final double previousMaxScroll = scrollController.position.maxScrollExtent;
+        final double currentPixels = scrollController.position.pixels;
+
+        _messages.insertAll(0, mappedCached);
+        _currentPage = nextPage;
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        _synthesizeAndSortMessages(prefs, _userId!);
+        notifyListeners();
+
+        // Adjust scroll offset to prevent jumpiness when prepending
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scrollController.hasClients) {
+            final double difference = scrollController.position.maxScrollExtent - previousMaxScroll;
+            if (difference > 0) {
+              scrollController.jumpTo(currentPixels + difference);
+            }
+          }
+        });
+      }
+
+      // 2. Fetch page from API in background to sync
+      final response = await ApiService().get(
+        '/chat/history?group_id=$groupId&requesterId=$_userId&page=$nextPage&limit=20',
+      );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        final List<dynamic> data = json['data'] ?? [];
+        if (data.isEmpty) {
+          _hasMoreMessages = false;
+        } else {
+          // Cache messages in SQLite
+          await LocalDbService().saveMessages(groupId, data);
+
+          if (data.length < 20) {
+            _hasMoreMessages = false;
+          }
+
+          // Reload all loaded pages from SQLite database to merge
+          await _reloadAllLoadedMessages();
+        }
+      } else {
+        _hasMoreMessages = false;
+      }
+    } catch (e) {
+      debugPrint("Error fetching next page of history: $e");
+    } finally {
+      _isFetchingMore = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _reloadAllLoadedMessages() async {
+    if (_groupId == null || _userId == null) return;
+    try {
+      final double previousMaxScroll = scrollController.position.maxScrollExtent;
+      final double currentPixels = scrollController.position.pixels;
+
+      final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+        _groupId!,
+        limit: _currentPage * 20,
+        offset: 0,
+      );
+
+      _messages = _mapRawMessages(cached, _userId!).reversed.toList();
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      _synthesizeAndSortMessages(prefs, _userId!);
+      notifyListeners();
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+          final double difference = scrollController.position.maxScrollExtent - previousMaxScroll;
+          if (difference > 0) {
+            scrollController.jumpTo(currentPixels + difference);
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("Error reloading loaded messages: $e");
     }
   }
 
@@ -1409,7 +1600,7 @@ class GroupChatController extends ChangeNotifier {
         );
         SocketService().emit('send-message', socketPayload);
 
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
       }
     } catch (e) {
       debugPrint("Error sending group message: $e");
@@ -1472,7 +1663,7 @@ class GroupChatController extends ChangeNotifier {
         );
         SocketService().emit('send-message', socketPayload);
 
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
       } else {
         debugPrint(
           "sendMediaMessage group failed with status code ${response.statusCode}: $json",
@@ -1978,7 +2169,7 @@ class GroupChatController extends ChangeNotifier {
         );
         SocketService().emit('send-message', socketPayload);
 
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
       }
     } catch (e) {
       debugPrint("Error sending group location: $e");
@@ -2215,6 +2406,7 @@ class GroupChatController extends ChangeNotifier {
       if (response.statusCode == 200 ||
           response.statusCode == 201 ||
           json['success'] == true) {
+        await LocalDbService().clearChatHistory(_groupId!);
         _messages.clear();
         try {
           final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -2353,7 +2545,7 @@ class GroupChatController extends ChangeNotifier {
         );
         SocketService().emit('send-message', socketPayload);
 
-        await fetchChatHistory(_groupId!);
+        await fetchChatHistory(_groupId!, silent: false, updateLoadingState: false);
       }
     } catch (e) {
       debugPrint("Error sending group sticker message: $e");
@@ -2503,11 +2695,93 @@ class GroupChatController extends ChangeNotifier {
     }
   }
 
+  bool get isSuspended => _groupDetails?['is_suspended'] as bool? ?? false;
+
+  Future<bool> reportGroup({
+    required String reason,
+    required String description,
+  }) async {
+    if (_userId == null || _groupId == null) return false;
+    try {
+      final response = await ApiService().post(
+        '/reports',
+        data: {
+          "reporterId": _userId,
+          "reportedGroupId": _groupId,
+          "reason": reason,
+          "description": description,
+        },
+      );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+      return json['success'] == true;
+    } catch (e) {
+      debugPrint("Error submitting report for group: $e");
+      return false;
+    }
+  }
+
+  DateTime parseTime(dynamic time) {
+    if (time == null) return DateTime.now();
+    try {
+      if (time is DateTime) return time;
+      return DateTime.parse(time.toString());
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
+  void _deduplicateSystemMessages() {
+    final List<Map<String, dynamic>> toRemove = [];
+    for (final msg in _messages) {
+      final String type = msg['type']?.toString() ?? "";
+      final String text = msg['text']?.toString() ?? "";
+      if (type == 'system' || type == 'status') {
+        String action = "";
+        if (text.startsWith("system_member_added:")) {
+          final parts = text.split(":");
+          if (parts.length >= 2) {
+            action = parts[1]; // memberId
+          }
+        }
+        
+        if (action.isNotEmpty) {
+          final DateTime msgTime = parseTime(msg['createdAt']);
+          for (final named in _messages) {
+            if (identical(msg, named)) continue;
+            final String namedType = named['type']?.toString() ?? "";
+            if (namedType == 'system' || namedType == 'status') {
+              final String namedText = named['text']?.toString() ?? "";
+              if (namedText.contains(action)) {
+                final DateTime namedTime = parseTime(named['createdAt']);
+                final difference = msgTime.difference(namedTime).abs();
+                if (difference.inSeconds <= 10) {
+                  final String msgId = msg['id']?.toString() ?? "";
+                  if (msgId.startsWith("virtual_added_")) {
+                    toRemove.add(msg);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (toRemove.isNotEmpty) {
+      _messages.removeWhere((msg) => toRemove.contains(msg));
+    }
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
     _refreshTimer?.cancel();
     _stopTypingTimer?.cancel();
+    scrollController.removeListener(_scrollListener);
     SocketService().messageQueueNotifier.removeListener(_onMessageQueueChanged);
     SocketService().typingIndicatorNotifier.removeListener(_onTypingIndicatorChanged);
     if (SocketService().activeChatId == _groupId) {

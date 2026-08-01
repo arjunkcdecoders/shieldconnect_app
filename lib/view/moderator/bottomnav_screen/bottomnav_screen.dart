@@ -60,7 +60,15 @@ class BottomnavScreen extends StatelessWidget {
                           : ImageAssets.home,
                       label: 'Home',
                       currentIndex: controller.currentIndex,
-                      onTap: () => controller.changeIndex(0),
+                      onTap: () {
+                        controller.changeIndex(0);
+                        context
+                            .read<ModeratorHomeController>()
+                            .fetchModerationStats(force: true);
+                        context
+                            .read<ModeratorHomeController>()
+                            .fetchModerationHistory(force: true);
+                      },
                     ),
                     _buildNavItem(
                       context,

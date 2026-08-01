@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -64,7 +64,11 @@ class GlobalOngoingCallBanner extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholderIcon(BuildContext context, String name, {bool isGroup = false}) {
+  Widget _buildPlaceholderIcon(
+    BuildContext context,
+    String name, {
+    bool isGroup = false,
+  }) {
     return Center(
       child: Icon(
         isGroup ? Icons.group : Icons.person,
@@ -149,8 +153,20 @@ class GlobalOngoingCallBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<CallManager, CallController>(
       builder: (context, callManager, callController, child) {
+        if (callManager.isGroup) {
+          return const SizedBox.shrink();
+        }
+
         if (callManager.state == CallState.idle || !callManager.isMinimized) {
           return const SizedBox.shrink();
+        }
+
+        if (callManager.state == CallState.dialing ||
+            callManager.state == CallState.ringing) {
+          final isCaller = callManager.callerId == callManager.myUserId;
+          if (!isCaller) {
+            return const SizedBox.shrink();
+          }
         }
 
         final isVideo = callManager.isVideo;
@@ -292,15 +308,22 @@ class GlobalOngoingCallBanner extends StatelessWidget {
                                   Text(
                                     callManager.state == CallState.connected
                                         ? "Ongoing Call"
-                                        : "Incoming Call",
+                                        : (callManager.callerId ==
+                                                  callManager.myUserId
+                                              ? "Outgoing Call"
+                                              : "Incoming Call"),
                                     style: fontStyle.clashDisplayMedium10
                                         .textColor(const Color(0xFF1A9E16)),
                                   ),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    duration,
-                                    style: fontStyle.clashDisplayMedium10
-                                        .textColor(appColor(context).white),
+                                  Flexible(
+                                    child: Text(
+                                      duration,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: fontStyle.clashDisplayMedium10
+                                          .textColor(appColor(context).white),
+                                    ),
                                   ),
                                 ],
                               ),

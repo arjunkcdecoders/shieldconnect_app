@@ -1,11 +1,15 @@
+// import 'dart:io';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+// import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
 import 'package:shieldconnect_app/controller/group_chat_controller.dart';
 import 'package:shieldconnect_app/controller/login_controller.dart';
 import 'package:shieldconnect_app/controller/onboarding_controller.dart';
 import 'package:shieldconnect_app/controller/splash_controller.dart';
+import 'package:shieldconnect_app/controller/launch_loading_controller.dart';
 import 'package:shieldconnect_app/controller/status_controller.dart';
 import 'package:shieldconnect_app/firebase_options.dart';
 import 'package:shieldconnect_app/view/splash_screen.dart';
@@ -32,13 +36,17 @@ import 'package:shieldconnect_app/view/global_ongoing_call_banner.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // if (Platform.isAndroid) {
+  //   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // }
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   // Register background handler for call signaling push events
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  
+
   await FcmService().init();
-  
+
   runApp(
     MultiProvider(
       providers: [
@@ -59,17 +67,15 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => StatusController()),
         ChangeNotifierProvider(create: (_) => HelpSupportController()),
         ChangeNotifierProvider(create: (_) => CallListController()),
-
         ChangeNotifierProvider(create: (_) => CallManager()),
         ChangeNotifierProvider(create: (_) => CallController()),
         ChangeNotifierProvider(create: (_) => DhsiController()),
+        ChangeNotifierProvider(create: (_) => LaunchLoadingController()),
       ],
       child: const MyApp(),
     ),
   );
 }
-
-
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 

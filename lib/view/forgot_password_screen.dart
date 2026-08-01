@@ -13,113 +13,121 @@ class ForgotPasswordScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Provider.of<ForgotPasswordController>(context);
 
-    return Scaffold(
-      backgroundColor: appColor(context).white,
-      appBar: AppBar(
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
         backgroundColor: appColor(context).white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: appColor(context).black),
-          onPressed: () {
-            controller.clearMessage();
-            Navigator.pop(context);
-          },
+        appBar: AppBar(
+          backgroundColor: appColor(context).white,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios, color: appColor(context).black),
+            onPressed: () {
+              controller.clearMessage();
+              Navigator.pop(context);
+            },
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title
-              ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: (bounds) => LinearGradient(
-                  colors: [
-                    appColor(context).primary,
-                    appColor(context).secondary,
-                  ],
-                ).createShader(
-                  Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                ),
-                child: Text(
-                  "Forgot Password",
-                  style: fontStyle.clashDisplaySemiBold24.textColor(
-                    appColor(context).white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 7),
-              // Subtitle
-              Text(
-                "Enter your email address to receive a verification code.",
-                style: fontStyle.clashDisplayRegular14.textColor(
-                  appColor(context).black,
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Email Field
-              CustomTextField(
-                labelText: "Email",
-                hintText: "Enter your email",
-                controller: controller.emailController,
-                focusNode: controller.emailFocus,
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 30),
-
-              // Send OTP Button
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      appColor(context).primary,
-                      appColor(context).secondary,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: ElevatedButton(
-                  onPressed: controller.isLoading
-                      ? null
-                      : () => controller.sendOtp(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: appColor(context).transparent,
-                    shadowColor: appColor(context).transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: controller.isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          "Send OTP",
-                          style: fontStyle.clashDisplaySemiBold18
-                              .textColor(appColor(context).white)
-                              .copyWith(fontWeight: FontWeight.w600),
-                        ),
-                ),
-              ),
-              if (controller.message.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Center(
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 20.0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) =>
+                      LinearGradient(
+                        colors: [
+                          appColor(context).primary,
+                          appColor(context).secondary,
+                        ],
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                      ),
                   child: Text(
-                    controller.message,
-                    textAlign: TextAlign.center,
-                    style: fontStyle.clashDisplayMedium14.textColor(
-                      controller.isError
-                          ? appColor(context).red
-                          : appColor(context).green,
+                    "Forgot Password",
+                    style: fontStyle.clashDisplaySemiBold24.textColor(
+                      appColor(context).white,
                     ),
                   ),
                 ),
+                const SizedBox(height: 7),
+                // Subtitle
+                Text(
+                  "Enter your email address to receive a verification code.",
+                  style: fontStyle.clashDisplayRegular14.textColor(
+                    appColor(context).black,
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                // Email Field
+                CustomTextField(
+                  labelText: "Email",
+                  hintText: "Enter your email",
+                  controller: controller.emailController,
+                  focusNode: controller.emailFocus,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 30),
+
+                // Send OTP Button
+                Container(
+                  width: double.infinity,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        appColor(context).primary,
+                        appColor(context).secondary,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: controller.isLoading
+                        ? null
+                        : () => controller.sendOtp(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColor(context).transparent,
+                      shadowColor: appColor(context).transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: controller.isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                            "Send OTP",
+                            style: fontStyle.clashDisplaySemiBold18
+                                .textColor(appColor(context).white)
+                                .copyWith(fontWeight: FontWeight.w600),
+                          ),
+                  ),
+                ),
+                if (controller.message.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      controller.message,
+                      textAlign: TextAlign.center,
+                      style: fontStyle.clashDisplayMedium14.textColor(
+                        controller.isError
+                            ? appColor(context).red
+                            : appColor(context).green,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

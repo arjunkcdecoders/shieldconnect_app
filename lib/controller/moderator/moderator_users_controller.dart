@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shieldconnect_app/services/moderation_api_client.dart';
+import 'package:shieldconnect_app/controller/moderator/moderation_controller.dart';
 
 class ModeratorUsersController extends ChangeNotifier {
-  final ModerationApiClient _apiClient = ModerationApiClient();
 
   List<Map<String, dynamic>> users = [];
   bool isLoading = false;
@@ -54,7 +53,7 @@ class ModeratorUsersController extends ChangeNotifier {
         return;
       }
 
-      final responseJson = await _apiClient.fetchUsers(
+      final responseJson = await ModerationController.apiFetchUsers(
         moderatorId: moderatorId,
         page: 1,
         limit: 100,
@@ -94,7 +93,7 @@ class ModeratorUsersController extends ChangeNotifier {
     users[actualIndex]['approval_status'] = newStatus;
     notifyListeners();
 
-    final success = await _apiClient.updateUserApprovalStatus(
+    final success = await ModerationController.apiUpdateUserApprovalStatus(
       userId: userId,
       approvalStatus: newStatus,
     );

@@ -92,10 +92,6 @@ class BlockedUsersScreen extends StatelessWidget {
   Widget _buildBlockedUserCard(BuildContext context, AccountController controller, int index) {
     final user = controller.blockedUsers[index];
     final String avatarUrl = ApiService.getImageUrl(user['image']);
-    final ImageProvider imageProvider = avatarUrl.isNotEmpty
-        ? NetworkImage(avatarUrl)
-        : const AssetImage(ImageAssets.userAvatar) as ImageProvider;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -112,17 +108,31 @@ class BlockedUsersScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              image: DecorationImage(
-                image: imageProvider,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
+          avatarUrl.isNotEmpty
+              ? Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    image: DecorationImage(
+                      image: NetworkImage(avatarUrl),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                )
+              : Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: appColor(context).secondary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.person,
+                    color: appColor(context).secondary,
+                    size: 24,
+                  ),
+                ),
           const SizedBox(width: 16),
           Expanded(
             child: Text(

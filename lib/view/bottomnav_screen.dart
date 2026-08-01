@@ -9,6 +9,7 @@ import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/controller/status_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/controller/dhsi_controller.dart';
 
 class BottomnavScreen extends StatelessWidget {
   const BottomnavScreen({super.key});
@@ -51,9 +52,14 @@ class BottomnavScreen extends StatelessWidget {
             } else if (resolvedIndex == 1) {
               Provider.of<CallListController>(context, listen: false).init();
             } else if (resolvedIndex == 2) {
-              Provider.of<ProfileController>(context, listen: false).init();
+              final userId = Provider.of<ProfileController>(context, listen: false).userId;
+              if (userId.isNotEmpty) {
+                Provider.of<DhsiController>(context, listen: false).fetchDhsiData(userId);
+              }
             } else if (resolvedIndex == 3) {
               Provider.of<StatusController>(context, listen: false).init();
+            } else if (resolvedIndex == 4) {
+              Provider.of<ProfileController>(context, listen: false).init(context: context);
             }
           },
           type: BottomNavigationBarType.fixed,

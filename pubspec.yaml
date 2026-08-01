@@ -54,6 +54,8 @@ dependencies:
   livekit_client: ^2.7.0
   flutter_callkit_incoming: ^3.1.1
   connectivity_plus: ^7.1.1
+  sqflite: ^2.3.0
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:

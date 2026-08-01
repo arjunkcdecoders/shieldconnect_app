@@ -2,8 +2,7 @@ class ImageAssets {
   static const String _path = "assets/images";
 
   // App Logos & Icons
-  static const String maisieAvatar = "$_path/maisie_avatar.png";
-  static const String userAvatar = "$_path/user_avatar.png";
+
   static const String appIcon = "$_path/appIcon.png";
   static const String appLogoAndroid = "$_path/appLogo-Android.png";
   static const String appLogoIos = "$_path/appLogo-ios.png";

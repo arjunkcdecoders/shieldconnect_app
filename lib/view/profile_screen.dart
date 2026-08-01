@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
 import 'package:shieldconnect_app/view/delete_account_dialog.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
@@ -23,7 +23,7 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ProfileController>().fetchUserDetails();
+      context.read<ProfileController>().fetchUserDetails(context: context);
     });
     return Scaffold(
       backgroundColor: appColor(context).white,
@@ -1052,7 +1052,7 @@ class UserModeDialog extends StatelessWidget {
                       await context.read<ProfileController>().setAppMode('user');
                       if (context.mounted) {
                         Provider.of<HomeScreenController>(context, listen: false).init();
-                        Provider.of<ProfileController>(context, listen: false).init();
+                        Provider.of<ProfileController>(context, listen: false).init(context: context);
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/help_support_controller.dart';
@@ -23,448 +23,491 @@ class SupportTicketsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<HelpSupportController>(context, listen: false)
-          .fetchUserTickets();
+      Provider.of<HelpSupportController>(
+        context,
+        listen: false,
+      ).fetchUserTickets();
     });
 
-    return Scaffold(
-      backgroundColor: appColor(context).white,
-      body: SafeArea(
-        child: Consumer<HelpSupportController>(
-          builder: (context, controller, child) {
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0,
-                      vertical: 10.0,
-                    ),
-                    child: Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: appColor(context).grey100,
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.chevron_left,
-                                color: appColor(context).secondary,
-                                size: 20,
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: appColor(context).white,
+        body: SafeArea(
+          child: Consumer<HelpSupportController>(
+            builder: (context, controller, child) {
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20.0,
+                        vertical: 10.0,
+                      ),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: appColor(context).grey100,
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            "Support Tickets",
-                            style: fontStyle.clashDisplaySemiBold20.textColor(
-                              appColor(context).black,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "Ticket Overview",
-                              style: fontStyle.clashDisplaySemiBold18.textColor(
-                                appColor(context).black,
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () => _showCreateTicketBottomSheet(context),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: appColor(context).secondary,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.add,
-                                      color: Colors.white,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      "Create Ticket",
-                                      style: fontStyle.clashDisplaySemiBold12
-                                          .textColor(Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Ticket Summary Cards
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildSummaryCard(
-                                context,
-                                "All",
-                                controller.tickets.length.toString(),
-                                Icons.forum_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildSummaryCard(
-                                context,
-                                "Pending",
-                                controller.tickets
-                                    .where((t) =>
-                                        t.status?.toLowerCase() == 'open' ||
-                                        t.status?.toLowerCase() == 'pending')
-                                    .length
-                                    .toString(),
-                                Icons.timer_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildSummaryCard(
-                                context,
-                                "Closed",
-                                controller.tickets
-                                    .where((t) =>
-                                        t.status?.toLowerCase() == 'closed' ||
-                                        t.status?.toLowerCase() == 'resolved')
-                                    .length
-                                    .toString(),
-                                Icons.event_available_outlined,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Search & Filter
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                decoration: BoxDecoration(
-                                  color: appColor(context).grey100,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: TextField(
-                                  onChanged: (val) {
-                                    controller.searchTickets(val);
-                                  },
-                                  style: fontStyle.clashDisplayMedium12.textColor(
-                                    appColor(context).black,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: "Search Subject or ID",
-                                    hintStyle: fontStyle.clashDisplayMedium12
-                                        .textColor(appColor(context).grey400),
-                                    border: InputBorder.none,
-                                    icon: Icon(
-                                      Icons.search,
-                                      color: appColor(context).grey400,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            GestureDetector(
-                              onTap: () {
-                                controller.toggleFilterVisibility();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: controller.showFilter
-                                      ? appColor(context).secondary.withValues(alpha: 0.12)
-                                      : appColor(context).grey100,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: controller.showFilter
-                                      ? Border.all(
-                                          color: appColor(context).secondary,
-                                          width: 1.5,
-                                        )
-                                      : null,
-                                ),
+                              child: Center(
                                 child: Icon(
-                                  Icons.filter_list,
+                                  Icons.chevron_left,
                                   color: appColor(context).secondary,
                                   size: 20,
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                        if (controller.showFilter) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: appColor(context).grey50,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: appColor(context).grey200,
-                                width: 1,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              "Support Tickets",
+                              style: fontStyle.clashDisplaySemiBold20.textColor(
+                                appColor(context).black,
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  "Category: ",
-                                  style: fontStyle.clashDisplaySemiBold14.textColor(
-                                    appColor(context).black,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: appColor(context).white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: appColor(context).grey300,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        value: controller.selectedCategory,
-                                        isExpanded: true,
-                                        icon: Icon(
-                                          Icons.keyboard_arrow_down,
-                                          color: appColor(context).grey600,
-                                        ),
-                                        style: fontStyle.clashDisplayMedium12.textColor(
-                                          appColor(context).black,
-                                        ),
-                                        dropdownColor: appColor(context).white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        onChanged: (String? newValue) {
-                                          if (newValue != null) {
-                                            controller.setSelectedCategory(newValue);
-                                          }
-                                        },
-                                        items: <String>[
-                                          "All Categories",
-                                          "Billing",
-                                          "Technical Issue",
-                                          "General Inquiry",
-                                          "Bug Report",
-                                        ].map<DropdownMenuItem<String>>((String value) {
-                                          return DropdownMenuItem<String>(
-                                            value: value,
-                                            child: Text(value),
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                if (controller.selectedCategory != "All Categories") ...[
-                                  const SizedBox(width: 12),
-                                  GestureDetector(
-                                    onTap: () {
-                                      controller.clearCategoryFilter();
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: appColor(context).secondary.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        "Clear",
-                                        style: fontStyle.clashDisplaySemiBold12.textColor(
-                                          appColor(context).secondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
-                        const SizedBox(height: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
 
-                        Text(
-                          "Latest Support History",
-                          style: fontStyle.clashDisplaySemiBold16.textColor(
-                            appColor(context).black,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Data Table
-                        if (controller.isLoading && controller.tickets.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40.0),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: appColor(context).secondary,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Ticket Overview",
+                                style: fontStyle.clashDisplaySemiBold18
+                                    .textColor(appColor(context).black),
                               ),
-                            ),
-                          )
-                        else if (controller.tickets.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40.0),
-                            child: Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.confirmation_number_outlined,
-                                    size: 48,
-                                    color: appColor(context).grey400,
+                              GestureDetector(
+                                onTap: () =>
+                                    _showCreateTicketBottomSheet(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
                                   ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    "No support tickets found",
+                                  decoration: BoxDecoration(
+                                    color: appColor(context).secondary,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.add,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "Create Ticket",
+                                        style: fontStyle.clashDisplaySemiBold12
+                                            .textColor(Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          // Ticket Summary Cards
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  context,
+                                  "All",
+                                  controller.tickets.length.toString(),
+                                  Icons.forum_outlined,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  context,
+                                  "Pending",
+                                  controller.tickets
+                                      .where(
+                                        (t) =>
+                                            t.status?.toLowerCase() == 'open' ||
+                                            t.status?.toLowerCase() ==
+                                                'pending',
+                                      )
+                                      .length
+                                      .toString(),
+                                  Icons.timer_outlined,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  context,
+                                  "Closed",
+                                  controller.tickets
+                                      .where(
+                                        (t) =>
+                                            t.status?.toLowerCase() ==
+                                                'closed' ||
+                                            t.status?.toLowerCase() ==
+                                                'resolved',
+                                      )
+                                      .length
+                                      .toString(),
+                                  Icons.event_available_outlined,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Search & Filter
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: appColor(context).grey100,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: TextField(
+                                    onChanged: (val) {
+                                      controller.searchTickets(val);
+                                    },
                                     style: fontStyle.clashDisplayMedium12
-                                        .textColor(appColor(context).grey600),
+                                        .textColor(appColor(context).black),
+                                    decoration: InputDecoration(
+                                      hintText: "Search Subject or ID",
+                                      hintStyle: fontStyle.clashDisplayMedium12
+                                          .textColor(appColor(context).grey400),
+                                      border: InputBorder.none,
+                                      icon: Icon(
+                                        Icons.search,
+                                        color: appColor(context).grey400,
+                                        size: 20,
+                                      ),
+                                    ),
                                   ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: () {
+                                  controller.toggleFilterVisibility();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: controller.showFilter
+                                        ? appColor(
+                                            context,
+                                          ).secondary.withValues(alpha: 0.12)
+                                        : appColor(context).grey100,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: controller.showFilter
+                                        ? Border.all(
+                                            color: appColor(context).secondary,
+                                            width: 1.5,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Icon(
+                                    Icons.filter_list,
+                                    color: appColor(context).secondary,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (controller.showFilter) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: appColor(context).grey50,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: appColor(context).grey200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    "Category: ",
+                                    style: fontStyle.clashDisplaySemiBold14
+                                        .textColor(appColor(context).black),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: appColor(context).white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: appColor(context).grey300,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          value: controller.selectedCategory,
+                                          isExpanded: true,
+                                          icon: Icon(
+                                            Icons.keyboard_arrow_down,
+                                            color: appColor(context).grey600,
+                                          ),
+                                          style: fontStyle.clashDisplayMedium12
+                                              .textColor(
+                                                appColor(context).black,
+                                              ),
+                                          dropdownColor: appColor(
+                                            context,
+                                          ).white,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          onChanged: (String? newValue) {
+                                            if (newValue != null) {
+                                              controller.setSelectedCategory(
+                                                newValue,
+                                              );
+                                            }
+                                          },
+                                          items:
+                                              <String>[
+                                                "All Categories",
+                                                "Billing",
+                                                "Technical Issue",
+                                                "General Inquiry",
+                                                "Bug Report",
+                                              ].map<DropdownMenuItem<String>>((
+                                                String value,
+                                              ) {
+                                                return DropdownMenuItem<String>(
+                                                  value: value,
+                                                  child: Text(value),
+                                                );
+                                              }).toList(),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (controller.selectedCategory !=
+                                      "All Categories") ...[
+                                    const SizedBox(width: 12),
+                                    GestureDetector(
+                                      onTap: () {
+                                        controller.clearCategoryFilter();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: appColor(
+                                            context,
+                                          ).secondary.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          "Clear",
+                                          style: fontStyle
+                                              .clashDisplaySemiBold12
+                                              .textColor(
+                                                appColor(context).secondary,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
-                          )
-                        else
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                              columnSpacing: 24,
-                              showCheckboxColumn: false,
-                              headingRowColor: WidgetStateProperty.all(
-                                appColor(context).grey100,
+                          ],
+                          const SizedBox(height: 32),
+
+                          Text(
+                            "Latest Support History",
+                            style: fontStyle.clashDisplaySemiBold16.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Data Table
+                          if (controller.isLoading &&
+                              controller.tickets.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 40.0,
                               ),
-                              headingTextStyle: fontStyle.clashDisplayMedium12
-                                  .textColor(appColor(context).grey600),
-                              dataTextStyle: fontStyle.clashDisplayMedium12
-                                  .textColor(appColor(context).black),
-                              columns: const [
-                                DataColumn(label: Text("TICKET ID")),
-                                DataColumn(label: Text("SUBJECT")),
-                                DataColumn(label: Text("CATEGORY")),
-                                DataColumn(label: Text("STATUS")),
-                                DataColumn(label: Text("LAST UPDATED")),
-                              ],
-                               rows: controller.tickets.map((ticket) {
-                                final String displayId = ticket.ticketId ??
-                                    (ticket.id ?? "TCKT-000");
-                                final String displaySubject =
-                                    ticket.subject ?? "No Subject";
-                                final String displayCategory =
-                                    ticket.category ?? "General Inquiry";
-                                final String displayStatus =
-                                    ticket.status ?? "Open";
-                                final String displayDate = _formatDate(
-                                    ticket.createdAt?.toIso8601String());
-
-                                final bool isOpen =
-                                    displayStatus.toLowerCase() == "open" ||
-                                        displayStatus.toLowerCase() == "pending";
-                                final Color statusBgColor = isOpen
-                                    ? const Color(0xFFE3F2FD)
-                                    : const Color(0xFFE8F5E9);
-                                final Color statusTextColor = isOpen
-                                    ? const Color(0xFF1976D2)
-                                    : const Color(0xFF2E7D32);
-
-                                return DataRow(
-                                onSelectChanged: (_) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            TicketDetailsScreen(ticketId: ticket.id ?? ""),
-                                      ),
-                                    );
-                                  },
-                                  cells: [
-                                    DataCell(Text(displayId)),
-                                    DataCell(Text(displaySubject)),
-                                    DataCell(
-                                      Text(
-                                        displayCategory,
-                                        style: TextStyle(
-                                          color: appColor(context).secondary,
-                                        ),
-                                      ),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: appColor(context).secondary,
+                                ),
+                              ),
+                            )
+                          else if (controller.tickets.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 40.0,
+                              ),
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.confirmation_number_outlined,
+                                      size: 48,
+                                      color: appColor(context).grey400,
                                     ),
-                                    DataCell(
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      "No support tickets found",
+                                      style: fontStyle.clashDisplayMedium12
+                                          .textColor(appColor(context).grey600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: DataTable(
+                                columnSpacing: 24,
+                                showCheckboxColumn: false,
+                                headingRowColor: WidgetStateProperty.all(
+                                  appColor(context).grey100,
+                                ),
+                                headingTextStyle: fontStyle.clashDisplayMedium12
+                                    .textColor(appColor(context).grey600),
+                                dataTextStyle: fontStyle.clashDisplayMedium12
+                                    .textColor(appColor(context).black),
+                                columns: const [
+                                  DataColumn(label: Text("TICKET ID")),
+                                  DataColumn(label: Text("SUBJECT")),
+                                  DataColumn(label: Text("CATEGORY")),
+                                  DataColumn(label: Text("STATUS")),
+                                  DataColumn(label: Text("LAST UPDATED")),
+                                ],
+                                rows: controller.tickets.map((ticket) {
+                                  final String displayId =
+                                      ticket.ticketId ??
+                                      (ticket.id ?? "TCKT-000");
+                                  final String displaySubject =
+                                      ticket.subject ?? "No Subject";
+                                  final String displayCategory =
+                                      ticket.category ?? "General Inquiry";
+                                  final String displayStatus =
+                                      ticket.status ?? "Open";
+                                  final String displayDate = _formatDate(
+                                    ticket.createdAt?.toIso8601String(),
+                                  );
+
+                                  final bool isOpen =
+                                      displayStatus.toLowerCase() == "open" ||
+                                      displayStatus.toLowerCase() == "pending";
+                                  final Color statusBgColor = isOpen
+                                      ? const Color(0xFFE3F2FD)
+                                      : const Color(0xFFE8F5E9);
+                                  final Color statusTextColor = isOpen
+                                      ? const Color(0xFF1976D2)
+                                      : const Color(0xFF2E7D32);
+
+                                  return DataRow(
+                                    onSelectChanged: (_) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              TicketDetailsScreen(
+                                                ticketId: ticket.id ?? "",
+                                              ),
                                         ),
-                                        decoration: BoxDecoration(
-                                          color: statusBgColor,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          displayStatus,
+                                      );
+                                    },
+                                    cells: [
+                                      DataCell(Text(displayId)),
+                                      DataCell(Text(displaySubject)),
+                                      DataCell(
+                                        Text(
+                                          displayCategory,
                                           style: TextStyle(
-                                            color: statusTextColor,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
+                                            color: appColor(context).secondary,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    DataCell(Text(displayDate)),
-                                  ],
-                                );
-                              }).toList(),
+                                      DataCell(
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: statusBgColor,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            displayStatus,
+                                            style: TextStyle(
+                                              color: statusTextColor,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(Text(displayDate)),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                          ),
-                        const SizedBox(height: 40),
-                      ],
+                          const SizedBox(height: 40),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -564,7 +607,10 @@ class SupportTicketsScreen extends StatelessWidget {
                               errorTimer?.cancel();
                               Navigator.pop(context);
                             },
-                            icon: Icon(Icons.close, color: appColor(context).black),
+                            icon: Icon(
+                              Icons.close,
+                              color: appColor(context).black,
+                            ),
                           ),
                         ],
                       ),
@@ -606,18 +652,20 @@ class SupportTicketsScreen extends StatelessWidget {
                                       Navigator.pop(context);
                                     },
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(25),
                                 ),
                                 side: BorderSide(
-                                    color: appColor(context).grey300),
+                                  color: appColor(context).grey300,
+                                ),
                               ),
                               child: Text(
                                 "Cancel",
-                                style: fontStyle.clashDisplaySemiBold14.textColor(
-                                  appColor(context).black,
-                                ),
+                                style: fontStyle.clashDisplaySemiBold14
+                                    .textColor(appColor(context).black),
                               ),
                             ),
                           ),
@@ -627,19 +675,23 @@ class SupportTicketsScreen extends StatelessWidget {
                               onPressed: isSubmitting
                                   ? null
                                   : () async {
-                                      if (subjectController.text.trim().isEmpty) {
+                                      if (subjectController.text
+                                          .trim()
+                                          .isEmpty) {
                                         setState(() {
                                           showErrorText = true;
                                         });
                                         errorTimer?.cancel();
                                         errorTimer = Timer(
-                                            const Duration(seconds: 2), () {
-                                          if (context.mounted) {
-                                            setState(() {
-                                              showErrorText = false;
-                                            });
-                                          }
-                                        });
+                                          const Duration(seconds: 2),
+                                          () {
+                                            if (context.mounted) {
+                                              setState(() {
+                                                showErrorText = false;
+                                              });
+                                            }
+                                          },
+                                        );
                                         return;
                                       }
 
@@ -649,13 +701,14 @@ class SupportTicketsScreen extends StatelessWidget {
                                       });
 
                                       final success =
-                                          await Provider.of<HelpSupportController>(
-                                                  context,
-                                                  listen: false)
+                                          await Provider.of<
+                                                HelpSupportController
+                                              >(context, listen: false)
                                               .createTicket(
-                                        subject: subjectController.text.trim(),
-                                        category: selectedCategory,
-                                      );
+                                                subject: subjectController.text
+                                                    .trim(),
+                                                category: selectedCategory,
+                                              );
 
                                       if (success) {
                                         errorTimer?.cancel();
@@ -670,19 +723,23 @@ class SupportTicketsScreen extends StatelessWidget {
                                           });
                                           errorTimer?.cancel();
                                           errorTimer = Timer(
-                                              const Duration(seconds: 2), () {
-                                            if (context.mounted) {
-                                              setState(() {
-                                                showErrorText = false;
-                                              });
-                                            }
-                                          });
+                                            const Duration(seconds: 2),
+                                            () {
+                                              if (context.mounted) {
+                                                setState(() {
+                                                  showErrorText = false;
+                                                });
+                                              }
+                                            },
+                                          );
                                         }
                                       }
                                     },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: appColor(context).secondary,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(25),
                                 ),
@@ -783,7 +840,10 @@ class SupportTicketsScreen extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButtonFormField<String>(
           initialValue: value,
-          icon: Icon(Icons.keyboard_arrow_down, color: appColor(context).grey600),
+          icon: Icon(
+            Icons.keyboard_arrow_down,
+            color: appColor(context).grey600,
+          ),
           decoration: const InputDecoration(
             border: InputBorder.none,
             contentPadding: EdgeInsets.zero,

@@ -2,13 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:shieldconnect_app/utils/toast_helper.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/media_cache_service.dart';
 
 class MediaViewerScreen extends StatelessWidget {
   final String url;
@@ -39,6 +39,26 @@ class MediaViewerScreen extends StatelessWidget {
   //   }
   // }
 
+  Widget _buildErrorWidget() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(
+          Icons.broken_image,
+          color: Colors.grey,
+          size: 64,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          "Unable to load image",
+          style: fontStyle.clashDisplayMedium14.textColor(
+            Colors.white70,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -55,17 +75,47 @@ class MediaViewerScreen extends StatelessWidget {
           style: fontStyle.clashDisplaySemiBold16.textColor(Colors.white),
         ),
         actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.open_in_browser_rounded, color: Colors.white),
-          //   onPressed: () => _launchInBrowser(context),
-          //   tooltip: "Open in external browser/player",
-          // ),
           DownloadButton(url: url, fileName: fileName),
         ],
       ),
       body: Center(
-        child: type == 'image'
-            ? InteractiveViewer(
+        child: FutureBuilder<File?>(
+          future: MediaCacheService().getCachedMedia(url),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    "Loading media...",
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
+              );
+            }
+
+            final File? cachedFile = snapshot.data;
+            if (cachedFile != null) {
+              if (type == 'image') {
+                return InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.file(
+                    cachedFile,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => _buildErrorWidget(),
+                  ),
+                );
+              } else {
+                return VideoPlayerWidget(file: cachedFile);
+              }
+            }
+
+            // Fallback to network
+            if (type == 'image') {
+              return InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 4.0,
                 child: CachedNetworkImage(
@@ -73,26 +123,14 @@ class MediaViewerScreen extends StatelessWidget {
                   fit: BoxFit.contain,
                   placeholder: (context, url) =>
                       const CircularProgressIndicator(color: Colors.white),
-                  errorWidget: (context, url, error) => Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.broken_image,
-                        color: Colors.grey,
-                        size: 64,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Unable to load image",
-                        style: fontStyle.clashDisplayMedium14.textColor(
-                          Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
+                  errorWidget: (context, url, error) => _buildErrorWidget(),
                 ),
-              )
-            : VideoPlayerWidget(url: url),
+              );
+            } else {
+              return VideoPlayerWidget(url: url);
+            }
+          },
+        ),
       ),
     );
   }
@@ -196,9 +234,10 @@ class _DownloadButtonState extends State<DownloadButton> {
 }
 
 class VideoPlayerWidget extends StatefulWidget {
-  final String url;
+  final String? url;
+  final File? file;
 
-  const VideoPlayerWidget({super.key, required this.url});
+  const VideoPlayerWidget({super.key, this.url, this.file});
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -216,10 +255,16 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   Future<void> _initVideoPlayer() async {
     try {
-      final absoluteUrl = ApiService.getImageUrl(widget.url);
-      _videoController = VideoPlayerController.networkUrl(
-        Uri.parse(absoluteUrl),
-      );
+      if (widget.file != null) {
+        _videoController = VideoPlayerController.file(widget.file!);
+      } else if (widget.url != null) {
+        final absoluteUrl = ApiService.getImageUrl(widget.url!);
+        _videoController = VideoPlayerController.networkUrl(
+          Uri.parse(absoluteUrl),
+        );
+      } else {
+        return;
+      }
       await _videoController!.initialize();
       if (mounted) {
         setState(() {

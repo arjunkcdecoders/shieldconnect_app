@@ -9,182 +9,186 @@ class ChangePasswordScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: appColor(context).white,
-      body: SafeArea(
-        child: Consumer<ChangePasswordController>(
-          builder: (context, controller, child) {
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 10.0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. Back Button Header
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: appColor(context).grey100,
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.chevron_left,
-                                color: appColor(context).secondary,
-                                size: 20,
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: appColor(context).white,
+        body: SafeArea(
+          child: Consumer<ChangePasswordController>(
+            builder: (context, controller, child) {
+              return SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 10.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 1. Back Button Header
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: appColor(context).grey100,
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  Icons.chevron_left,
+                                  color: appColor(context).secondary,
+                                  size: 20,
+                                ),
                               ),
                             ),
                           ),
+                          const SizedBox(width: 16),
+                          Text(
+                            "Change Password",
+                            style: fontStyle.clashDisplaySemiBold20.textColor(
+                              appColor(context).black,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+
+                      // 2. Input Data Fields Group
+                      CustomTextField(
+                        labelText: "Old Password",
+                        hintText: "Enter Old Password",
+                        controller: controller.oldPasswordController,
+                        focusNode: controller.oldPasswordFocusNode,
+                        obscureText: controller.obscureOldPassword,
+                        suffixIcon: IconButton(
+                          onPressed: controller.toggleObscureOldPassword,
+                          icon: Icon(
+                            controller.obscureOldPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: appColor(context).grey400,
+                            size: 20,
+                          ),
                         ),
-                        const SizedBox(width: 16),
-                        Text(
-                          "Change Password",
-                          style: fontStyle.clashDisplaySemiBold20.textColor(
-                            appColor(context).black,
+                      ),
+                      const SizedBox(height: 20),
+
+                      CustomTextField(
+                        labelText: "New Password",
+                        hintText: "Enter New Password",
+                        controller: controller.passwordController,
+                        focusNode: controller.passwordFocusNode,
+                        obscureText: controller.obscurePassword,
+                        suffixIcon: IconButton(
+                          onPressed: controller.toggleObscurePassword,
+                          icon: Icon(
+                            controller.obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: appColor(context).grey400,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Dynamic conditions
+                      _buildConditionItem(
+                        context: context,
+                        label: 'Atleast 6 characters',
+                        isMet: controller.isAtLeast6Chars,
+                      ),
+                      _buildConditionItem(
+                        context: context,
+                        label: 'Atleast one upper case and one lower case',
+                        isMet: controller.hasUpperAndLowerCase,
+                      ),
+                      _buildConditionItem(
+                        context: context,
+                        label: 'One number ,one special character',
+                        isMet: controller.hasNumberAndSpecialChar,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      CustomTextField(
+                        labelText: "Confirm Password",
+                        hintText: "Re-enter New Password",
+                        controller: controller.confirmPasswordController,
+                        focusNode: controller.confirmPasswordFocusNode,
+                        obscureText: controller.obscureConfirmPassword,
+                        suffixIcon: IconButton(
+                          onPressed: controller.toggleObscureConfirmPassword,
+                          icon: Icon(
+                            controller.obscureConfirmPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: appColor(context).grey400,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 44),
+
+                      // 3. Bottom Update action button
+                      GestureDetector(
+                        onTap: controller.isLoading
+                            ? null
+                            : () => controller.changePassword(context),
+                        child: Container(
+                          height: 46,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: controller.isLoading
+                                ? appColor(
+                                    context,
+                                  ).secondary.withValues(alpha: 0.6)
+                                : appColor(context).secondary,
+                            borderRadius: BorderRadius.circular(23),
+                          ),
+                          child: Center(
+                            child: controller.isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    "Update Password",
+                                    style: fontStyle.clashDisplaySemiBold14
+                                        .textColor(appColor(context).white),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      if (controller.feedbackMessage.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Center(
+                          child: Text(
+                            controller.feedbackMessage,
+                            style: fontStyle.clashDisplayMedium12.textColor(
+                              controller.isError ? Colors.red : Colors.green,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 32),
-
-                    // 2. Input Data Fields Group
-                    CustomTextField(
-                      labelText: "Old Password",
-                      hintText: "Enter Old Password",
-                      controller: controller.oldPasswordController,
-                      focusNode: controller.oldPasswordFocusNode,
-                      obscureText: controller.obscureOldPassword,
-                      suffixIcon: IconButton(
-                        onPressed: controller.toggleObscureOldPassword,
-                        icon: Icon(
-                          controller.obscureOldPassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: appColor(context).grey400,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    CustomTextField(
-                      labelText: "New Password",
-                      hintText: "Enter New Password",
-                      controller: controller.passwordController,
-                      focusNode: controller.passwordFocusNode,
-                      obscureText: controller.obscurePassword,
-                      suffixIcon: IconButton(
-                        onPressed: controller.toggleObscurePassword,
-                        icon: Icon(
-                          controller.obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: appColor(context).grey400,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Dynamic conditions
-                    _buildConditionItem(
-                      context: context,
-                      label: 'Atleast 6 characters',
-                      isMet: controller.isAtLeast6Chars,
-                    ),
-                    _buildConditionItem(
-                      context: context,
-                      label: 'Atleast one upper case and one lower case',
-                      isMet: controller.hasUpperAndLowerCase,
-                    ),
-                    _buildConditionItem(
-                      context: context,
-                      label: 'One number ,one special character',
-                      isMet: controller.hasNumberAndSpecialChar,
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    CustomTextField(
-                      labelText: "Confirm Password",
-                      hintText: "Re-enter New Password",
-                      controller: controller.confirmPasswordController,
-                      focusNode: controller.confirmPasswordFocusNode,
-                      obscureText: controller.obscureConfirmPassword,
-                      suffixIcon: IconButton(
-                        onPressed: controller.toggleObscureConfirmPassword,
-                        icon: Icon(
-                          controller.obscureConfirmPassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: appColor(context).grey400,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 44),
-
-                    // 3. Bottom Update action button
-                    GestureDetector(
-                      onTap: controller.isLoading
-                          ? null
-                          : () => controller.changePassword(context),
-                      child: Container(
-                        height: 46,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: controller.isLoading
-                              ? appColor(
-                                  context,
-                                ).secondary.withValues(alpha: 0.6)
-                              : appColor(context).secondary,
-                          borderRadius: BorderRadius.circular(23),
-                        ),
-                        child: Center(
-                          child: controller.isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  "Update Password",
-                                  style: fontStyle.clashDisplaySemiBold14
-                                      .textColor(appColor(context).white),
-                                ),
-                        ),
-                      ),
-                    ),
-                    if (controller.feedbackMessage.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Text(
-                          controller.feedbackMessage,
-                          style: fontStyle.clashDisplayMedium12.textColor(
-                            controller.isError ? Colors.red : Colors.green,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+                      const SizedBox(height: 20),
                     ],
-                    const SizedBox(height: 20),
-                  ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -295,7 +299,7 @@ class CustomTextField extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: fontStyle.clashDisplayRegular12.textColor(
-                appColor(context).grey300,
+                appColor(context).grey500,
               ),
               filled: true,
               fillColor: const Color(0xFFF9FAFB),

@@ -851,6 +851,34 @@ class GroupInfoScreen extends StatelessWidget {
                 final controller = context.read<GroupChatController>();
                 final List<String> memberIds = [];
                 final gDetails = controller.groupDetails;
+                final List<String> previousMemberIds = [];
+                if (gDetails != null && gDetails['previous_members'] != null) {
+                  final prevList = gDetails['previous_members'];
+                  if (prevList is List) {
+                    for (var pm in prevList) {
+                      if (pm is Map) {
+                        final userIdData = pm['user_id'];
+                        String? pmId;
+                        if (userIdData is Map) {
+                          pmId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                        } else if (userIdData != null) {
+                          pmId = userIdData.toString();
+                        } else {
+                          pmId = (pm['_id'] ?? pm['id'])?.toString();
+                        }
+                        if (pmId != null && pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      } else if (pm != null) {
+                        final pmId = pm.toString();
+                        if (pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      }
+                    }
+                  }
+                }
+
                 if (gDetails != null && gDetails['members'] != null) {
                   final membersList = gDetails['members'];
                   if (membersList is List) {
@@ -866,7 +894,10 @@ class GroupInfoScreen extends StatelessWidget {
                         } else {
                           mId = (m['_id'] ?? m['id'])?.toString();
                         }
-                        if (mId != null && mId.isNotEmpty && mId != myId) {
+                        if (mId != null &&
+                            mId.isNotEmpty &&
+                            mId != myId &&
+                            !previousMemberIds.contains(mId)) {
                           memberIds.add(mId);
                         }
                       }
@@ -903,6 +934,34 @@ class GroupInfoScreen extends StatelessWidget {
                 final controller = context.read<GroupChatController>();
                 final List<String> memberIds = [];
                 final gDetails = controller.groupDetails;
+                final List<String> previousMemberIds = [];
+                if (gDetails != null && gDetails['previous_members'] != null) {
+                  final prevList = gDetails['previous_members'];
+                  if (prevList is List) {
+                    for (var pm in prevList) {
+                      if (pm is Map) {
+                        final userIdData = pm['user_id'];
+                        String? pmId;
+                        if (userIdData is Map) {
+                          pmId = (userIdData['_id'] ?? userIdData['id'])?.toString();
+                        } else if (userIdData != null) {
+                          pmId = userIdData.toString();
+                        } else {
+                          pmId = (pm['_id'] ?? pm['id'])?.toString();
+                        }
+                        if (pmId != null && pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      } else if (pm != null) {
+                        final pmId = pm.toString();
+                        if (pmId.isNotEmpty) {
+                          previousMemberIds.add(pmId);
+                        }
+                      }
+                    }
+                  }
+                }
+
                 if (gDetails != null && gDetails['members'] != null) {
                   final membersList = gDetails['members'];
                   if (membersList is List) {
@@ -918,7 +977,10 @@ class GroupInfoScreen extends StatelessWidget {
                         } else {
                           mId = (m['_id'] ?? m['id'])?.toString();
                         }
-                        if (mId != null && mId.isNotEmpty && mId != myId) {
+                        if (mId != null &&
+                            mId.isNotEmpty &&
+                            mId != myId &&
+                            !previousMemberIds.contains(mId)) {
                           memberIds.add(mId);
                         }
                       }
@@ -1011,9 +1073,10 @@ class GroupInfoScreen extends StatelessWidget {
     Map<String, dynamic>? details,
   ) {
     String createdByInfo = "Created recently";
-    if (details != null && details['created_at'] != null) {
+    final dynamic detailsCreatedAt = details?['created_at'] ?? details?['createdAt'];
+    if (detailsCreatedAt != null) {
       try {
-        final parsedDate = DateTime.parse(details['created_at'].toString());
+        final parsedDate = DateTime.parse(detailsCreatedAt.toString());
         createdByInfo =
             "Created on ${parsedDate.day}/${parsedDate.month}/${parsedDate.year}";
       } catch (_) {}

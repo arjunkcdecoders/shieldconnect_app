@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/model/user_model.dart';
 import 'package:shieldconnect_app/model/wallpaper_model.dart';
 import 'package:shieldconnect_app/services/api_services.dart';
+import 'package:shieldconnect_app/services/local_db_service.dart';
 
 class AccountController extends ChangeNotifier {
   bool _isLoading = false;
@@ -62,6 +63,13 @@ class AccountController extends ChangeNotifier {
       }
 
       if (_userId != null && _userId!.isNotEmpty) {
+        // Load cached wallpaper ID immediately to avoid blank load
+        final cached = await LocalDbService().getUserWallpaper(_userId!);
+        if (cached != null) {
+          _selectedWallpaperId = cached['wallpaper_id'];
+          notifyListeners();
+        }
+
         final response = await ApiService().get('/users/$_userId?currentUserId=$_userId');
         final dynamic responseData = response.data;
         final Map<String, dynamic> json = responseData is String
@@ -70,8 +78,33 @@ class AccountController extends ChangeNotifier {
 
         if (json['success'] == true && json['data'] != null) {
           final data = json['data'];
-          _selectedWallpaperId = data['chat_wallpaper']?.toString();
-          notifyListeners();
+          final String? liveWallpaperId = data['chat_wallpaper']?.toString();
+          if (liveWallpaperId != _selectedWallpaperId) {
+            _selectedWallpaperId = liveWallpaperId;
+            notifyListeners();
+
+            if (liveWallpaperId != null && liveWallpaperId.isNotEmpty) {
+              // Fetch details of the live wallpaper to cache the URL
+              try {
+                final wpRes = await ApiService().get('/admin/wallpapers/$liveWallpaperId');
+                final wpResData = wpRes.data;
+                final Map<String, dynamic> wpJson = wpResData is String
+                    ? jsonDecode(wpResData)
+                    : wpResData as Map<String, dynamic>;
+                if (wpJson['success'] == true && wpJson['data'] != null) {
+                  final wpData = wpJson['data'];
+                  final String? wpImage = wpData['wallpaper_image']?.toString();
+                  if (wpImage != null) {
+                    await LocalDbService().saveUserWallpaper(_userId!, liveWallpaperId, wpImage);
+                  }
+                }
+              } catch (e) {
+                debugPrint("AccountController: Error updating local wallpaper cache: $e");
+              }
+            } else {
+              await LocalDbService().saveUserWallpaper(_userId!, '', '');
+            }
+          }
         }
       }
     } catch (e) {
@@ -223,6 +256,20 @@ class AccountController extends ChangeNotifier {
       if (json['success'] == true && json['data'] != null) {
         final data = json['data'];
         _selectedWallpaperId = data['chat_wallpaper']?.toString();
+        
+        // Retrieve details of selected wallpaper from _wallpapers to cache image URL locally
+        final selectedWallpaper = _wallpapers.firstWhere(
+          (w) => w.id == wallpaperId,
+          orElse: () => WallpaperModel(),
+        );
+        if (selectedWallpaper.wallpaperImage != null) {
+          await LocalDbService().saveUserWallpaper(
+            _userId!,
+            wallpaperId,
+            selectedWallpaper.wallpaperImage!,
+          );
+        }
+
         _selectingWallpaperId = null;
         notifyListeners();
         return true;

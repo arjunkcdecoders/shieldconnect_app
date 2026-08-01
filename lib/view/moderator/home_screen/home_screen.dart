@@ -113,7 +113,9 @@ class HomeScreen extends StatelessWidget {
               ),
               actions: [
                 TextButton(
-                  onPressed: isLoading ? null : () => Navigator.pop(dialogContext),
+                  onPressed: isLoading
+                      ? null
+                      : () => Navigator.pop(dialogContext),
                   child: Text(
                     "Cancel",
                     style: fontStyle.clashDisplaySemiBold14
@@ -241,11 +243,11 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 _buildModerationList(context, controller),
                 const SizedBox(height: 32),
-                const SizedBox(height: 32),
-                _buildSectionHeader(context, "Message Activity"),
-                const SizedBox(height: 16),
-                _buildActivityChart(context),
-                const SizedBox(height: 40),
+                // const SizedBox(height: 32),
+                // _buildSectionHeader(context, "Message Activity"),
+                // const SizedBox(height: 16),
+                // _buildActivityChart(context),
+                // const SizedBox(height: 40),
               ],
             ),
           ),
@@ -395,7 +397,10 @@ class HomeScreen extends StatelessWidget {
         Center(
           child: GestureDetector(
             onTap: () {
-              Provider.of<BottomnavController>(context, listen: false).changeIndex(2);
+              Provider.of<BottomnavController>(
+                context,
+                listen: false,
+              ).changeIndex(2);
             },
             child: Text(
               "View All",
@@ -479,13 +484,16 @@ class HomeScreen extends StatelessWidget {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: appColor(context).bgGrey,
-                backgroundImage: (item.pendingAvatar != null &&
+                backgroundImage:
+                    (item.pendingAvatar != null &&
                         item.pendingAvatar!.isNotEmpty)
                     ? NetworkImage(item.pendingAvatar!)
                     : (item.fileUrl != null && item.fileUrl!.isNotEmpty)
-                        ? NetworkImage(item.fileUrl!)
-                        : null,
-                child: ((item.pendingAvatar == null || item.pendingAvatar!.isEmpty) &&
+                    ? NetworkImage(item.fileUrl!)
+                    : null,
+                child:
+                    ((item.pendingAvatar == null ||
+                            item.pendingAvatar!.isEmpty) &&
                         (item.fileUrl == null || item.fileUrl!.isEmpty))
                     ? Icon(
                         Icons.group,
@@ -612,13 +620,16 @@ class HomeScreen extends StatelessWidget {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: appColor(context).bgGrey,
-                backgroundImage: (item.pendingAvatar != null &&
+                backgroundImage:
+                    (item.pendingAvatar != null &&
                         item.pendingAvatar!.isNotEmpty)
                     ? NetworkImage(item.pendingAvatar!)
                     : (item.fileUrl != null && item.fileUrl!.isNotEmpty)
-                        ? NetworkImage(item.fileUrl!)
-                        : null,
-                child: ((item.pendingAvatar == null || item.pendingAvatar!.isEmpty) &&
+                    ? NetworkImage(item.fileUrl!)
+                    : null,
+                child:
+                    ((item.pendingAvatar == null ||
+                            item.pendingAvatar!.isEmpty) &&
                         (item.fileUrl == null || item.fileUrl!.isEmpty))
                     ? Icon(
                         Icons.person,
@@ -884,204 +895,204 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentRegistrations(
-    BuildContext context,
-    List<Map<String, dynamic>> users,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: appColor(context).white,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: appColor(context).bgGrey),
-      ),
-      child: Column(
-        children: [
-          ...users.take(3).map((user) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              decoration: BoxDecoration(
-                color: appColor(context).white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: appColor(context).black.withOpacity(0.04),
-                    blurRadius: 15,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundImage: NetworkImage(user['image']),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                user['name'],
-                                style: fontStyle.clashDisplayBold30
-                                    .textColor(appColor(context).black)
-                                    .size(14),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  user['country'],
-                                  style: fontStyle.clashDisplaySemiBold18
-                                      .textColor(appColor(context).textGrey)
-                                      .size(9),
-                                ),
-                                const SizedBox(width: 4),
-                                Image.asset(
-                                  ImageAssets.usFlag,
-                                  height: 14,
-                                  width: 14,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          user['email'],
-                          style: fontStyle.clashDisplayRegular12
-                              .textColor(appColor(context).textGrey)
-                              .size(11),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          user['phone'],
-                          style: fontStyle.clashDisplayRegular12
-                              .textColor(appColor(context).textMediumGrey)
-                              .size(11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-          const SizedBox(height: 4),
-          Center(
-            child: Text(
-              "View More",
-              style: fontStyle.clashDisplaySemiBold18
-                  .textColor(appColor(context).primary)
-                  .size(12)
-                  .copyWith(decoration: TextDecoration.underline),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildRecentRegistrations(
+  //   BuildContext context,
+  //   List<Map<String, dynamic>> users,
+  // ) {
+  //   return Container(
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: appColor(context).white,
+  //       borderRadius: BorderRadius.circular(30),
+  //       border: Border.all(color: appColor(context).bgGrey),
+  //     ),
+  //     child: Column(
+  //       children: [
+  //         ...users.take(3).map((user) {
+  //           return Container(
+  //             margin: const EdgeInsets.only(bottom: 16),
+  //             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+  //             decoration: BoxDecoration(
+  //               color: appColor(context).white,
+  //               borderRadius: BorderRadius.circular(24),
+  //               boxShadow: [
+  //                 BoxShadow(
+  //                   color: appColor(context).black.withOpacity(0.04),
+  //                   blurRadius: 15,
+  //                   offset: const Offset(0, 4),
+  //                 ),
+  //               ],
+  //             ),
+  //             child: Row(
+  //               crossAxisAlignment: CrossAxisAlignment.start,
+  //               children: [
+  //                 CircleAvatar(
+  //                   radius: 22,
+  //                   backgroundImage: NetworkImage(user['image']),
+  //                 ),
+  //                 const SizedBox(width: 12),
+  //                 Expanded(
+  //                   child: Column(
+  //                     crossAxisAlignment: CrossAxisAlignment.start,
+  //                     children: [
+  //                       Row(
+  //                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //                         crossAxisAlignment: CrossAxisAlignment.start,
+  //                         children: [
+  //                           Expanded(
+  //                             child: Text(
+  //                               user['name'],
+  //                               style: fontStyle.clashDisplayBold30
+  //                                   .textColor(appColor(context).black)
+  //                                   .size(14),
+  //                               overflow: TextOverflow.ellipsis,
+  //                             ),
+  //                           ),
+  //                           const SizedBox(width: 8),
+  //                           Row(
+  //                             mainAxisSize: MainAxisSize.min,
+  //                             children: [
+  //                               Text(
+  //                                 user['country'],
+  //                                 style: fontStyle.clashDisplaySemiBold18
+  //                                     .textColor(appColor(context).textGrey)
+  //                                     .size(9),
+  //                               ),
+  //                               const SizedBox(width: 4),
+  //                               Image.asset(
+  //                                 ImageAssets.usFlag,
+  //                                 height: 14,
+  //                                 width: 14,
+  //                               ),
+  //                             ],
+  //                           ),
+  //                         ],
+  //                       ),
+  //                       const SizedBox(height: 2),
+  //                       Text(
+  //                         user['email'],
+  //                         style: fontStyle.clashDisplayRegular12
+  //                             .textColor(appColor(context).textGrey)
+  //                             .size(11),
+  //                       ),
+  //                       const SizedBox(height: 6),
+  //                       Text(
+  //                         user['phone'],
+  //                         style: fontStyle.clashDisplayRegular12
+  //                             .textColor(appColor(context).textMediumGrey)
+  //                             .size(11),
+  //                       ),
+  //                     ],
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           );
+  //         }).toList(),
+  //         const SizedBox(height: 4),
+  //         Center(
+  //           child: Text(
+  //             "View More",
+  //             style: fontStyle.clashDisplaySemiBold18
+  //                 .textColor(appColor(context).primary)
+  //                 .size(12)
+  //                 .copyWith(decoration: TextDecoration.underline),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  Widget _buildActivityChart(BuildContext context) {
-    return Container(
-      height: 200,
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: appColor(context).white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: appColor(context).bgGrey),
-        boxShadow: [
-          BoxShadow(
-            color: appColor(context).black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: CustomPaint(painter: ChartPainter(appColor(context).primary)),
-    );
-  }
+  // Widget _buildActivityChart(BuildContext context) {
+  //   return Container(
+  //     height: 200,
+  //     width: double.infinity,
+  //     padding: const EdgeInsets.all(16),
+  //     decoration: BoxDecoration(
+  //       color: appColor(context).white,
+  //       borderRadius: BorderRadius.circular(24),
+  //       border: Border.all(color: appColor(context).bgGrey),
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: appColor(context).black.withOpacity(0.02),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, 5),
+  //         ),
+  //       ],
+  //     ),
+  //     child: CustomPaint(painter: ChartPainter(appColor(context).primary)),
+  //   );
+  // }
 }
 
-class ChartPainter extends CustomPainter {
-  final Color color;
-  ChartPainter(this.color);
+// class ChartPainter extends CustomPainter {
+//   final Color color;
+//   ChartPainter(this.color);
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withOpacity(0.1)
-      ..style = PaintingStyle.fill;
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final paint = Paint()
+//       ..color = color.withOpacity(0.1)
+//       ..style = PaintingStyle.fill;
 
-    final linePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+//     final linePaint = Paint()
+//       ..color = color
+//       ..style = PaintingStyle.stroke
+//       ..strokeWidth = 2;
 
-    final path = Path();
-    path.moveTo(0, size.height * 0.7);
-    path.quadraticBezierTo(
-      size.width * 0.1,
-      size.height * 0.4,
-      size.width * 0.2,
-      size.height * 0.2,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.3,
-      size.height * 0.5,
-      size.width * 0.4,
-      size.height * 0.3,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.5,
-      size.height * 0.8,
-      size.width * 0.6,
-      size.height * 0.6,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.7,
-      size.height * 0.4,
-      size.width * 0.8,
-      size.height * 0.7,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.9,
-      size.height * 0.9,
-      size.width,
-      size.height * 0.5,
-    );
+//     final path = Path();
+//     path.moveTo(0, size.height * 0.7);
+//     path.quadraticBezierTo(
+//       size.width * 0.1,
+//       size.height * 0.4,
+//       size.width * 0.2,
+//       size.height * 0.2,
+//     );
+//     path.quadraticBezierTo(
+//       size.width * 0.3,
+//       size.height * 0.5,
+//       size.width * 0.4,
+//       size.height * 0.3,
+//     );
+//     path.quadraticBezierTo(
+//       size.width * 0.5,
+//       size.height * 0.8,
+//       size.width * 0.6,
+//       size.height * 0.6,
+//     );
+//     path.quadraticBezierTo(
+//       size.width * 0.7,
+//       size.height * 0.4,
+//       size.width * 0.8,
+//       size.height * 0.7,
+//     );
+//     path.quadraticBezierTo(
+//       size.width * 0.9,
+//       size.height * 0.9,
+//       size.width,
+//       size.height * 0.5,
+//     );
 
-    final fillPath = Path.from(path);
-    fillPath.lineTo(size.width, size.height);
-    fillPath.lineTo(0, size.height);
-    fillPath.close();
+//     final fillPath = Path.from(path);
+//     fillPath.lineTo(size.width, size.height);
+//     fillPath.lineTo(0, size.height);
+//     fillPath.close();
 
-    canvas.drawPath(fillPath, paint);
-    canvas.drawPath(path, linePaint);
+//     canvas.drawPath(fillPath, paint);
+//     canvas.drawPath(path, linePaint);
 
-    // Draw grid lines
-    final gridPaint = Paint()
-      ..color = Colors.grey.withOpacity(0.2)
-      ..strokeWidth = 1;
+//     // Draw grid lines
+//     final gridPaint = Paint()
+//       ..color = Colors.grey.withOpacity(0.2)
+//       ..strokeWidth = 1;
 
-    for (int i = 0; i < 5; i++) {
-      double y = size.height * (i / 4);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-  }
+//     for (int i = 0; i < 5; i++) {
+//       double y = size.height * (i / 4);
+//       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+//     }
+//   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+//   @override
+//   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+// }

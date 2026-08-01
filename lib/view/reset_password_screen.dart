@@ -14,171 +14,176 @@ class ResetPasswordScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Provider.of<ForgotPasswordController>(context);
 
-    return Scaffold(
-      backgroundColor: appColor(context).white,
-      appBar: AppBar(
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
         backgroundColor: appColor(context).white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios, color: appColor(context).black),
-          onPressed: () {
-            controller.clearMessage();
-            Navigator.pop(context);
-          },
+        appBar: AppBar(
+          backgroundColor: appColor(context).white,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios, color: appColor(context).black),
+            onPressed: () {
+              controller.clearMessage();
+              Navigator.pop(context);
+            },
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Logo and App Name
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset(
-                    ImageAssets.appIcon,
-                    height: 40,
-                    width: 40,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    "ShieldConnect",
-                    style: fontStyle.clashDisplayBold24.textColor(
-                      appColor(context).black,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 20.0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Logo and App Name
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(ImageAssets.appIcon, height: 40, width: 40),
+                    const SizedBox(width: 10),
+                    Text(
+                      "ShieldConnect",
+                      style: fontStyle.clashDisplayBold24.textColor(
+                        appColor(context).black,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 40),
-
-              // Header
-              Text(
-                "Set new password",
-                style: fontStyle.clashDisplaySemiBold24.textColor(
-                  appColor(context).black,
+                  ],
                 ),
-              ),
-              const SizedBox(height: 40),
+                const SizedBox(height: 40),
 
-              // New Password Field
-              CustomTextField(
-                labelText: "New Password *",
-                hintText: "Enter new password",
-                controller: controller.passwordController,
-                focusNode: controller.passwordFocus,
-                obscureText: !controller.isPasswordVisible,
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    controller.isPasswordVisible
-                        ? Icons.visibility
-                        : Icons.visibility_off_outlined,
-                    color: controller.passwordFocus.hasFocus
-                        ? appColor(context).primary
-                        : appColor(context).grey,
+                // Header
+                Text(
+                  "Set new password",
+                  style: fontStyle.clashDisplaySemiBold24.textColor(
+                    appColor(context).black,
                   ),
-                  onPressed: controller.togglePasswordVisibility,
                 ),
-              ),
-              const SizedBox(height: 25),
+                const SizedBox(height: 40),
 
-              // Confirm Password Field
-              CustomTextField(
-                labelText: "Confirm New Password *",
-                hintText: "Confirm new password",
-                controller: controller.confirmPasswordController,
-                focusNode: controller.confirmPasswordFocus,
-                obscureText: !controller.isConfirmPasswordVisible,
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    controller.isConfirmPasswordVisible
-                        ? Icons.visibility
-                        : Icons.visibility_off_outlined,
-                    color: controller.confirmPasswordFocus.hasFocus
-                        ? appColor(context).primary
-                        : appColor(context).grey,
-                  ),
-                  onPressed: controller.toggleConfirmPasswordVisibility,
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              // Reset Password Button
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      appColor(context).primary,
-                      appColor(context).secondary,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: ElevatedButton(
-                  onPressed: controller.isLoading
-                      ? null
-                      : () => controller.resetPassword(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: appColor(context).transparent,
-                    shadowColor: appColor(context).transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                // New Password Field
+                CustomTextField(
+                  labelText: "New Password *",
+                  hintText: "Enter new password",
+                  controller: controller.passwordController,
+                  focusNode: controller.passwordFocus,
+                  obscureText: !controller.isPasswordVisible,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      controller.isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off_outlined,
+                      color: controller.passwordFocus.hasFocus
+                          ? appColor(context).primary
+                          : appColor(context).grey,
                     ),
-                    elevation: 0,
-                  ),
-                  child: controller.isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          "Reset Password",
-                          style: fontStyle.clashDisplaySemiBold18
-                              .textColor(appColor(context).white)
-                              .copyWith(fontWeight: FontWeight.w600),
-                        ),
-                ),
-              ),
-              if (controller.message.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    controller.message,
-                    textAlign: TextAlign.center,
-                    style: fontStyle.clashDisplayMedium14.textColor(
-                      controller.isError
-                          ? appColor(context).red
-                          : appColor(context).green,
-                    ),
+                    onPressed: controller.togglePasswordVisibility,
                   ),
                 ),
-              ],
-              const SizedBox(height: 40),
+                const SizedBox(height: 25),
 
-              // Footer
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Remember your password? ",
-                    style: fontStyle.clashDisplayMedium14.textColor(
-                      appColor(context).textMediumGrey,
+                // Confirm Password Field
+                CustomTextField(
+                  labelText: "Confirm New Password *",
+                  hintText: "Confirm new password",
+                  controller: controller.confirmPasswordController,
+                  focusNode: controller.confirmPasswordFocus,
+                  obscureText: !controller.isConfirmPasswordVisible,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      controller.isConfirmPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off_outlined,
+                      color: controller.confirmPasswordFocus.hasFocus
+                          ? appColor(context).primary
+                          : appColor(context).grey,
                     ),
+                    onPressed: controller.toggleConfirmPasswordVisibility,
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    },
-                    child: Text(
-                      "Login",
-                      style: fontStyle.clashDisplayBold14.textColor(
+                ),
+                const SizedBox(height: 40),
+
+                // Reset Password Button
+                Container(
+                  width: double.infinity,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        appColor(context).primary,
                         appColor(context).secondary,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: controller.isLoading
+                        ? null
+                        : () => controller.resetPassword(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColor(context).transparent,
+                      shadowColor: appColor(context).transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: controller.isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                            "Reset Password",
+                            style: fontStyle.clashDisplaySemiBold18
+                                .textColor(appColor(context).white)
+                                .copyWith(fontWeight: FontWeight.w600),
+                          ),
+                  ),
+                ),
+                if (controller.message.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      controller.message,
+                      textAlign: TextAlign.center,
+                      style: fontStyle.clashDisplayMedium14.textColor(
+                        controller.isError
+                            ? appColor(context).red
+                            : appColor(context).green,
                       ),
                     ),
                   ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 40),
+
+                // Footer
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Remember your password? ",
+                      style: fontStyle.clashDisplayMedium14.textColor(
+                        appColor(context).textMediumGrey,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(
+                          context,
+                        ).popUntil((route) => route.isFirst);
+                      },
+                      child: Text(
+                        "Login",
+                        style: fontStyle.clashDisplayBold14.textColor(
+                          appColor(context).secondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

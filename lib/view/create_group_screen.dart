@@ -15,272 +15,276 @@ class CreateGroupScreen extends StatelessWidget {
       create: (_) => CreateGroupController()..init(),
       child: Consumer<CreateGroupController>(
         builder: (context, controller, child) {
-          return Scaffold(
-      backgroundColor: appColor(context).white,
-      floatingActionButton: null,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20.0,
-              vertical: 10.0,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top App Bar Header
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: appColor(context).grey100,
-                        ),
-                        child: Center(
-                          child: Icon(
-                            Icons.chevron_left,
-                            color: appColor(context).secondary,
-                            size: 20,
-                          ),
-                        ),
-                      ),
+          return GestureDetector(
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            behavior: HitTestBehavior.opaque,
+            child: Scaffold(
+              backgroundColor: appColor(context).white,
+              floatingActionButton: null,
+              body: SafeArea(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0,
+                      vertical: 10.0,
                     ),
-                    const SizedBox(width: 16),
-                    Text(
-                      "Create New group",
-                      style: fontStyle.clashDisplaySemiBold18.textColor(
-                        appColor(context).black,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Group Name Section
-                CustomTextField(
-                  labelText: "Group Name",
-                  hintText: "Family👨‍👩‍👧‍👦",
-                  maxLength: 100,
-                  controller: controller.groupNameController,
-                  focusNode: controller.groupNameFocus,
-                ),
-                const SizedBox(height: 24),
-
-                // Choose Group Icon Picker
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: controller.pickImage,
-                      child: Stack(
-                        alignment: Alignment.bottomRight,
-                        children: [
-                           CircleAvatar(
-                            radius: 42,
-                            backgroundColor: appColor(context).grey200,
-                            backgroundImage:
-                                (controller.pickedImagePath != null &&
-                                    !controller.pickedImagePath!.startsWith(
-                                      'assets',
-                                    ))
-                                ? FileImage(File(controller.pickedImagePath!))
-                                      as ImageProvider
-                                : null,
-                            child: (controller.pickedImagePath == null ||
-                                    controller.pickedImagePath!.startsWith('assets'))
-                                ? Icon(
-                                    Icons.group,
-                                    color: appColor(context).grey400,
-                                    size: 42,
-                                  )
-                                : null,
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: appColor(context).secondary,
-                                // shape: BoxShape.circle,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: appColor(context).white,
-                                  width: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top App Bar Header
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: appColor(context).grey100,
                                 ),
-                              ),
-                              child: Icon(
-                                Icons.add,
-                                color: appColor(context).white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Choose Group Icon",
-                      style: fontStyle.clashDisplayMedium10.textColor(
-                        appColor(context).black,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Description Section
-                CustomTextField(
-                  labelText: "Description",
-                  hintText: "Enter Group Description...",
-                  maxLines: 3,
-                  maxLength: 100,
-                  controller: controller.groupDescController,
-                  focusNode: controller.groupDescFocus,
-                ),
-                const SizedBox(height: 24),
-
-                // Search Bar
-                Container(
-                  decoration: BoxDecoration(
-                    color: appColor(context).white,
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: appColor(context).black.withValues(alpha: 0.04),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: TextField(
-                    controller: controller.searchController,
-                    onChanged: controller.searchUsers,
-                    cursorColor: appColor(context).primary,
-                    decoration: InputDecoration(
-                      hintText: "Search...",
-                      hintStyle: fontStyle.clashDisplayRegular12.textColor(
-                        appColor(context).grey400,
-                      ),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 16.0, right: 10.0),
-                        child: Image.asset(
-                          ImageAssets.searchIcon,
-                          width: 18,
-                          height: 18,
-                          color: appColor(context).secondary,
-                        ),
-                      ),
-                      prefixIconConstraints: const BoxConstraints(
-                        minWidth: 38,
-                        minHeight: 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 16,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // "Select People" Subtitle Row with small Create Group Button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Select People",
-                      style: fontStyle.clashDisplaySemiBold14.textColor(
-                        appColor(context).black,
-                      ),
-                    ),
-                    if (controller.hasSelectedUsers)
-                      GestureDetector(
-                        onTap: () => controller.createGroup(context),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: appColor(context).secondary,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: appColor(context).secondary.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (controller.isLoading) ...[
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    color: appColor(context).white,
-                                    strokeWidth: 1.5,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.chevron_left,
+                                    color: appColor(context).secondary,
+                                    size: 20,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                              ],
-                              Text(
-                                "Create Group",
-                                style: fontStyle.clashDisplaySemiBold12.textColor(
-                                  appColor(context).white,
-                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              "Create New group",
+                              style: fontStyle.clashDisplaySemiBold18.textColor(
+                                appColor(context).black,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+        
+                        // Group Name Section
+                        CustomTextField(
+                          labelText: "Group Name",
+                          hintText: "Family👨‍👩‍👧‍👦",
+                          maxLength: 100,
+                          controller: controller.groupNameController,
+                          focusNode: controller.groupNameFocus,
+                        ),
+                        const SizedBox(height: 24),
+        
+                        // Choose Group Icon Picker
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            GestureDetector(
+                              onTap: controller.pickImage,
+                              child: Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                   CircleAvatar(
+                                    radius: 42,
+                                    backgroundColor: appColor(context).grey200,
+                                    backgroundImage:
+                                        (controller.pickedImagePath != null &&
+                                            !controller.pickedImagePath!.startsWith(
+                                              'assets',
+                                            ))
+                                        ? FileImage(File(controller.pickedImagePath!))
+                                              as ImageProvider
+                                        : null,
+                                    child: (controller.pickedImagePath == null ||
+                                            controller.pickedImagePath!.startsWith('assets'))
+                                        ? Icon(
+                                            Icons.group,
+                                            color: appColor(context).grey400,
+                                            size: 42,
+                                          )
+                                        : null,
+                                  ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: appColor(context).secondary,
+                                        // shape: BoxShape.circle,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: appColor(context).white,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.add,
+                                        color: appColor(context).white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "Choose Group Icon",
+                              style: fontStyle.clashDisplayMedium10.textColor(
+                                appColor(context).black,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+        
+                        // Description Section
+                        CustomTextField(
+                          labelText: "Description",
+                          hintText: "Enter Group Description...",
+                          maxLines: 3,
+                          maxLength: 100,
+                          controller: controller.groupDescController,
+                          focusNode: controller.groupDescFocus,
+                        ),
+                        const SizedBox(height: 24),
+        
+                        // Search Bar
+                        Container(
+                          decoration: BoxDecoration(
+                            color: appColor(context).white,
+                            borderRadius: BorderRadius.circular(25),
+                            boxShadow: [
+                              BoxShadow(
+                                color: appColor(context).black.withValues(alpha: 0.04),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Contact list (Integrated smoothly into SingleChildScrollView)
-                controller.isLoading && controller.searchResults.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: controller.searchResults.length,
-                        itemBuilder: (context, index) {
-                          final person = controller.searchResults[index];
-                          return GestureDetector(
-                            onTap: () => controller.toggleUserSelection(index),
-                            behavior: HitTestBehavior.opaque,
-                            child: _buildSelectablePersonItem(
-                              context,
-                              name: person["name"],
-                              subtitle: person["subtitle"],
-                              avatarUrl: person["avatar"]?.toString() ?? "",
-                              isSelected: person["isSelected"],
+                          child: TextField(
+                            controller: controller.searchController,
+                            onChanged: controller.searchUsers,
+                            cursorColor: appColor(context).primary,
+                            decoration: InputDecoration(
+                              hintText: "Search...",
+                              hintStyle: fontStyle.clashDisplayRegular12.textColor(
+                                appColor(context).grey400,
+                              ),
+                              prefixIcon: Padding(
+                                padding: const EdgeInsets.only(left: 16.0, right: 10.0),
+                                child: Image.asset(
+                                  ImageAssets.searchIcon,
+                                  width: 18,
+                                  height: 18,
+                                  color: appColor(context).secondary,
+                                ),
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 38,
+                                minHeight: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(25),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 10,
+                                horizontal: 16,
+                              ),
                             ),
-                          );
-                        },
-                      ),
-              ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+        
+                        // "Select People" Subtitle Row with small Create Group Button
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Select People",
+                              style: fontStyle.clashDisplaySemiBold14.textColor(
+                                  appColor(context).black,
+                                ),
+                            ),
+                            if (controller.hasSelectedUsers)
+                              GestureDetector(
+                                onTap: () => controller.createGroup(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: appColor(context).secondary,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: appColor(context).secondary.withValues(
+                                              alpha: 0.15,
+                                            ),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (controller.isLoading) ...[
+                                        SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            color: appColor(context).white,
+                                            strokeWidth: 1.5,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      Text(
+                                        "Create Group",
+                                        style: fontStyle.clashDisplaySemiBold12.textColor(
+                                          appColor(context).white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+        
+                        // Contact list (Integrated smoothly into SingleChildScrollView)
+                        controller.isLoading && controller.searchResults.isEmpty
+                            ? const Center(child: CircularProgressIndicator())
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: controller.searchResults.length,
+                                itemBuilder: (context, index) {
+                                  final person = controller.searchResults[index];
+                                  return GestureDetector(
+                                    onTap: () => controller.toggleUserSelection(index),
+                                    behavior: HitTestBehavior.opaque,
+                                    child: _buildSelectablePersonItem(
+                                      context,
+                                      name: person["name"],
+                                      subtitle: person["subtitle"],
+                                      avatarUrl: person["avatar"]?.toString() ?? "",
+                                      isSelected: person["isSelected"],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
-    );
+          );
         },
       ),
     );
@@ -294,16 +298,26 @@ class CreateGroupScreen extends StatelessWidget {
     required bool isSelected,
   }) {
     final bool isNetworkAvatar = avatarUrl.toLowerCase().startsWith('http');
-    final ImageProvider avatarProvider = isNetworkAvatar
-        ? NetworkImage(avatarUrl)
-        : const AssetImage(ImageAssets.maisieAvatar);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 20.0),
       child: Row(
         children: [
           // Avatar
-          CircleAvatar(radius: 24, backgroundImage: avatarProvider),
+          CircleAvatar(
+            radius: 24,
+            backgroundImage: isNetworkAvatar ? NetworkImage(avatarUrl) : null,
+            backgroundColor: isNetworkAvatar
+                ? Colors.transparent
+                : appColor(context).secondary.withValues(alpha: 0.15),
+            child: isNetworkAvatar
+                ? null
+                : Icon(
+                    Icons.person,
+                    color: appColor(context).secondary,
+                    size: 24,
+                  ),
+          ),
           const SizedBox(width: 12),
 
           // Identity Details

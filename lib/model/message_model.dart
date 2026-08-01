@@ -148,7 +148,9 @@ class MessageModel {
       'read_at': readAt?.toIso8601String(),
       'read_by': readBy?.map((e) => e.toJson()).toList(),
       'createdAt': createdAt?.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 }

@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -549,53 +549,7 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Answer Button (Left End)
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  context.read<CallManager>().acceptCall();
-                                },
-                                child: Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: const BoxDecoration(
-                                    color: Color(
-                                      0xFF23C123,
-                                    ), // Vibrant active call green
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Color(0xFF1B5E20),
-                                        offset: Offset(0, 4),
-                                        blurRadius: 0,
-                                      ),
-                                    ],
-                                  ),
-                                  child: Center(
-                                    child: Image.asset(
-                                      ImageAssets.answerCall,
-                                      color: Colors.white,
-                                      width: 26,
-                                      height: 26,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "Answer",
-                                style: fontStyle.clashDisplayMedium14.textColor(
-                                  appColor(
-                                    context,
-                                  ).white.withValues(alpha: 0.9),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          // Decline Button (Right End)
+                          // Decline Button (Left End)
                           Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -632,6 +586,51 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                               const SizedBox(height: 12),
                               Text(
                                 "Decline",
+                                style: fontStyle.clashDisplayMedium14.textColor(
+                                  appColor(
+                                    context,
+                                  ).white.withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Answer Button (Right End)
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  context.read<CallManager>().acceptCall();
+                                },
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: const BoxDecoration(
+                                    color: Color(
+                                      0xFF23C123,
+                                    ), // Vibrant active call green
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Color(0xFF1B5E20),
+                                        offset: Offset(0, 4),
+                                        blurRadius: 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Image.asset(
+                                      ImageAssets.answerCall,
+                                      color: Colors.white,
+                                      width: 26,
+                                      height: 26,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "Answer",
                                 style: fontStyle.clashDisplayMedium14.textColor(
                                   appColor(
                                     context,
@@ -735,7 +734,8 @@ class VoiceCallReceivingScreen extends StatelessWidget {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) => AddCallMembersScreen(),
+                                          builder: (context) =>
+                                              AddCallMembersScreen(),
                                         ),
                                       );
                                     },

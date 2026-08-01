@@ -233,7 +233,10 @@ class RoomManager extends ChangeNotifier {
               await lk.Hardware.instance.setSpeakerphoneOn(true);
             }
           } catch (e) {
-            dev.log('🚨 LiveKit: Failed delayed speaker activation: $e', name: 'RoomManager');
+            dev.log(
+              '🚨 LiveKit: Failed delayed speaker activation: $e',
+              name: 'RoomManager',
+            );
           }
         });
       }
@@ -335,7 +338,8 @@ class RoomManager extends ChangeNotifier {
         if (devices.length > 1) {
           final current = lk.Hardware.instance.selectedVideoInput;
           final currentLabel = current?.label.toLowerCase() ?? '';
-          final isCurrentlyBack = currentLabel.contains('back') ||
+          final isCurrentlyBack =
+              currentLabel.contains('back') ||
               currentLabel.contains('rear') ||
               currentLabel.contains('environment');
 
@@ -345,7 +349,9 @@ class RoomManager extends ChangeNotifier {
             try {
               next = devices.firstWhere((d) {
                 final lbl = d.label.toLowerCase();
-                return lbl.contains('front') || lbl.contains('user') || lbl.contains('facing');
+                return lbl.contains('front') ||
+                    lbl.contains('user') ||
+                    lbl.contains('facing');
               });
             } catch (_) {}
           } else {
@@ -353,7 +359,9 @@ class RoomManager extends ChangeNotifier {
             try {
               next = devices.firstWhere((d) {
                 final lbl = d.label.toLowerCase();
-                return lbl.contains('back') || lbl.contains('rear') || lbl.contains('environment');
+                return lbl.contains('back') ||
+                    lbl.contains('rear') ||
+                    lbl.contains('environment');
               });
             } catch (_) {}
           }
@@ -364,12 +372,18 @@ class RoomManager extends ChangeNotifier {
             orElse: () => devices.first,
           );
 
-          dev.log('🎙️ LiveKit: Switching local camera to ${next.deviceId} (${next.label})', name: 'RoomManager');
+          dev.log(
+            '🎙️ LiveKit: Switching local camera to ${next.deviceId} (${next.label})',
+            name: 'RoomManager',
+          );
           await track.switchCamera(next.deviceId);
           lk.Hardware.instance.selectedVideoInput = next;
           notifyListeners();
         } else {
-          dev.log('⚠️ LiveKit: Only one camera device available, cannot switch.', name: 'RoomManager');
+          dev.log(
+            '⚠️ LiveKit: Only one camera device available, cannot switch.',
+            name: 'RoomManager',
+          );
         }
       } catch (e) {
         dev.log(

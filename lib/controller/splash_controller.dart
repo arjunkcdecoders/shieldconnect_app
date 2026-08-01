@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/profile_controller.dart';
+import 'package:shieldconnect_app/controller/announcement_controller.dart';
 import 'package:shieldconnect_app/view/bottomnav_screen.dart';
 import 'package:shieldconnect_app/view/onboarding_screen.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
 
 import 'package:shieldconnect_app/services/call_manager.dart';
-import 'package:shieldconnect_app/view/moderator/bottomnav_screen/bottomnav_screen.dart' as mod;
+import 'package:shieldconnect_app/view/moderator/bottomnav_screen/bottomnav_screen.dart'
+    as mod;
 
 class SplashController extends ChangeNotifier {
   bool _hasStarted = false;
@@ -36,7 +38,9 @@ class SplashController extends ChangeNotifier {
           );
         }
       } catch (e) {
-        debugPrint("SplashController: Error parsing user_session for socket: $e");
+        debugPrint(
+          "SplashController: Error parsing user_session for socket: $e",
+        );
       }
     }
 
@@ -47,11 +51,20 @@ class SplashController extends ChangeNotifier {
           if (appMode == 'moderator') {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const mod.BottomnavScreen()),
+              MaterialPageRoute(
+                builder: (context) => const mod.BottomnavScreen(),
+              ),
             );
           } else {
             Provider.of<HomeScreenController>(context, listen: false).init();
-            Provider.of<ProfileController>(context, listen: false).init();
+            Provider.of<ProfileController>(
+              context,
+              listen: false,
+            ).init(context: context);
+            Provider.of<AnnouncementController>(
+              context,
+              listen: false,
+            ).fetchAnnouncements();
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const BottomnavScreen()),

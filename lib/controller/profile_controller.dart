@@ -14,6 +14,8 @@ import 'package:shieldconnect_app/controller/call_list_controller.dart';
 import 'package:shieldconnect_app/services/socket_service.dart';
 import 'package:shieldconnect_app/controller/status_controller.dart';
 import 'package:shieldconnect_app/controller/add_new_chat_controller.dart';
+import 'package:shieldconnect_app/controller/announcement_controller.dart';
+import 'package:shieldconnect_app/services/local_db_service.dart';
 
 import 'package:dio/dio.dart' as dio_lib;
 
@@ -80,11 +82,19 @@ class ProfileController extends ChangeNotifier {
   String get appMode => _appMode;
 
   // Initialize data
-  Future<void> init() async {
+  Future<void> init({BuildContext? context}) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     _appMode = prefs.getString('app_mode') ?? 'user';
-    await fetchUserDetails();
-    await fetchArchivedChats();
+    if (context != null && context.mounted) {
+      await fetchUserDetails(context: context);
+    } else {
+      await fetchUserDetails();
+    }
+    if (context != null && context.mounted) {
+      await fetchArchivedChats(context: context);
+    } else {
+      await fetchArchivedChats();
+    }
   }
 
   Future<void> setAppMode(String mode) async {
@@ -95,7 +105,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   // Fetch user details from session
-  Future<void> fetchUserDetails() async {
+  Future<void> fetchUserDetails({BuildContext? context}) async {
     try {
       _shouldRemoveAvatar = false;
       _showImageOptions = false;
@@ -116,6 +126,29 @@ class ProfileController extends ChangeNotifier {
         );
 
         if (_userId.isNotEmpty) {
+          // Load cached profile data from SQLite first
+          final cachedProfile = await LocalDbService().getProfileCache(_userId);
+          if (cachedProfile != null) {
+            _name = cachedProfile['name'] ?? "";
+            _email = cachedProfile['email'] ?? "";
+            _imageUrl = cachedProfile['avatar'] ?? "";
+            _bio = cachedProfile['bio'] ?? "";
+            _isModerator = cachedProfile['is_moderator'] as bool? ??
+                cachedProfile['isModerator'] as bool? ??
+                _isModerator;
+            final dynamic rawRegion = cachedProfile['region'];
+            if (rawRegion is Map) {
+              _region = rawRegion['name'] as String? ?? "";
+            } else if (rawRegion is String) {
+              _region = rawRegion;
+            }
+            nameController.text = _name;
+            bioController.text = _bio;
+            emailController.text = _email;
+            regionController.text = _region;
+            notifyListeners();
+          }
+
           final response = await ApiService().get(
             '/users/$_userId?currentUserId=$_userId',
           );
@@ -158,12 +191,29 @@ class ProfileController extends ChangeNotifier {
               emailController.text = _email;
               regionController.text = _region;
 
+              // Save the fetched profile to SQLite cache
+              await LocalDbService().saveProfileCache(_userId, data);
+
               // Save the fetched user to SharedPreferences to keep session updated with settings
               final UserModel fetchedUser = UserModel.fromJson(data);
+              final String? currentSessionStr = prefs.getString('user_session');
+              final Map<String, dynamic> userMap = currentSessionStr != null
+                  ? jsonDecode(currentSessionStr)
+                  : {};
+              final String? lastRead = userMap['lastReadAnnouncementTimestamp']?.toString();
+              userMap.addAll(fetchedUser.toJson());
+              if (lastRead != null) {
+                userMap['lastReadAnnouncementTimestamp'] = lastRead;
+              }
               await prefs.setString(
                 'user_session',
-                jsonEncode(fetchedUser.toJson()),
+                jsonEncode(userMap),
               );
+
+              if (context != null && context.mounted) {
+                context.read<BottomnavController>().checkStatusFeature(force: true);
+                context.read<AnnouncementController>().fetchAnnouncements();
+              }
             }
           }
         }
@@ -201,9 +251,13 @@ class ProfileController extends ChangeNotifier {
   Set<String> get failedUnarchiveChatIds => _failedUnarchiveChatIds;
 
   // Fetch archived chats from API
-  Future<void> fetchArchivedChats() async {
+  Future<void> fetchArchivedChats({BuildContext? context}) async {
     if (_userId.isEmpty) {
-      await fetchUserDetails();
+      if (context != null && context.mounted) {
+        await fetchUserDetails(context: context);
+      } else {
+        await fetchUserDetails();
+      }
     }
     if (_userId.isEmpty) return;
     _isLoading = true;
@@ -379,9 +433,18 @@ class ProfileController extends ChangeNotifier {
       if (apiResponse.success && apiResponse.data != null) {
         // Update local session with new user data
         final SharedPreferences prefs = await SharedPreferences.getInstance();
+        final String? currentSessionStr = prefs.getString('user_session');
+        final Map<String, dynamic> userMap = currentSessionStr != null
+            ? jsonDecode(currentSessionStr)
+            : {};
+        final String? lastRead = userMap['lastReadAnnouncementTimestamp']?.toString();
+        userMap.addAll(apiResponse.data!.toJson());
+        if (lastRead != null) {
+          userMap['lastReadAnnouncementTimestamp'] = lastRead;
+        }
         await prefs.setString(
           'user_session',
-          jsonEncode(apiResponse.data!.toJson()),
+          jsonEncode(userMap),
         );
 
         // Notify HomeScreenController to refresh the profile image

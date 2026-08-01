@@ -13,6 +13,7 @@ import 'package:video_compress/video_compress.dart';
 import 'package:shieldconnect_app/utils/app_colors.dart';
 import 'package:shieldconnect_app/utils/font_style.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shieldconnect_app/services/local_db_service.dart';
 
 class StatusController extends ChangeNotifier {
   StatusController() {
@@ -158,14 +159,27 @@ class StatusController extends ChangeNotifier {
   }
 
   Future<void> init() async {
-    _isLoading = true;
-    _myStatuses = [];
-    _othersStatuses = [];
-    _viewersCache.clear();
-    _profileImage = null;
-    _userId = null;
-    notifyListeners();
+    // Resolve user ID first to ensure correct filtering during cache parsing
+    if (_userId == null) {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? sessionStr = prefs.getString('user_session');
+      if (sessionStr != null) {
+        final Map<String, dynamic> userMap = jsonDecode(sessionStr);
+        final UserModel user = UserModel.fromJson(userMap);
+        _userId = user.id;
+      }
+    }
 
+    // Load cached statuses from SQLite first
+    await loadCachedStatuses();
+
+    // Show loading spinner ONLY if both myStatuses and othersStatuses are empty
+    if (_myStatuses.isEmpty && _othersStatuses.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+    }
+
+    // Trigger API updates in background
     await fetchProfileImage();
     if (_userId != null) {
       await fetchMyStatuses();
@@ -174,6 +188,30 @@ class StatusController extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> loadCachedStatuses() async {
+    try {
+      final myCached = await LocalDbService().getStatusCache('me');
+      if (myCached.isNotEmpty) {
+        _myStatuses = myCached
+            .map((e) => StatusModel.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        _myStatuses.sort((a, b) {
+          final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return aTime.compareTo(bTime);
+        });
+      }
+
+      final othersCached = await LocalDbService().getStatusCache('others');
+      if (othersCached.isNotEmpty) {
+        _othersStatuses = othersCached;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error loading cached statuses: $e");
+    }
   }
 
   Future<void> fetchProfileImage() async {
@@ -236,6 +274,8 @@ class StatusController extends ChangeNotifier {
           return aTime.compareTo(bTime);
         });
 
+        await LocalDbService().saveStatusCache('me', list);
+
         // Prefetch status viewers for all my statuses immediately in the background
         for (var status in _myStatuses) {
           if (status.id != null) {
@@ -283,6 +323,7 @@ class StatusController extends ChangeNotifier {
             item['statuses'] = mutableList;
           }
         }
+        await LocalDbService().saveStatusCache('others', _othersStatuses);
       } else {
         _othersStatuses = [];
       }

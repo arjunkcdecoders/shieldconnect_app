@@ -34,6 +34,7 @@ class UserModel {
   final DateTime? updatedAt;
   final bool? isModerator;
   final String? region;
+  final String? lastReadAnnouncementTimestamp;
   
   // Fields found in API responses
   final String? token;
@@ -82,6 +83,7 @@ class UserModel {
     this.settings,
     this.isModerator,
     this.region,
+    this.lastReadAnnouncementTimestamp,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -126,6 +128,7 @@ class UserModel {
       region: json['region'] is Map
           ? (json['region']['name'] as String? ?? json['region']['_id'] as String?)
           : json['region'] as String?,
+      lastReadAnnouncementTimestamp: json['lastReadAnnouncementTimestamp'] as String?,
     );
   }
 
@@ -169,6 +172,7 @@ class UserModel {
       'settings': settings?.toJson(),
       'is_moderator': isModerator,
       'region': region,
+      'lastReadAnnouncementTimestamp': lastReadAnnouncementTimestamp,
     };
   }
 }

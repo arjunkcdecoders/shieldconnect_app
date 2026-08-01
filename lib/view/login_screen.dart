@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shieldconnect_app/controller/login_controller.dart';
 import 'package:shieldconnect_app/controller/signup_controller.dart';
@@ -14,192 +14,196 @@ class LoginScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Provider.of<LoginController>(context);
 
-    return Scaffold(
-      backgroundColor: appColor(context).white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title
-              ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: (bounds) =>
-                    LinearGradient(
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Scaffold(
+        backgroundColor: appColor(context).white,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) =>
+                      LinearGradient(
+                        colors: [
+                          appColor(context).primary,
+                          appColor(context).secondary,
+                        ],
+                      ).createShader(
+                        Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                      ),
+                  child: Text(
+                    "Log In",
+                    style: fontStyle.clashDisplaySemiBold24.textColor(
+                      appColor(context).white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 7),
+                // Subtitle
+                Text(
+                  "Let's start again to chat with friends",
+                  style: fontStyle.clashDisplayRegular14.textColor(
+                    appColor(context).black,
+                  ),
+                ),
+                const SizedBox(height: 30),
+  
+                // Email Field
+                CustomTextField(
+                  labelText: "Email",
+                  hintText: "Enter Email",
+                  controller: controller.emailController,
+                  focusNode: controller.emailFocus,
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 20),
+  
+                // Password Field
+                CustomTextField(
+                  labelText: "Password",
+                  hintText: "Enter Password",
+                  controller: controller.passwordController,
+                  focusNode: controller.passwordFocus,
+                  obscureText: !controller.isPasswordVisible,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      controller.isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off_outlined,
+                      color: controller.passwordFocus.hasFocus
+                          ? appColor(context).primary
+                          : appColor(context).grey,
+                    ),
+                    onPressed: controller.togglePasswordVisibility,
+                  ),
+                ),
+                const SizedBox(height: 16),
+  
+                // Forgot Password link
+                GestureDetector(
+                  onTap: () {
+                    controller.resetFields();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ForgotPasswordScreen(),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    "FORGOT PASSWORD?",
+                    style: fontStyle.clashDisplaySemiBold12.textColor(
+                      appColor(context).cyan,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+  
+                // T&C disclaimer text
+                Text(
+                  "By continuing, I accept the T&C and Privacy Policy and child safe parent's app to access my family's personal information",
+                  textAlign: TextAlign.start,
+                  style: fontStyle.clashDisplayRegular12.textColor(
+                    appColor(context).darkGrey,
+                  ),
+                ),
+                const SizedBox(height: 13),
+  
+                // Main Login Button
+                Container(
+                  width: double.infinity,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
                       colors: [
                         appColor(context).primary,
                         appColor(context).secondary,
                       ],
-                    ).createShader(
-                      Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                     ),
-                child: Text(
-                  "Log In",
-                  style: fontStyle.clashDisplaySemiBold24.textColor(
-                    appColor(context).white,
+                    borderRadius: BorderRadius.circular(30),
                   ),
-                ),
-              ),
-              const SizedBox(height: 7),
-              // Subtitle
-              Text(
-                "Let's start again to chat with friends",
-                style: fontStyle.clashDisplayRegular14.textColor(
-                  appColor(context).black,
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              // Email Field
-              CustomTextField(
-                labelText: "Email",
-                hintText: "Enter Email",
-                controller: controller.emailController,
-                focusNode: controller.emailFocus,
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 20),
-
-              // Password Field
-              CustomTextField(
-                labelText: "Password",
-                hintText: "Enter Password",
-                controller: controller.passwordController,
-                focusNode: controller.passwordFocus,
-                obscureText: !controller.isPasswordVisible,
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    controller.isPasswordVisible
-                        ? Icons.visibility
-                        : Icons.visibility_off_outlined,
-                    color: controller.passwordFocus.hasFocus
-                        ? appColor(context).primary
-                        : appColor(context).grey,
-                  ),
-                  onPressed: controller.togglePasswordVisibility,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Forgot Password link
-              GestureDetector(
-                onTap: () {
-                  controller.resetFields();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ForgotPasswordScreen(),
+                  child: ElevatedButton(
+                    onPressed: controller.isLoading ? null : () => controller.login(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColor(context).transparent,
+                      disabledBackgroundColor: appColor(context).transparent,
+                      shadowColor: appColor(context).transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
                     ),
-                  );
-                },
-                child: Text(
-                  "FORGOT PASSWORD?",
-                  style: fontStyle.clashDisplaySemiBold12.textColor(
-                    appColor(context).cyan,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // T&C disclaimer text
-              Text(
-                "By continuing, I accept the T&C and Privacy Policy and child safe parent's app to access my family's personal information",
-                textAlign: TextAlign.start,
-                style: fontStyle.clashDisplayRegular12.textColor(
-                  appColor(context).darkGrey,
-                ),
-              ),
-              const SizedBox(height: 13),
-
-              // Main Login Button
-              Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      appColor(context).primary,
-                      appColor(context).secondary,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: ElevatedButton(
-                  onPressed: controller.isLoading ? null : () => controller.login(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: appColor(context).transparent,
-                    disabledBackgroundColor: appColor(context).transparent,
-                    shadowColor: appColor(context).transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: controller.isLoading
-                      ? SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            color: appColor(context).white,
-                            strokeWidth: 2,
+                    child: controller.isLoading
+                        ? SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              color: appColor(context).white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text(
+                            "Log In",
+                            style: fontStyle.clashDisplaySemiBold18
+                                .textColor(appColor(context).white)
+                                .copyWith(fontWeight: FontWeight.w600),
                           ),
-                        )
-                      : Text(
-                          "Log In",
-                          style: fontStyle.clashDisplaySemiBold18
-                              .textColor(appColor(context).white)
-                              .copyWith(fontWeight: FontWeight.w600),
-                        ),
-                ),
-              ),
-              if (controller.message.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    controller.message,
-                    style: fontStyle.clashDisplayMedium12.textColor(
-                      controller.isSuccess
-                          ? Colors.green
-                          : appColor(context).red,
-                    ),
                   ),
                 ),
-              ],
-              const SizedBox(height: 30),
-
-              // "Don't Have an Account Yet? Create Account"
-              Row(
-                // mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Don’t Have an Account Yet? ",
-                    style: fontStyle.clashDisplayMedium12.textColor(
-                      appColor(context).black,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      controller.resetFields();
-                      Provider.of<SignupController>(context, listen: false)
-                          .resetFields();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignupScreen(),
-                        ),
-                      );
-                    },
+                if (controller.message.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Center(
                     child: Text(
-                      "Create Account",
-                      style: fontStyle.clashDisplayBold14.textColor(
-                        appColor(context).secondary,
+                      controller.message,
+                      style: fontStyle.clashDisplayMedium12.textColor(
+                        controller.isSuccess
+                            ? Colors.green
+                            : appColor(context).red,
                       ),
                     ),
                   ),
                 ],
-              ),
-            ],
+                const SizedBox(height: 30),
+  
+                // "Don't Have an Account Yet? Create Account"
+                Row(
+                  // mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don’t Have an Account Yet? ",
+                      style: fontStyle.clashDisplayMedium12.textColor(
+                        appColor(context).black,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        controller.resetFields();
+                        Provider.of<SignupController>(context, listen: false)
+                            .resetFields();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SignupScreen(),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        "Create Account",
+                        style: fontStyle.clashDisplayBold14.textColor(
+                          appColor(context).secondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

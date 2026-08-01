@@ -23,6 +23,8 @@ import 'package:shieldconnect_app/controller/homescreen_controller.dart';
 import 'package:shieldconnect_app/controller/notification_controller.dart';
 import 'package:shieldconnect_app/view/media_caption_screen.dart';
 import 'package:record/record.dart';
+import 'package:shieldconnect_app/services/local_db_service.dart';
+import 'package:shieldconnect_app/services/media_cache_service.dart';
 
 class PersonalChatController extends ChangeNotifier {
   bool _isDisposed = false;
@@ -80,6 +82,14 @@ class PersonalChatController extends ChangeNotifier {
 
   final TextEditingController messageController = TextEditingController();
   final ScrollController scrollController = ScrollController();
+
+  int _currentPage = 1;
+  bool _hasMoreMessages = true;
+  bool _isFetchingMore = false;
+
+  int get currentPage => _currentPage;
+  bool get hasMoreMessages => _hasMoreMessages;
+  bool get isFetchingMore => _isFetchingMore;
 
   String? _userId;
   String? get userId => _userId;
@@ -274,6 +284,9 @@ class PersonalChatController extends ChangeNotifier {
 
       if ((msgSenderId == _recipientId && msgRecipientId == _userId) ||
           (msgSenderId == _userId && msgRecipientId == _recipientId)) {
+        // Save to SQLite
+        LocalDbService().saveSingleMessage(_recipientId!, unwrapped);
+        MediaCacheService().precacheMediaFromMessages([unwrapped]);
         final bool isOutgoing = msgSenderId == _userId;
         final String senderName = isOutgoing
             ? "You"
@@ -375,6 +388,15 @@ class PersonalChatController extends ChangeNotifier {
     }
   }
 
+  void _scrollListener() {
+    if (scrollController.hasClients &&
+        scrollController.position.pixels == 0 &&
+        !_isFetchingMore &&
+        _hasMoreMessages) {
+      fetchNextPage();
+    }
+  }
+
   Future<void> init(
     String targetUserId, {
     bool isGroup = false,
@@ -414,9 +436,17 @@ class PersonalChatController extends ChangeNotifier {
     _searchMatchMessageIds = [];
     _currentSearchMatchIndex = -1;
 
+    // Reset pagination states
+    _currentPage = 1;
+    _hasMoreMessages = true;
+    _isFetchingMore = false;
+
     // Set active chat ID globally
     SocketService().activeChatId = targetUserId;
     SocketService().isActiveChatGroup = false;
+
+    scrollController.removeListener(_scrollListener);
+    scrollController.addListener(_scrollListener);
 
     notifyListeners();
 
@@ -431,9 +461,18 @@ class PersonalChatController extends ChangeNotifier {
     }
 
     if (_userId != null) {
-      // Fetch current user details from API directly to read the live chat_wallpaper field with wallpaperid
-      try {
-        final userRes = await ApiService().get('/users/$_userId?currentUserId=$_userId');
+      // Load cached wallpaper immediately from SQLite to avoid lag
+      LocalDbService().getUserWallpaper(_userId!).then((cached) {
+        if (cached != null && !_isDisposed) {
+          _wallpaperUrl = cached['wallpaper_image'];
+          notifyListeners();
+        }
+      }).catchError((e) {
+        debugPrint("Error loading cached wallpaper from local DB: $e");
+      });
+
+      // Fetch current user details from API directly to read the live chat_wallpaper field in background
+      ApiService().get('/users/$_userId?currentUserId=$_userId').then((userRes) {
         final dynamic userResData = userRes.data;
         final Map<String, dynamic> userJson = userResData is String
             ? jsonDecode(userResData)
@@ -442,42 +481,71 @@ class PersonalChatController extends ChangeNotifier {
           final userData = userJson['data'];
           final String? wallpaperId = userData['chat_wallpaper']?.toString();
           if (wallpaperId != null && wallpaperId.isNotEmpty) {
-            await fetchSelectedWallpaper(wallpaperId);
+            LocalDbService().getUserWallpaper(_userId!).then((cached) {
+              if (cached != null && cached['wallpaper_id'] == wallpaperId) {
+                if (_wallpaperUrl != cached['wallpaper_image'] && !_isDisposed) {
+                  _wallpaperUrl = cached['wallpaper_image'];
+                  notifyListeners();
+                }
+              } else {
+                fetchSelectedWallpaper(wallpaperId);
+              }
+            });
           } else {
             _wallpaperUrl = null;
+            LocalDbService().saveUserWallpaper(_userId!, '', '');
+            notifyListeners();
           }
         }
-      } catch (e) {
+      }).catchError((e) {
         debugPrint("Error fetching current user details for wallpaper: $e");
-      }
-    }
+      });
 
-    await fetchHeaderDetails(targetUserId, isGroup: isGroup);
-
-    if (_userId != null) {
-      await fetchChatHistory(targetUserId);
-      if (_messages.isNotEmpty) {
-        _isNewChat = false;
-      }
-
-      // Mark as read immediately on open
-      SocketService().markAsRead(
-        chatId: targetUserId,
-        userId: _userId!,
-        otherId: targetUserId,
-        isGroup: false,
-      );
+      // Load SQLite cached chat history first
+      await loadCachedChatHistory(targetUserId);
     } else {
       _messages = [];
     }
 
-    if (!isGroup && _userId != null) {
-      await fetchPersonalChatDetails(targetUserId);
-    }
+    if (_messages.isNotEmpty) {
+      _isLoading = false;
+      _isNewChat = false;
+      notifyListeners();
+      scrollToBottom(immediate: true);
 
-    _isLoading = false;
-    notifyListeners();
-    scrollToBottom(immediate: true);
+      // Fetch details and fresh chat history in background (without blocking the UI)
+      fetchHeaderDetails(targetUserId, isGroup: isGroup);
+      if (_userId != null) {
+        fetchChatHistory(targetUserId, updateLoadingState: false);
+        SocketService().markAsRead(
+          chatId: targetUserId,
+          userId: _userId!,
+          otherId: targetUserId,
+          isGroup: false,
+        );
+      }
+      if (!isGroup && _userId != null) {
+        fetchPersonalChatDetails(targetUserId);
+      }
+    } else {
+      // No cache: Show loading spinner and wait for API to fetch everything
+      await fetchHeaderDetails(targetUserId, isGroup: isGroup);
+      if (_userId != null) {
+        await fetchChatHistory(targetUserId, updateLoadingState: true);
+        SocketService().markAsRead(
+          chatId: targetUserId,
+          userId: _userId!,
+          otherId: targetUserId,
+          isGroup: false,
+        );
+      }
+      if (!isGroup && _userId != null) {
+        await fetchPersonalChatDetails(targetUserId);
+      }
+      _isLoading = false;
+      notifyListeners();
+      scrollToBottom(immediate: true);
+    }
   }
 
   void _onUserStatusChange() {
@@ -511,6 +579,9 @@ class PersonalChatController extends ChangeNotifier {
         final data = json['data'];
         _wallpaperUrl = data['wallpaper_image'] as String?;
         notifyListeners();
+        if (_userId != null && _wallpaperUrl != null) {
+          await LocalDbService().saveUserWallpaper(_userId!, id, _wallpaperUrl!);
+        }
       }
     } catch (e) {
       debugPrint("Error fetching selected wallpaper: $e");
@@ -527,7 +598,7 @@ class PersonalChatController extends ChangeNotifier {
     if (_isDisposed) return;
     if (!scrollController.hasClients) {
       if (retryCount < 10) {
-        Future.delayed(const Duration(milliseconds: 150), () {
+        Future.delayed(const Duration(milliseconds: 500), () {
           _performScroll(immediate, retryCount + 1);
         });
       }
@@ -537,12 +608,12 @@ class PersonalChatController extends ChangeNotifier {
     try {
       if (immediate) {
         scrollController.jumpTo(scrollController.position.maxScrollExtent);
-        Future.delayed(const Duration(milliseconds: 150), () {
+        Future.delayed(const Duration(milliseconds: 500), () {
           if (!_isDisposed && scrollController.hasClients) {
             scrollController.jumpTo(scrollController.position.maxScrollExtent);
           }
         });
-        Future.delayed(const Duration(milliseconds: 300), () {
+        Future.delayed(const Duration(milliseconds: 500), () {
           if (!_isDisposed && scrollController.hasClients) {
             scrollController.jumpTo(scrollController.position.maxScrollExtent);
           }
@@ -702,9 +773,117 @@ class PersonalChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchChatHistory(String targetUserId) async {
+  List<Map<String, dynamic>> _mapRawMessages(List<dynamic> data) {
+    if (_userId == null) return [];
+    return data.map<Map<String, dynamic>>((msg) {
+      if (msg is! Map) return {};
+      final casted = Map<String, dynamic>.from(msg);
+      final sender = casted['sender_id'];
+      final String senderName = sender is Map ? (sender['name'] ?? '') : '';
+      final String? senderAvatar = sender is Map ? sender['avatar']?.toString() : null;
+      final String senderIdStr = sender is Map ? (sender['_id'] ?? '') : (sender ?? '');
+      final bool isOutgoing = senderIdStr == _userId;
+
+      final String? parentMessageId = casted['parent_message_id'] is Map
+          ? casted['parent_message_id']['_id']?.toString()
+          : casted['parent_message_id']?.toString();
+      String? replyTo;
+      String? replyToSender;
+      String? replyToType;
+      String? replyToUrl;
+
+      if (casted['parent_message_id'] is Map) {
+        replyTo = casted['parent_message_id']['content']?.toString();
+        replyToType = casted['parent_message_id']['message_type']?.toString();
+        replyToUrl = casted['parent_message_id']['file_url'] != null
+            ? ApiService.getImageUrl(casted['parent_message_id']['file_url'].toString())
+            : null;
+        final dynamic pSender = casted['parent_message_id']['sender_id'];
+        if (pSender is Map) {
+          replyToSender = pSender['name']?.toString();
+        } else if (pSender?.toString() == _userId) {
+          replyToSender = "You";
+        } else if (pSender != null) {
+          replyToSender = _headerDetails?['name']?.toString() ?? "Sender";
+        }
+      }
+
+      if (parentMessageId != null && replyTo == null) {
+        final parentMsg = data.firstWhere(
+          (item) =>
+              (item is Map && ((item['_id']?.toString() ?? item['id']?.toString()) == parentMessageId)),
+          orElse: () => null,
+        );
+        if (parentMsg != null && parentMsg is Map) {
+          replyTo = parentMsg['content']?.toString();
+          replyToType = parentMsg['message_type']?.toString() ?? parentMsg['type']?.toString();
+          replyToUrl = parentMsg['file_url'] != null
+              ? ApiService.getImageUrl(parentMsg['file_url'].toString())
+              : (parentMsg['url'] != null ? parentMsg['url']?.toString() : null);
+          final pSender = parentMsg['sender_id'];
+          if (pSender is Map) {
+            replyToSender = pSender['name']?.toString();
+          } else if (pSender?.toString() == _userId) {
+            replyToSender = "You";
+          } else if (pSender != null) {
+            replyToSender = _headerDetails?['name']?.toString() ?? "Sender";
+          }
+        }
+      }
+
+      final bool isDeleted = casted['is_deleted_for_everyone'] as bool? ?? false;
+      return {
+        "id": casted['_id'] ?? casted['id'],
+        "sender": isOutgoing ? "You" : senderName,
+        "text": isDeleted ? "This message was deleted" : (casted['content'] ?? ''),
+        "time": (casted['created_at'] ?? casted['createdAt']) != null
+            ? DateHelper.formatTime((casted['created_at'] ?? casted['createdAt']).toString())
+            : '',
+        "createdAt": casted['created_at'] ?? casted['createdAt'] ?? DateTime.now().toIso8601String(),
+        "isOutgoing": isOutgoing,
+        "type": isDeleted ? "text" : (casted['message_type'] ?? 'text'),
+        "file_name": isDeleted ? null : casted['file_name']?.toString(),
+        "url": (isDeleted || casted['file_url'] == null)
+            ? null
+            : ApiService.getImageUrl(casted['file_url']),
+        "avatar": senderAvatar ?? "",
+        "moderation_status": casted['moderation_status'] ?? 'Approved',
+        "moderated_by": casted['moderated_by'],
+        "parent_message_id": parentMessageId,
+        "replyTo": replyTo,
+        "replyToSender": replyToSender,
+        "replyToType": replyToType,
+        "replyToUrl": replyToUrl,
+        "is_forwarded": casted['is_forwarded'] as bool? ?? false,
+        "status": casted['status'] ?? 'sent',
+        "isDeleted": isDeleted,
+        "isEdited": casted['is_edited'] as bool? ?? false,
+      };
+    }).toList();
+  }
+
+  Future<void> loadCachedChatHistory(String targetUserId) async {
+    final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+      targetUserId,
+      limit: 50,
+      offset: 0,
+    );
+    if (cached.isNotEmpty) {
+      _messages = _mapRawMessages(cached).reversed.toList();
+      _isLoading = false; // Hide loader immediately
+      notifyListeners();
+      scrollToBottom(immediate: true);
+    }
+  }
+
+  Future<void> fetchChatHistory(String targetUserId, {bool updateLoadingState = true}) async {
     if (_userId == null) return;
     try {
+      if (updateLoadingState) {
+        _isLoading = true;
+        notifyListeners();
+      }
+
       final response = await ApiService().get(
         '/chat/history?user1=$_userId&user2=$targetUserId&page=1&limit=50',
       );
@@ -717,111 +896,135 @@ class PersonalChatController extends ChangeNotifier {
 
       if (json['success'] == true) {
         final List<dynamic> data = json['data'] ?? [];
-        _messages = data
-            .map<Map<String, dynamic>>((msg) {
-              final sender = msg['sender_id'];
-              final String senderName = sender is Map
-                  ? (sender['name'] ?? '')
-                  : '';
-              final String? senderAvatar = sender is Map
-                  ? sender['avatar']?.toString()
-                  : null;
-              final String senderIdStr = sender is Map
-                  ? (sender['_id'] ?? '')
-                  : (sender ?? '');
-              final bool isOutgoing = senderIdStr == _userId;
 
-              final String? parentMessageId = msg['parent_message_id'] is Map
-                  ? msg['parent_message_id']['_id']?.toString()
-                  : msg['parent_message_id']?.toString();
-              String? replyTo;
-              String? replyToSender;
-              String? replyToType;
-              String? replyToUrl;
+        // Save fresh page 1 history to SQLite database cache
+        await LocalDbService().saveMessages(targetUserId, data);
+        MediaCacheService().precacheMediaFromMessages(data);
 
-              if (msg['parent_message_id'] is Map) {
-                replyTo = msg['parent_message_id']['content']?.toString();
-                replyToType = msg['parent_message_id']['message_type']?.toString();
-                replyToUrl = msg['parent_message_id']['file_url'] != null
-                    ? ApiService.getImageUrl(msg['parent_message_id']['file_url'].toString())
-                    : null;
-                final dynamic pSender = msg['parent_message_id']['sender_id'];
-                if (pSender is Map) {
-                  replyToSender = pSender['name']?.toString();
-                } else if (pSender?.toString() == _userId) {
-                  replyToSender = "You";
-                } else if (pSender != null) {
-                  replyToSender = _headerDetails?['name']?.toString() ?? "Sender";
-                }
-              }
+        // Fetch back merged/sorted list from SQLite
+        final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+          targetUserId,
+          limit: _currentPage * 50,
+          offset: 0,
+        );
 
-              if (parentMessageId != null && replyTo == null) {
-                // Self-healing lookup in current list of messages
-                final parentMsg = data.firstWhere(
-                  (item) =>
-                      (item['_id']?.toString() ?? item['id']?.toString()) ==
-                      parentMessageId,
-                  orElse: () => null,
-                );
-                if (parentMsg != null) {
-                  replyTo = parentMsg['content']?.toString();
-                  replyToType = parentMsg['message_type']?.toString() ?? parentMsg['type']?.toString();
-                  replyToUrl = parentMsg['file_url'] != null
-                      ? ApiService.getImageUrl(parentMsg['file_url'].toString())
-                      : (parentMsg['url'] != null ? parentMsg['url']?.toString() : null);
-                  final pSender = parentMsg['sender_id'];
-                  if (pSender is Map) {
-                    replyToSender = pSender['name']?.toString();
-                  } else if (pSender?.toString() == _userId) {
-                    replyToSender = "You";
-                  } else if (pSender != null) {
-                    replyToSender = _headerDetails?['name']?.toString() ?? "Sender";
-                  }
-                }
-              }
+        _messages = _mapRawMessages(cached).reversed.toList();
 
-              final bool isDeleted = msg['is_deleted_for_everyone'] as bool? ?? false;
-              return {
-                "id": msg['_id'],
-                "sender": isOutgoing ? "You" : senderName,
-                "text": isDeleted ? "This message was deleted" : (msg['content'] ?? ''),
-                "time": msg['created_at'] != null
-                    ? DateHelper.formatTime(msg['created_at'])
-                    : '',
-                "createdAt":
-                    msg['created_at'] ?? DateTime.now().toIso8601String(),
-                "isOutgoing": isOutgoing,
-                "type": isDeleted ? "text" : (msg['message_type'] ?? 'text'),
-                "file_name": isDeleted ? null : msg['file_name']?.toString(),
-                "url": (isDeleted || msg['file_url'] == null)
-                    ? null
-                    : ApiService.getImageUrl(msg['file_url']),
-                "avatar": senderAvatar ?? "",
-                "moderation_status": msg['moderation_status'] ?? 'Approved',
-                "moderated_by": msg['moderated_by'],
-                "parent_message_id": parentMessageId,
-                "replyTo": replyTo,
-                "replyToSender": replyToSender,
-                "replyToType": replyToType,
-                "replyToUrl": replyToUrl,
-                "is_forwarded": msg['is_forwarded'] as bool? ?? false,
-                "status": msg['status'] ?? 'sent',
-                "isDeleted": isDeleted,
-                "isEdited": msg['is_edited'] as bool? ?? false,
-              };
-            })
-            .toList()
-            .reversed
-            .toList();
-      } else {
-        _messages = [];
+        if (data.length < 50) {
+          _hasMoreMessages = false;
+        } else {
+          _hasMoreMessages = true;
+        }
       }
     } catch (e) {
       debugPrint("Error fetching chat history: $e");
-      _messages = [];
+    } finally {
+      if (updateLoadingState) {
+        _isLoading = false;
+      }
+      notifyListeners();
+      scrollToBottom(immediate: true);
     }
+  }
+
+  Future<void> fetchNextPage() async {
+    if (_userId == null || _recipientId == null || _isFetchingMore || !_hasMoreMessages) return;
+    _isFetchingMore = true;
     notifyListeners();
-    scrollToBottom(immediate: true);
+
+    final int nextPage = _currentPage + 1;
+    final String targetUserId = _recipientId!;
+
+    try {
+      // 1. Fetch from SQLite local cache first
+      final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+        targetUserId,
+        limit: 50,
+        offset: (nextPage - 1) * 50,
+      );
+
+      final List<Map<String, dynamic>> mappedCached = _mapRawMessages(cached).reversed.toList();
+
+      if (mappedCached.isNotEmpty) {
+        final double previousMaxScroll = scrollController.position.maxScrollExtent;
+        final double currentPixels = scrollController.position.pixels;
+
+        _messages.insertAll(0, mappedCached);
+        _currentPage = nextPage;
+        notifyListeners();
+
+        // Adjust scroll offset to prevent jumpiness when prepending
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scrollController.hasClients) {
+            final double difference = scrollController.position.maxScrollExtent - previousMaxScroll;
+            if (difference > 0) {
+              scrollController.jumpTo(currentPixels + difference);
+            }
+          }
+        });
+      }
+
+      // 2. Fetch page from API in background to sync
+      final response = await ApiService().get(
+        '/chat/history?user1=$_userId&user2=$targetUserId&page=$nextPage&limit=50',
+      );
+      final dynamic responseData = response.data;
+      final Map<String, dynamic> json = responseData is String
+          ? jsonDecode(responseData)
+          : responseData as Map<String, dynamic>;
+
+      if (json['success'] == true) {
+        final List<dynamic> data = json['data'] ?? [];
+        if (data.isEmpty) {
+          _hasMoreMessages = false;
+        } else {
+          // Cache messages in SQLite
+          await LocalDbService().saveMessages(targetUserId, data);
+
+          if (data.length < 50) {
+            _hasMoreMessages = false;
+          }
+
+          // Reload all loaded pages from SQLite database to merge
+          await _reloadAllLoadedMessages();
+        }
+      } else {
+        _hasMoreMessages = false;
+      }
+    } catch (e) {
+      debugPrint("Error fetching next page of history: $e");
+    } finally {
+      _isFetchingMore = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _reloadAllLoadedMessages() async {
+    if (_recipientId == null) return;
+    try {
+      final double previousMaxScroll = scrollController.position.maxScrollExtent;
+      final double currentPixels = scrollController.position.pixels;
+
+      final List<Map<String, dynamic>> cached = await LocalDbService().getMessages(
+        _recipientId!,
+        limit: _currentPage * 50,
+        offset: 0,
+      );
+
+      _messages = _mapRawMessages(cached).reversed.toList();
+      notifyListeners();
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scrollController.hasClients) {
+          final double difference = scrollController.position.maxScrollExtent - previousMaxScroll;
+          if (difference > 0) {
+            scrollController.jumpTo(currentPixels + difference);
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("Error reloading loaded messages: $e");
+    }
   }
 
   Future<void> sendMessage() async {
@@ -878,7 +1081,7 @@ class PersonalChatController extends ChangeNotifier {
         SocketService().emit('send-message', socketPayload);
 
         // Fetch latest history to display the message with correct DB schema and IDs
-        await fetchChatHistory(_recipientId!);
+        await fetchChatHistory(_recipientId!, updateLoadingState: false);
 
         // If it was a brand-new chat screen, it is now no longer a blank/new chat!
         if (_isNewChat) {
@@ -947,7 +1150,7 @@ class PersonalChatController extends ChangeNotifier {
         SocketService().emit('send-message', socketPayload);
 
         // Fetch latest history to display the message with correct DB schema and IDs
-        await fetchChatHistory(_recipientId!);
+        await fetchChatHistory(_recipientId!, updateLoadingState: false);
 
         if (_isNewChat) {
           _isNewChat = false;
@@ -1458,7 +1661,7 @@ class PersonalChatController extends ChangeNotifier {
         SocketService().emit('send-message', socketPayload);
 
         // Fetch latest history to display the message with correct DB schema and IDs
-        await fetchChatHistory(_recipientId!);
+        await fetchChatHistory(_recipientId!, updateLoadingState: false);
 
         if (_isNewChat) {
           _isNewChat = false;
@@ -1695,6 +1898,7 @@ class PersonalChatController extends ChangeNotifier {
       if (response.statusCode == 200 ||
           response.statusCode == 201 ||
           json['success'] == true) {
+        await LocalDbService().clearChatHistory(_recipientId!);
         _messages.clear();
         notifyListeners();
         return true;
@@ -1721,6 +1925,8 @@ class PersonalChatController extends ChangeNotifier {
       if (json['success'] == true ||
           response.statusCode == 200 ||
           response.statusCode == 201) {
+        await LocalDbService().deleteConversation(_recipientId!);
+        await LocalDbService().clearChatHistory(_recipientId!);
         _messages.clear();
         notifyListeners();
         return true;
@@ -1768,7 +1974,7 @@ class PersonalChatController extends ChangeNotifier {
         if (action == 'accepted') {
           _isRequest = false;
           _isNewChat = false;
-          await fetchChatHistory(_recipientId!);
+          await fetchChatHistory(_recipientId!, updateLoadingState: false);
         } else if (action == 'rejected') {
           _isRequest = false;
           _isNewChat = true;
@@ -1971,7 +2177,7 @@ class PersonalChatController extends ChangeNotifier {
         SocketService().emit('send-message', socketPayload);
 
         // Fetch latest history to display the message with correct DB schema and IDs
-        await fetchChatHistory(_recipientId!);
+        await fetchChatHistory(_recipientId!, updateLoadingState: false);
 
         if (_isNewChat) {
           _isNewChat = false;
@@ -2201,6 +2407,7 @@ class PersonalChatController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _stopTypingTimer?.cancel();
+    scrollController.removeListener(_scrollListener);
     SocketService().messageQueueNotifier.removeListener(_onMessageQueueChanged);
     SocketService().userStatusChangeNotifier.removeListener(
       _onUserStatusChange,
